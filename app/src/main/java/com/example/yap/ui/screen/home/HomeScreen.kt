@@ -35,7 +35,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
@@ -50,7 +49,6 @@ import androidx.compose.material3.BottomSheetScaffoldState
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalMinimumInteractiveComponentSize
@@ -68,25 +66,20 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.TransformOrigin
-import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -96,11 +89,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.yap.R
 import com.example.yap.data.UserItem
-import com.example.yap.ui.theme.LightAdditionColors
 import com.example.yap.ui.theme.LocalAdditionColors
-import com.example.yap.ui.theme.RobotoFlexFamily
-import com.example.yap.ui.util.isEmojiOnly
-import kotlinx.coroutines.launch
 
 
 // Модель пользователя
@@ -349,7 +338,8 @@ fun HomeContent(
                 message = state.currentAlertMessage,
                 showCloseIcon = state.canCloseMessage,
                 onClose = { viewModel.dismissMessage() },
-                baseScale = baseScale
+                baseScale = baseScale,
+                isEmojiOnly = state.isEmojiOnly
             )
 
             // --- 2. ЦЕНТР ---
@@ -420,16 +410,17 @@ fun HomeContent(
 @Composable
 fun InfoMessage(
     message: String?,
+    isEmojiOnly: Boolean,
     showCloseIcon: Boolean,
     onClose: () -> Unit,
     baseScale: Float
 ) {
     // 1. Определяем, является ли сообщение набором эмодзи
-    val isEmojiOnly = remember(message) { message?.isEmojiOnly() ?: false }
+//    val isEmojiOnly = remember(message) { message?.isEmojiOnly() ?: false }
 
     // 2. Выбираем размер шрифта: 44sp для эмодзи, 18sp для текста
-    val dynamicFontSize = if (isEmojiOnly) (28 * baseScale).sp else (18 * baseScale).sp
-    val dynamicLetterSpacing = if (isEmojiOnly) 4.sp else TextUnit.Unspecified
+    val dynamicFontSize = if (isEmojiOnly) (32 * baseScale).sp else (18 * baseScale).sp
+    val dynamicLetterSpacing = if (isEmojiOnly) (4 * baseScale).sp else TextUnit.Unspecified
 
     AnimatedVisibility(
         visible = !message.isNullOrEmpty(),
@@ -555,7 +546,8 @@ fun MainYapButton(
 
                     // Плашка цены
                     Surface(
-                        modifier = Modifier.offset(y = 50.dp * baseScale),
+                        modifier = Modifier
+                            .offset(y = 50.dp * baseScale),
                         shape = RoundedCornerShape(18.dp * baseScale),
                         color = MaterialTheme.colorScheme.tertiary,
                     ) {

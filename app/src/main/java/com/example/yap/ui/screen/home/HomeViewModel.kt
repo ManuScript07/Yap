@@ -3,6 +3,8 @@ package com.example.yap.ui.screen.home
 import androidx.lifecycle.ViewModel
 import com.example.yap.R
 import com.example.yap.data.UserItem
+import com.example.yap.ui.util.countGraphemeClusters
+import com.example.yap.ui.util.isEmojiOnly
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -72,31 +74,33 @@ class HomeViewModel : ViewModel() {
         _state.update { currentState ->
             val currentContent = currentState.currentAlertMessage ?: ""
 
-            // Считаем реальное количество символов/эмодзи
-            // В Kotlin/Java для эмодзи лучше использовать codePointCount
-            val emojiCount = currentContent.codePointCount(0, currentContent.length)
-
-            // Проверяем, является ли текущее сообщение набором эмодзи или текстом
-            val isJustEmojis = currentContent.all { it.isSurrogate() || it.code > 128 }
+            // 1. Проверяем, что БЫЛО в поле до нажатия
+            val wasEmojiOnly = currentContent.isEmojiOnly()
+            val currentCount = currentContent.countGraphemeClusters()
 
             when {
-                // Если там был текст (длинная строка) — заменяем на первый эмодзи
-                !isJustEmojis && currentContent.isNotEmpty() -> {
-                    currentState.copy(currentAlertMessage = emoji)
+                // СЛУЧАЙ А: В поле был текст (Да, Гоу)
+                // Мы заменяем текст на эмодзи и ставим флаг true
+                !wasEmojiOnly && currentContent.isNotEmpty() -> {
+                    currentState.copy(
+                        currentAlertMessage = emoji,
+                        isEmojiOnly = true, // Теперь только эмодзи
+                        isEmojiPickerOpen = true
+                    )
                 }
 
-                // Если уже есть 5 эмодзи — ничего не меняем (игнорируем ввод)
-                isJustEmojis && emojiCount >= 5 -> {
+                // СЛУЧАЙ Б: Достигнут лимит 5 эмодзи
+                wasEmojiOnly && currentCount >= 5 -> {
                     currentState
                 }
 
-                // В остальных случаях — добавляем в конец
+                // СЛУЧАЙ В: Добавляем эмодзи к уже существующим эмодзи
                 else -> {
                     val newContent = currentContent + emoji
                     currentState.copy(
                         currentAlertMessage = newContent,
-                        // Закрываем панель только когда набрали ровно 5
-                        isEmojiPickerOpen = (emojiCount + 1) < 5
+                        isEmojiOnly = true, // Подтверждаем, что это всё еще эмодзи
+                        isEmojiPickerOpen = (currentCount + 1) < 5
                     )
                 }
             }
@@ -111,10 +115,15 @@ class HomeViewModel : ViewModel() {
     }
 
     fun selectQuickMessage(message: String) {
-        _state.update { it.copy(
-            currentAlertMessage = message,
-            isChatPickerOpen = false
-        ) }
+        _state.update { currentState ->
+            currentState.copy(
+                currentAlertMessage = message,
+                // ОБЯЗАТЕЛЬНО: Проверяем новый текст.
+                // Для "Да", "Гоу" и т.д. это вернет false, и шрифт уменьшится.
+                isEmojiOnly = message.isEmojiOnly(),
+                isChatPickerOpen = false
+            )
+        }
     }
 
     fun setSheetExpanded(expanded: Boolean) {

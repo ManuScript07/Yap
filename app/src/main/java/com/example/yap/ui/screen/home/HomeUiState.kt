@@ -15,6 +15,7 @@ data class HomeUiState(
     val isEmojiPickerOpen: Boolean = false,
     val isChatPickerOpen: Boolean = false,
     val isSheetExpanded: Boolean = false,
+    val isEmojiOnly: Boolean = false,
 )
 
 enum class MessageType {

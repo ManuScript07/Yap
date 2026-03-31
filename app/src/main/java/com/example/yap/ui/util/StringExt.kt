@@ -1,15 +1,31 @@
 package com.example.yap.ui.util
 
+// Точная проверка: только эмодзи и спец-символы, никаких букв/цифр
+import java.text.BreakIterator
+
+// Считаем "визуальные" символы (Grapheme Clusters)
+fun String.countGraphemeClusters(): Int {
+    val it = BreakIterator.getCharacterInstance()
+    it.setText(this)
+    var count = 0
+    while (it.next() != BreakIterator.DONE) {
+        count++
+    }
+    return count
+}
+
+// Улучшенная проверка на эмодзи
 fun String.isEmojiOnly(): Boolean {
     if (this.isBlank()) return false
     return this.all { char ->
         val type = Character.getType(char).toByte()
-        // 1. Проверяем на суррогатные пары (большинство современных эмодзи)
-        // 2. Проверяем на графические символы (сердца, значки и т.д.)
-        // 3. Исключаем буквы и цифры (чтобы "Да", "Го" и "100" не считались эмодзи)
-        (char.isSurrogate() ||
-                type == Character.SURROGATE ||
+        // Variation Selectors, Surrogates и Symbols — это наши друзья
+        val isEmojiPart = char.isSurrogate() ||
                 type == Character.OTHER_SYMBOL ||
-                type == Character.NON_SPACING_MARK) && !char.isLetterOrDigit()
+                type == Character.NON_SPACING_MARK ||
+                type == Character.SURROGATE ||
+                char.code in 0xFE00..0xFE0F // Variation Selectors
+
+        isEmojiPart && !Character.isLetterOrDigit(char)
     }
 }
