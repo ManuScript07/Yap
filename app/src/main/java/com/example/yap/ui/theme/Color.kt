@@ -18,5 +18,9 @@ data class AdditionalColors(
     val speedBottomDialog: Color,
     val buttonReactionColor: Color,
     val centerGradientColor: Color,
-    val pinkForGradientColor: Color
+    val pinkForGradientColor: Color,
+    val popupColor: Color,
+    val darkYapButtonBackgroundColor: Color,
+    val disabledYabBackgroundColor: Color,
+    val secondTextColor: Color
     )

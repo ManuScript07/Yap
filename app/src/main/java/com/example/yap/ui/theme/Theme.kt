@@ -48,7 +48,11 @@ val LightAdditionColors = AdditionalColors(
     speedBottomDialog = Color(0xFFEAF1FF),
     buttonReactionColor = Color(0xFFE1FFDD),
     centerGradientColor = Color(0xFFFFAA62),
-    pinkForGradientColor = Color(0xFFFB62FE)
+    pinkForGradientColor = Color(0xFFFB62FE),
+    popupColor = Color(0xFFA6A6F2),
+    darkYapButtonBackgroundColor = Color(0xFFB9D800),
+    disabledYabBackgroundColor = Color(0xFFD9D9D9),
+    secondTextColor = Color(0xFF414141)
 )
 
 val LocalAdditionColors = staticCompositionLocalOf {

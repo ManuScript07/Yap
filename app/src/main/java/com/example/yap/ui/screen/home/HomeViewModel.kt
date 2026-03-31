@@ -1,5 +1,6 @@
 package com.example.yap.ui.screen.home
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import com.example.yap.R
 import com.example.yap.data.UserItem
@@ -15,24 +16,46 @@ class HomeViewModel : ViewModel() {
     private val _state = MutableStateFlow(
         HomeUiState(
             users = getInitialUsers(),
-            currentAlertMessage = "Привет, познакомися?)",
-            canCloseMessage = true
+//            currentAlertMessage = "Привет, познакомися?)",
         )
     )
     val state: StateFlow<HomeUiState> = _state.asStateFlow()
 
     fun toggleUserYap(userId: Int) {
         _state.update { currentState ->
-            val updatedUsers = currentState.users.map { user ->
-                if (user.id == userId) {
-                    user.copy(isYapActive = !user.isYapActive)
-                } else {
-                    user
-                }
+            val user = currentState.users.find { it.id == userId }
+            val updatedUsers = currentState.users.map {
+                if (it.id == userId) it.copy(isYapActive = !it.isYapActive) else it
             }
+
+            // ЛОГИРОВАНИЕ
+            user?.let {
+                val action = if (!it.isYapActive) "добавлен в список" else "удалён из списка"
+                Log.d("UsersState", "Пользователь ${it.name} $action получателей")
+            }
+
             currentState.copy(users = updatedUsers)
         }
     }
+
+    fun addUser() {
+        _state.update { currentState ->
+            if (currentState.users.size >= 20) return@update currentState
+
+            val newId = (currentState.users.maxOfOrNull { it.id } ?: 0) + 1
+            val randomAvatar = listOf(R.drawable.avatar_1, R.drawable.avatar_2, R.drawable.avatar_3, R.drawable.avatar_4).random()
+            val newUser = UserItem(newId, "User $newId", false, randomAvatar)
+
+            currentState.copy(users = currentState.users + newUser)
+        }
+    }
+
+    fun removeUser(userId: Int) {
+        _state.update { currentState ->
+            currentState.copy(users = currentState.users.filter { it.id != userId })
+        }
+    }
+
     private fun getInitialUsers() = listOf(
         UserItem(1, "User1", false, R.drawable.avatar_1),
         UserItem(2, "User2", true, R.drawable.avatar_2),
@@ -48,7 +71,8 @@ class HomeViewModel : ViewModel() {
     fun showAlert(message: String, canClose: Boolean = true) {
         _state.update { it.copy(
             currentAlertMessage = message,
-            canCloseMessage = canClose
+            canCloseMessage = canClose,
+            isEmojiOnly = false
         ) }
     }
 
@@ -74,6 +98,8 @@ class HomeViewModel : ViewModel() {
         _state.update { currentState ->
             val currentContent = currentState.currentAlertMessage ?: ""
 
+
+
             // 1. Проверяем, что БЫЛО в поле до нажатия
             val wasEmojiOnly = currentContent.isEmojiOnly()
             val currentCount = currentContent.countGraphemeClusters()
@@ -85,7 +111,8 @@ class HomeViewModel : ViewModel() {
                     currentState.copy(
                         currentAlertMessage = emoji,
                         isEmojiOnly = true, // Теперь только эмодзи
-                        isEmojiPickerOpen = true
+                        isEmojiPickerOpen = true,
+                        canCloseMessage = true
                     )
                 }
 
@@ -100,7 +127,8 @@ class HomeViewModel : ViewModel() {
                     currentState.copy(
                         currentAlertMessage = newContent,
                         isEmojiOnly = true, // Подтверждаем, что это всё еще эмодзи
-                        isEmojiPickerOpen = (currentCount + 1) < 5
+                        isEmojiPickerOpen = (currentCount + 1) < 5,
+                        canCloseMessage = true
                     )
                 }
             }
@@ -120,8 +148,9 @@ class HomeViewModel : ViewModel() {
                 currentAlertMessage = message,
                 // ОБЯЗАТЕЛЬНО: Проверяем новый текст.
                 // Для "Да", "Гоу" и т.д. это вернет false, и шрифт уменьшится.
-                isEmojiOnly = message.isEmojiOnly(),
-                isChatPickerOpen = false
+                isEmojiOnly = false,
+                isChatPickerOpen = false,
+                canCloseMessage = true
             )
         }
     }

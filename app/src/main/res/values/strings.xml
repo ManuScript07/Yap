@@ -1,3 +1,7 @@
 <resources>
     <string name="app_name">Yap</string>
+    <string name="users_empty_state">У вас пока нет друзей</string>
+    <string name="users_add_button">Добавить</string>
+    <string name="users_delete_popup">Удалить пользователя</string>
 </resources>
+

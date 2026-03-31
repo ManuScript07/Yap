@@ -4,6 +4,7 @@ import com.example.yap.data.UserItem
 
 data class HomeUiState(
     val users: List<UserItem> = emptyList(),
+
     val progress: Float = 0.65f, // 65/100
     val starsCount: Int = 5,
     val isNiceActive: Boolean = true,
@@ -16,6 +17,7 @@ data class HomeUiState(
     val isChatPickerOpen: Boolean = false,
     val isSheetExpanded: Boolean = false,
     val isEmojiOnly: Boolean = false,
+    val maxUsers: Int = 20,
 )
 
 enum class MessageType {

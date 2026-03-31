@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="quick_messages">
+        <item>Привет, познакомимся?)</item>
+        <item>Ты где?</item>
+        <item>Всё хорошо?</item>
+        <item>Гоу</item>
+        <item>Ты дома?</item>
+        <item>Да</item>
+    </string-array>
+
+    <string-array name="quick_emojis">
+        <item>❤️</item>
+        <item>😁</item>
+        <item>🥺</item>
+        <item>💩</item>
+        <item>🔥</item>
+        <item>🤡</item>
+    </string-array>
+</resources>

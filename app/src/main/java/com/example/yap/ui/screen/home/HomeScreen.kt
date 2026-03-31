@@ -2,8 +2,10 @@ package com.example.yap.ui.screen.home
 
 
 import android.annotation.SuppressLint
+import android.widget.Button
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.spring
@@ -28,6 +30,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -38,20 +41,25 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.BottomSheetScaffoldState
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Surface
@@ -62,10 +70,13 @@ import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.material3.rememberStandardBottomSheetState
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -76,20 +87,28 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringArrayResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.yap.R
 import com.example.yap.data.UserItem
 import com.example.yap.ui.theme.LocalAdditionColors
+import com.example.yap.ui.theme.LocalBaseScale
 
 
 // Модель пользователя
@@ -100,8 +119,6 @@ import com.example.yap.ui.theme.LocalAdditionColors
 @Composable
 fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
     val state by viewModel.state.collectAsState()
-    val configuration = LocalConfiguration.current
-    val baseScale = (configuration.screenWidthDp.dp / 390.dp).coerceIn(0.8f, 1.2f)
     // Сохраняем состояние шторки между рекомпозициями
     val sheetState = rememberStandardBottomSheetState(
         initialValue = SheetValue.PartiallyExpanded,
@@ -127,9 +144,10 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
         HomeUsersBottomSheet(
             scaffoldState = scaffoldState,
             state = state,
-            baseScale = baseScale,
-            screenHeight = configuration.screenHeightDp.dp,
+            screenHeight = LocalConfiguration.current.screenHeightDp.dp,
             onYapClick = { userId -> viewModel.toggleUserYap(userId) },
+            onAddUserClick = { viewModel.addUser() },       // Связываем тут
+            onRemoveUserClick = { id -> viewModel.removeUser(id) }, // Связываем тут
             content = { innerPadding ->
                 HomeContent(innerPadding, viewModel = viewModel)
             }
@@ -142,23 +160,24 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
 fun HomeUsersBottomSheet(
     scaffoldState: BottomSheetScaffoldState,
     state: HomeUiState,
-    baseScale: Float,
     screenHeight: Dp,
     onYapClick: (Int) -> Unit,
+    onAddUserClick: () -> Unit, // НОВОЕ
+    onRemoveUserClick: (Int) -> Unit, // НОВОЕ
     content: @Composable (PaddingValues) -> Unit
 ) {
     val adaptivePeekHeight = screenHeight * 0.28f
-
+    val baseScale = LocalBaseScale.current
     BottomSheetScaffold(
         scaffoldState = scaffoldState,
         containerColor = Color.Transparent,
         sheetPeekHeight = adaptivePeekHeight,
         sheetContainerColor = LocalAdditionColors.current.speedBottomDialog,
         sheetShape = RoundedCornerShape(
-            topStart = 24.dp * baseScale,
-            topEnd = 24.dp * baseScale
+            topStart = 28.dp * baseScale,
+            topEnd = 28.dp * baseScale
         ),
-        // Включаем или выключаем свайп (по умолчанию true)
+// Включаем или выключаем свайп (по умолчанию true)
         sheetSwipeEnabled = true,
         sheetDragHandle = {
             Box(
@@ -167,7 +186,7 @@ fun HomeUsersBottomSheet(
                     .width(40.dp * baseScale)
                     .height(4.dp * baseScale)
                     .background(
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
                         shape = CircleShape
                     )
             )
@@ -176,12 +195,14 @@ fun HomeUsersBottomSheet(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    // Оставляем место для контента
-                    .height(screenHeight * 0.7f)
+                    .height(screenHeight * 0.75f)
             ) {
                 UsersBottomSheet(
                     users = state.users,
-                    onYapClick = onYapClick
+                    onYapClick = onYapClick,
+                    onAddUser = onAddUserClick,
+                    onRemoveUser = onRemoveUserClick,
+                    maxUsers = state.maxUsers
                 )
             }
         },
@@ -191,17 +212,87 @@ fun HomeUsersBottomSheet(
 
 
 @Composable
+fun UsersBottomSheet(
+    users: List<UserItem>,
+    onYapClick: (Int) -> Unit,
+    onAddUser: () -> Unit,
+    onRemoveUser: (Int) -> Unit,
+    maxUsers: Int
+) {
+    val baseScale = LocalBaseScale.current
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxWidth()
+            .defaultMinSize(minHeight = 300.dp * baseScale),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        if (users.isEmpty()) {
+            item(key = "empty_state") {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 40.dp * baseScale),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = stringResource(R.string.users_empty_state),
+                        fontSize = (20 * baseScale).sp,
+                        fontWeight = FontWeight.Bold,
+                        color = LocalAdditionColors.current.secondTextColor,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(bottom = 20.dp * baseScale)
+                    )
+
+                    AddUserButton(onClick = onAddUser)
+                }
+            }
+        } else {
+            items(
+                items = users,
+                key = { it.id }
+            ) { user ->
+                Box(modifier = Modifier.animateItem(
+                    fadeInSpec = tween(150),
+                    fadeOutSpec = tween(150),
+                    placementSpec = spring(stiffness = Spring.StiffnessLow)
+                )) {
+                    UserListItem(
+                        user = user,
+                        onYapClick = onYapClick,
+                        onRemoveClick = onRemoveUser
+                    )
+                }
+            }
+
+            if (users.size < maxUsers){
+                item(key = "add_button") {
+                    Box(modifier = Modifier.animateItem()) {
+                        AddUserButton(onClick = onAddUser)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun UserListItem(
     user: UserItem,
-    onYapClick: (Int) -> Unit
+    onYapClick: (Int) -> Unit,
+    onRemoveClick: (Int) -> Unit // Новый параметр
 ) {
+    var showMenu by rememberSaveable { mutableStateOf(false) }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 5.dp, horizontal = 2.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // --- АВАТАР ---
+        // ... Аватар, Имя и Кнопка YAP остаются такими же (код из твоего вопроса) ...
         Image(
             painter = painterResource(user.avatarRes),
             contentDescription = null,
@@ -222,7 +313,7 @@ fun UserListItem(
             color = MaterialTheme.colorScheme.onPrimaryContainer
         )
 
-        val iconTint = if (user.isYapActive) Color.Black else Color(0XFF646464)
+        val iconTint = if (user.isYapActive) Color.Black else LocalAdditionColors.current.secondTextColor
         // --- КНОПКА YAP (CHECKBOX) ---
         Box(
             modifier = Modifier
@@ -230,8 +321,8 @@ fun UserListItem(
                 .width(64.dp)
                 .clip(RoundedCornerShape(16.dp))
                 .background(
-                    if (user.isYapActive) Color(0xFFB9D800)
-                    else Color(0xFFD9D9D9)
+                    if (user.isYapActive) LocalAdditionColors.current.darkYapButtonBackgroundColor
+                    else LocalAdditionColors.current.disabledYabBackgroundColor
                 )
                 .clickable { onYapClick(user.id) },
             contentAlignment = Alignment.Center
@@ -244,52 +335,146 @@ fun UserListItem(
         }
         Spacer(modifier = Modifier.width(4.dp))
 
-        // --- МЕНЮ ---
-        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
-            // Это убирает принудительные 48dp вокруг иконки
+        Box(contentAlignment = Alignment.Center) {
             IconButton(
-                onClick = { /* TODO */ },
-                modifier = Modifier.size(32.dp) // Сама область кнопки теперь меньше и аккуратнее
+                onClick = { showMenu = true },
+                modifier = Modifier.size(32.dp)
             ) {
                 Icon(
                     painter = painterResource(R.drawable.more_vert),
                     contentDescription = null,
-                    tint = Color(0xFF1D1B20),
+                    tint = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.size(24.dp)
                 )
             }
-        }
-    }
-}
 
-
-@Composable
-fun UsersBottomSheet(
-    users: List<UserItem>,
-    onYapClick: (Int) -> Unit // Добавляем параметр
-) {
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .navigationBarsPadding(),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
-    ) {
-        items(
-            items = users,
-            // key критически важен для плавности: при изменении одного YAP
-            // LazyColumn не будет пересоздавать весь список
-            key = { it.id }
-        ) { user ->
-            UserListItem(
-                user = user,
-                onYapClick = onYapClick
+            DeleteUserPopup(
+                isVisible = showMenu,
+                onDismiss = { showMenu = false },
+                onDeleteClick = { onRemoveClick(user.id) },
             )
         }
     }
 }
 
 
+@Composable
+fun DeleteUserPopup(
+    isVisible: Boolean,
+    onDismiss: () -> Unit,
+    onDeleteClick: () -> Unit
+) {
+    val baseScale = LocalBaseScale.current
+    val density = LocalDensity.current
+    val offsetX = remember(density, baseScale) {
+        with(density) { ((-110).dp * baseScale).toPx().toInt() }
+    }
 
+    // Состояние для анимации
+    var isAnimatedVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(isVisible) { isAnimatedVisible = isVisible }
+
+    if (isVisible) {
+        Popup(
+            alignment = Alignment.Center,
+            onDismissRequest = onDismiss,
+            offset = IntOffset(x = offsetX, y = 0),
+            properties = PopupProperties(focusable = true)
+        ) {
+            // ФИКСИРУЕМ ОБЛАСТЬ: Popup больше не будет прыгать,
+            // так как его размер сразу 248x56
+            Box(
+                modifier = Modifier.size(
+                    width = 248.dp * baseScale,
+                    height = 56.dp * baseScale
+                ),
+                contentAlignment = Alignment.Center
+            ) {
+                AnimatedVisibility(
+                    visible = isAnimatedVisible,
+                    enter = fadeIn(animationSpec = tween(200)) +
+                            scaleIn(initialScale = 0.95f, animationSpec = tween(200)),
+                    exit = fadeOut(animationSpec = tween(150)) +
+                            scaleOut(targetScale = 0.95f, animationSpec = tween(150))
+                ) {
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxSize() // Заполняем уже готовый Box
+//                            .graphicsLayer {
+//                                this.shadowElevation = 8.dp.toPx()
+//                                this.shape = RoundedCornerShape(18.dp * baseScale)
+//                                this.clip = true
+//                            }
+                            .clickable {
+                                onDeleteClick()
+                                onDismiss()
+                            },
+                        shape = RoundedCornerShape(18.dp * baseScale),
+                        color = LocalAdditionColors.current.popupColor
+                    ) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = stringResource(R.string.users_delete_popup),
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontSize = (20 * baseScale).sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AddUserButton(onClick: () -> Unit) {
+    val baseScale = LocalBaseScale.current
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 16.dp * baseScale),
+        contentAlignment = Alignment.Center
+    ) {
+        Button(
+            onClick = onClick,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = LocalAdditionColors.current.darkYapButtonBackgroundColor,
+                contentColor = MaterialTheme.colorScheme.onSurface
+            ),
+            shape = RoundedCornerShape(100.dp),
+            contentPadding = PaddingValues(
+                horizontal = 24.dp * baseScale,
+                vertical = 12.dp * baseScale
+            ),
+            elevation = ButtonDefaults.buttonElevation(0.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = null,
+                    modifier = Modifier.size(32.dp * baseScale),
+                )
+
+                Spacer(modifier = Modifier.width(8.dp * baseScale))
+
+                Text(
+                    text = stringResource(R.string.users_add_button),
+                    fontSize = (18 * baseScale).sp,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.labelLarge
+                )
+            }
+        }
+    }
+}
 
 @SuppressLint("ConfigurationScreenWidthHeight")
 @Composable
@@ -298,8 +483,7 @@ fun HomeContent(
     viewModel: HomeViewModel
 ) {
     val state by viewModel.state.collectAsState()
-    val configuration = LocalConfiguration.current
-    val baseScale = (configuration.screenWidthDp.dp / 390.dp).coerceIn(0.8f, 1.2f)
+    val baseScale = LocalBaseScale.current
 
     // 🌟 ГЛАВНЫЙ BOX-ОВЕРЛЕЙ 🌟
     // Он занимает весь экран. Ничто внутри него не может "раздвинуть" экран.
@@ -351,7 +535,7 @@ fun HomeContent(
             ) {
                 MainYapButton(
                     stars = state.starsCount,
-                    onClick = { /* Клик */ }
+                    onClick = { viewModel.showAlert("Вы нажали на кнопку", false) }
                 )
             }
 
@@ -477,7 +661,7 @@ fun MainYapButton(
 
     // Вычисляем базовый размер кнопки как 50% от ширины экрана (или другой коэффициент)
     // Это гарантирует, что на любом экране кнопка будет занимать одинаковую долю места
-    val baseScale = screenWidth / 390.dp // 390dp - это стандартный iPhone/Pixel
+    val baseScale = LocalBaseScale.current
 
     val frontPillWidth = 196.dp * baseScale
     val frontPillHeight = 160.dp * baseScale
@@ -547,28 +731,34 @@ fun MainYapButton(
                     // Плашка цены
                     Surface(
                         modifier = Modifier
-                            .offset(y = 50.dp * baseScale),
+                            .offset(y = 50.dp * baseScale)
+                            // Фиксируем размер плашки
+                            .size(width = 60.dp * baseScale, height = 32.dp * baseScale),
                         shape = RoundedCornerShape(18.dp * baseScale),
                         color = MaterialTheme.colorScheme.tertiary,
                     ) {
+                        // Используем Row с Center-позиционированием без внутренних padding
                         Row(
-                            modifier = Modifier.padding(
-                                horizontal = 12.dp * baseScale,
-                                vertical = 6.dp * baseScale
-                            ),
-                            verticalAlignment = Alignment.CenterVertically
+                            modifier = Modifier.fillMaxSize(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
                         ) {
                             Text(
                                 text = "$stars",
                                 color = MaterialTheme.colorScheme.background,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = (18 * baseScale).sp
+                                // Чуть уменьшим шрифт, если 18sp будет тесно в 60dp
+                                fontSize = (18 * baseScale).sp,
+                                lineHeight = (16 * baseScale).sp
                             )
-                            Spacer(modifier = Modifier.width(4.dp * baseScale))
+
+                            Spacer(modifier = Modifier.width(5.dp * baseScale))
+
                             Icon(
                                 painter = painterResource(R.drawable.star),
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.background,
+                                // Оптимальный размер иконки для высоты 32dp
                                 modifier = Modifier.size(20.dp * baseScale)
                             )
                         }
@@ -666,7 +856,7 @@ fun EmojiPickerPanel(
     onClose: () -> Unit,
     baseScale: Float
 ) {
-    val emojis = listOf("❤️", "😁", "🥺", "💩", "🔥", "🤡")
+    val emojis = stringArrayResource(R.array.quick_emojis)
 
     Row(
         modifier = Modifier
@@ -714,10 +904,7 @@ fun QuickMessagesPanel(
     onMessageSelected: (String) -> Unit,
     baseScale: Float
 ) {
-    val messages = listOf(
-        "Привет, познакомимся?)", "Ты где?", "Всё хорошо?",
-        "Гоу", "Ты дома?", "Да"
-    )
+    val messages = stringArrayResource(R.array.quick_messages).toList()
 
     // Используем Card для встроенной поддержки теней и формы
     Card(
