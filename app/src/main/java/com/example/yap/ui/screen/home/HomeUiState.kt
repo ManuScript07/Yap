@@ -5,10 +5,13 @@ import com.example.yap.data.UserItem
 data class HomeUiState(
     val users: List<UserItem> = emptyList(),
 
-    val progress: Float = 0.65f, // 65/100
-    val starsCount: Int = 5,
+    val currentStars: Int = 65,
+    val maxStars: Int = 100,
+    val progress: Float = 0.65f,
+    val yapPrice: Int = 65,
+    val yapType: YapType = YapType.YAP,
+
     val isNiceActive: Boolean = true,
-    val yapStars: Int = 5,// Звездочка внутри кнопки YAP
     val isLocationEnabled: Boolean = true,
     val currentAlertMessage: String? = null,
     val canCloseMessage: Boolean = false,
@@ -22,6 +25,10 @@ data class HomeUiState(
 
 enum class MessageType {
     INFO, WARNING, ERROR
+}
+
+enum class YapType {
+    YAP, EMOJI, TEXT, VOICE
 }
 
 

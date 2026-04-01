@@ -2,14 +2,17 @@ package com.example.yap.ui.screen.home
 
 import android.util.Log
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.example.yap.R
 import com.example.yap.data.UserItem
 import com.example.yap.ui.util.countGraphemeClusters
 import com.example.yap.ui.util.isEmojiOnly
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 
 class HomeViewModel : ViewModel() {
 
@@ -21,22 +24,43 @@ class HomeViewModel : ViewModel() {
     )
     val state: StateFlow<HomeUiState> = _state.asStateFlow()
 
-    fun toggleUserYap(userId: Int) {
+
+    companion object {
+        const val PRICE_TEXT = 3
+        const val PRICE_EMOJI = 2
+        const val PRICE_SIMPLE_YAP = 1
+        const val REGEN_DELAY_MS = 5000L // 1 звезда каждые 5 секунд
+    }
+
+
+    private fun updateStateWithPrice(update: (HomeUiState) -> HomeUiState) {
         _state.update { currentState ->
-            val user = currentState.users.find { it.id == userId }
+            val newState = update(currentState)
+            val calculatedPrice = calculatePrice(
+                users = newState.users,
+                isEmojiOnly = newState.isEmojiOnly,
+                type = newState.yapType
+            )
+            newState.copy(yapPrice = calculatedPrice)
+        }
+    }
+
+    init {
+        updateStateWithPrice { it }
+        // Запускаем бесконечный цикл восстановления энергии при старте ViewModel
+        startEnergyRegeneration()
+    }
+
+    // 2. ОБНОВЛЯЕМ ВЫБОР И ПЕРЕСЧИТЫВАЕМ ЦЕНУ
+    fun toggleUserYap(userId: Int) {
+        updateStateWithPrice { currentState ->
             val updatedUsers = currentState.users.map {
                 if (it.id == userId) it.copy(isYapActive = !it.isYapActive) else it
             }
-
-            // ЛОГИРОВАНИЕ
-            user?.let {
-                val action = if (!it.isYapActive) "добавлен в список" else "удалён из списка"
-                Log.d("UsersState", "Пользователь ${it.name} $action получателей")
-            }
-
             currentState.copy(users = updatedUsers)
         }
     }
+
 
     fun addUser() {
         _state.update { currentState ->
@@ -51,8 +75,13 @@ class HomeViewModel : ViewModel() {
     }
 
     fun removeUser(userId: Int) {
-        _state.update { currentState ->
-            currentState.copy(users = currentState.users.filter { it.id != userId })
+        // Используем нашу защищенную функцию с пересчетом
+        updateStateWithPrice { currentState ->
+            val updatedUsers = currentState.users.filter { it.id != userId }
+
+            // Логика: если мы удаляем юзера, он автоматически перестает быть получателем.
+            // updateStateWithPrice сама вызовет calculatePrice для нового списка.
+            currentState.copy(users = updatedUsers)
         }
     }
 
@@ -78,9 +107,13 @@ class HomeViewModel : ViewModel() {
 
     // Функция для скрытия (вызывается при клике на крестик)
     fun dismissMessage() {
-        _state.update { it.copy(
-            currentAlertMessage = null
-        ) }
+        updateStateWithPrice { currentState ->
+            currentState.copy(
+                currentAlertMessage = null,
+                yapType = YapType.YAP,
+                isEmojiOnly = false // Лучше сбрасывать и его, раз мы возвращаемся к обычному YAP
+            )
+        }
     }
 
     // Самый гибкий вариант
@@ -95,39 +128,37 @@ class HomeViewModel : ViewModel() {
 
 
     fun selectEmoji(emoji: String) {
-        _state.update { currentState ->
+        updateStateWithPrice { currentState ->
             val currentContent = currentState.currentAlertMessage ?: ""
 
-
-
-            // 1. Проверяем, что БЫЛО в поле до нажатия
-            val wasEmojiOnly = currentContent.isEmojiOnly()
-            val currentCount = currentContent.countGraphemeClusters()
+            // Вспомогательные расчеты
+            val wasEmojiOnly = currentContent.isEmojiOnly() // твоя функция расширения
+            val currentCount = currentContent.countGraphemeClusters() // твоя функция счета
 
             when {
-                // СЛУЧАЙ А: В поле был текст (Да, Гоу)
-                // Мы заменяем текст на эмодзи и ставим флаг true
+                // Лимит 5 эмодзи — ничего не меняем
+                wasEmojiOnly && currentCount >= 5 -> currentState
+
+                // Был текст — заменяем его на первый эмодзи
                 !wasEmojiOnly && currentContent.isNotEmpty() -> {
                     currentState.copy(
                         currentAlertMessage = emoji,
-                        isEmojiOnly = true, // Теперь только эмодзи
-                        isEmojiPickerOpen = true,
+                        isEmojiOnly = true,
+                        yapType = YapType.EMOJI,
                         canCloseMessage = true
                     )
                 }
 
-                // СЛУЧАЙ Б: Достигнут лимит 5 эмодзи
-                wasEmojiOnly && currentCount >= 5 -> {
-                    currentState
-                }
-
-                // СЛУЧАЙ В: Добавляем эмодзи к уже существующим эмодзи
+                // Добавляем эмодзи к существующим или в пустую строку
                 else -> {
                     val newContent = currentContent + emoji
+                    val newCount = currentCount + 1
                     currentState.copy(
                         currentAlertMessage = newContent,
-                        isEmojiOnly = true, // Подтверждаем, что это всё еще эмодзи
-                        isEmojiPickerOpen = (currentCount + 1) < 5,
+                        isEmojiOnly = true,
+                        yapType = YapType.EMOJI,
+                        // Автоматически закрываем пикер, если набрали 5
+                        isEmojiPickerOpen = newCount < 5,
                         canCloseMessage = true
                     )
                 }
@@ -143,14 +174,14 @@ class HomeViewModel : ViewModel() {
     }
 
     fun selectQuickMessage(message: String) {
-        _state.update { currentState ->
+        updateStateWithPrice { currentState ->
             currentState.copy(
                 currentAlertMessage = message,
-                // ОБЯЗАТЕЛЬНО: Проверяем новый текст.
-                // Для "Да", "Гоу" и т.д. это вернет false, и шрифт уменьшится.
+                // Для быстрых сообщений ("Гоу", "Ты где?") всегда false
                 isEmojiOnly = false,
                 isChatPickerOpen = false,
-                canCloseMessage = true
+                canCloseMessage = true,
+                yapType = YapType.TEXT
             )
         }
     }
@@ -158,5 +189,71 @@ class HomeViewModel : ViewModel() {
     fun setSheetExpanded(expanded: Boolean) {
         _state.update { it.copy(isSheetExpanded = expanded) }
     }
+
+
+
+
+    // 1. КАЛЬКУЛЯТОР ЦЕНЫ
+    private fun calculatePrice(users: List<UserItem>, isEmojiOnly: Boolean, type: YapType): Int {
+        val selectedCount = users.count { it.isYapActive }
+        val pricePerUser = when {
+            isEmojiOnly -> PRICE_EMOJI
+            type == YapType.TEXT -> PRICE_TEXT // Замени на свою проверку текстового сообщения
+            else -> PRICE_SIMPLE_YAP
+        }
+        return selectedCount * pricePerUser
+    }
+
+
+
+    // 3. ОТПРАВКА YAP И СПИСАНИЕ ЗВЕЗД
+    fun sendYap() {
+        val state = _state.value
+        if (state.yapPrice == 0) return // Защита: нет получателей
+
+        if (state.currentStars >= state.yapPrice) {
+            // Хватает звезд -> Списываем
+            val newStars = state.currentStars - state.yapPrice
+            val newProgress = newStars.toFloat() / state.maxStars.toFloat()
+
+            _state.update {
+                it.copy(
+                    currentStars = newStars,
+                    progress = newProgress,
+                    // Опционально: сбросить выделение получателей после отправки
+                    // users = it.users.map { u -> u.copy(isYapActive = false) },
+                    // yapPrice = 0
+                )
+            }
+
+            Log.d("ViewModel", "Сообщение отправлено. Списано: ${state.yapPrice}")
+            // TODO: Вызвать отправку сообщения на сервер/в БД
+        } else {
+            // Не хватает звезд -> Показываем ошибку
+            // TODO: Затриггерить показ AlertMessage
+            Log.d("ViewModel", "Недостаточно звезд!")
+        }
+    }
+
+    // 4. ТАЙМЕР РЕГЕНЕРАЦИИ ЗВЕЗД
+    private fun startEnergyRegeneration() {
+        viewModelScope.launch {
+            while (true) {
+                delay(REGEN_DELAY_MS)
+                _state.update { state ->
+                    if (state.currentStars < state.maxStars) {
+                        val newStars = state.currentStars + 1
+                        state.copy(
+                            currentStars = newStars,
+                            progress = newStars.toFloat() / state.maxStars.toFloat()
+                        )
+                    } else {
+                        state // Если полная шкала - ничего не делаем
+                    }
+                }
+            }
+        }
+    }
+
 
 }

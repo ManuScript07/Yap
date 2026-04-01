@@ -534,9 +534,12 @@ fun HomeContent(
                 contentAlignment = Alignment.Center
             ) {
                 MainYapButton(
-                    stars = state.starsCount,
-                    onClick = { viewModel.showAlert("Вы нажали на кнопку", false) }
+                    price = state.yapPrice,
+                    isEnoughStars = state.currentStars >= state.yapPrice,
+                    onClick = { viewModel.sendYap() }
+//                    onClick = { viewModel.showAlert("Вы нажали на кнопку", false) }
                 )
+//                viewModel.onMessageContentChanged(YapType.YAP, false)
             }
 
             // --- 3. НИЗ ---
@@ -652,7 +655,8 @@ fun InfoMessage(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainYapButton(
-    stars: Int,
+    price: Int,
+    isEnoughStars: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -744,7 +748,7 @@ fun MainYapButton(
                             horizontalArrangement = Arrangement.Center
                         ) {
                             Text(
-                                text = "$stars",
+                                text = "$price",
                                 color = MaterialTheme.colorScheme.background,
                                 fontWeight = FontWeight.Bold,
                                 // Чуть уменьшим шрифт, если 18sp будет тесно в 60dp
@@ -803,7 +807,7 @@ fun ActionButtonsRow(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                ProgressText(currentValue = state.starsCount)
+                ProgressText(currentValue = state.currentStars, maxValue = state.maxStars)
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     ActionButton(
