@@ -692,7 +692,8 @@ fun HomeContent(
                             context = context,
                             viewModel = viewModel,
                             isLocationEnabled = state.isLocationEnabled
-                    )}
+                    )},
+                    viewModel = viewModel
 //                    onClick = { viewModel.showAlert("Вы нажали на кнопку", false) }
                 )
             }
@@ -801,7 +802,7 @@ fun InfoMessage(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = 20.dp * baseScale),
-            contentAlignment = Alignment.Center
+            contentAlignment = Alignment.Center,
         ) {
             Text(
                 text = finalMessage,
@@ -812,7 +813,7 @@ fun InfoMessage(
                 fontWeight = if (isEmojiOnly) FontWeight.Normal else FontWeight.Bold,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 40.dp * baseScale)
+                    .padding(horizontal = 20.dp * baseScale)
             )
 
             if (showCloseIcon) {

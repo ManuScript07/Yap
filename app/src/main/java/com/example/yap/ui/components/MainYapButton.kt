@@ -32,20 +32,22 @@ import androidx.compose.ui.unit.sp
 import com.example.yap.ui.theme.LocalBaseScale
 import kotlinx.coroutines.delay
 import com.example.yap.R
+import com.example.yap.ui.screen.home.HomeViewModel
 
 // 1. ОПРЕДЕЛЯЕМ СОСТОЯНИЯ КНОПКИ
 private enum class YapButtonState {
-    IDLE, PRESSED, READY, FIRING
+    IDLE, PRESSED, READY, FIRING, RECORDING
 }
 
-@SuppressLint("ConfigurationScreenWidthHeight")
+@SuppressLint("ConfigurationScreenWidthHeight", "DefaultLocale")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainYapButton(
     price: Int,
     isEnoughStars: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    viewModel: HomeViewModel
 ) {
     val configuration = LocalConfiguration.current
     val baseScale = LocalBaseScale.current // Предполагаю, что он у тебя объявлен через CompositionLocal
@@ -59,6 +61,9 @@ fun MainYapButton(
     var buttonState by remember { mutableStateOf(YapButtonState.IDLE) }
     val haptic = LocalHapticFeedback.current
 
+
+    var offsetY by remember { mutableStateOf(0f) }
+    val recordTimer = remember { mutableStateOf(0) }
     // --- АНИМАЦИИ НА ОСНОВЕ СОСТОЯНИЯ ---
 
     val backgroundRotation by animateFloatAsState(
@@ -71,7 +76,7 @@ fun MainYapButton(
     val backColor by animateColorAsState(
         targetValue = when (buttonState) {
             YapButtonState.IDLE, YapButtonState.PRESSED -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
-            YapButtonState.READY, YapButtonState.FIRING -> MaterialTheme.colorScheme.tertiary.copy(alpha = 0.6f)// Цвет "заряженной" кнопки
+            YapButtonState.READY, YapButtonState.RECORDING, YapButtonState.FIRING -> MaterialTheme.colorScheme.tertiary.copy(alpha = 0.6f)// Цвет "заряженной" кнопки
         },
         animationSpec = tween(durationMillis = 150),
         label = "BgColor"
@@ -98,13 +103,41 @@ fun MainYapButton(
                 delay(150) // Короткая задержка: если держим палец, кнопка "заряжается"
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress) // Жесткая вибрация
                 buttonState = YapButtonState.READY
+                viewModel.showAlert(resId = R.string.hold_to_record, canClose = false)
             }
+
+            YapButtonState.READY -> {
+                delay(600) // Пауза перед началом записи
+                if (buttonState == YapButtonState.READY) { // Проверка, что палец всё еще там
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress) // Повторный тик — старт записи
+                    buttonState = YapButtonState.RECORDING
+                }
+
+                // Здесь можно вызвать viewModel.startRecording()
+            }
+
+            YapButtonState.RECORDING -> {
+                viewModel.showAlert(message = "Запись голосового сообщения...", canClose = false)
+
+                // Запуск таймера
+                // viewModel.startVoiceRecording()
+                while (buttonState == YapButtonState.RECORDING) {
+                    delay(1000)
+                    recordTimer.value++
+                }
+            }
+
             YapButtonState.FIRING -> {
                 delay(200) // Ждем завершения анимации уменьшения
                 onClick()  // Вызываем твою функцию
                 buttonState = YapButtonState.IDLE // Сбрасываем кнопку обратно
+                recordTimer.value = 0
+                offsetY = 0f
             }
-            else -> {}
+            else -> {
+                recordTimer.value = 0
+                offsetY = 0f
+            }
         }
     }
 
@@ -128,6 +161,7 @@ fun MainYapButton(
             // --- ПЕРЕДНЯЯ ПЛАШКА ---
             Surface(
                 modifier = Modifier
+                    .offset(y = offsetY.dp/5)
                     .size(width = frontPillWidth, height = frontPillHeight)
                     .shadow(elevation = 6.dp * baseScale, shape = pillShape)
                     .clip(pillShape)
@@ -136,66 +170,108 @@ fun MainYapButton(
                         if (!isEnoughStars) return@pointerInput
 
                         awaitEachGesture {
-                            val down = awaitFirstDown(requireUnconsumed = false)
+                            val down = awaitFirstDown()
                             buttonState = YapButtonState.PRESSED
 
-                            val up = waitForUpOrCancellation()
+                            var isInside = true // Флаг: находится ли палец в границах кнопки
 
-                            if (up != null) {
-                                // Палец отпустили в пределах кнопки
-                                if (buttonState == YapButtonState.READY) {
-                                    // Только если кнопка успела перейти в состояние READY (заряжена),
-                                    // мы запускаем процесс отправки FIRING
-                                    buttonState = YapButtonState.FIRING
-                                } else {
-                                    // Если отпустили слишком рано (состояние всё еще PRESSED),
-                                    // просто даем легкий фидбек и отменяем действие
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    buttonState = YapButtonState.IDLE
+                            do {
+                                val event = awaitPointerEvent()
+                                val change = event.changes.first()
+                                val position = change.position
+
+                                // Проверяем, не вышел ли палец за границы передней плашки
+                                isInside = position.x in 0f..size.width.toFloat() &&
+                                        position.y in 0f..size.height.toFloat()
+
+                                if (buttonState == YapButtonState.RECORDING) {
+                                    offsetY = position.y - down.position.y
+
+                                    // Логика отмены (свайп вниз)
+                                    if (offsetY > 200f) {
+                                        buttonState = YapButtonState.IDLE
+                                    }
+                                    // Логика закрепления (свайп вверх)
+                                    else if (offsetY < -200f) {
+                                        // buttonState = YapButtonState.LOCKED
+                                    }
                                 }
-                            } else {
-                                // Жест отменен (увели палец в сторону)
-                                buttonState = YapButtonState.IDLE
+
+                                change.consume()
+                            } while (event.changes.any { it.pressed })
+
+                            // ПАЛЕЦ ПОДНЯЛИ: решаем, что делать
+                            when {
+                                // Если мы были в режиме записи и отпустили (не отменив свайпом)
+                                buttonState == YapButtonState.RECORDING -> {
+                                    buttonState = YapButtonState.FIRING
+                                }
+
+                                // Если мы были в READY и отпустили ВНУТРИ кнопки
+                                buttonState == YapButtonState.READY && isInside -> {
+                                    buttonState = YapButtonState.FIRING
+                                }
+
+                                // Во всех остальных случаях (вышли за границы, слишком быстро или отмена)
+                                else -> {
+                                    buttonState = YapButtonState.IDLE
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                }
                             }
                         }
-                    }   ,
+                    },
                 shape = pillShape,
                 color = MaterialTheme.colorScheme.primary,
             ) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Icon(
-                        painter = painterResource(id = R.drawable.yap_button_big_text), // Замени на свой ID
-                        contentDescription = "YAP Logo",
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.size(width = 120.dp * baseScale, height = 60.dp * baseScale)
-                    )
-
-                    Surface(
-                        modifier = Modifier
-                            .offset(y = 50.dp * baseScale)
-                            .size(width = 60.dp * baseScale, height = 32.dp * baseScale),
-                        shape = RoundedCornerShape(18.dp * baseScale),
-                        color = MaterialTheme.colorScheme.tertiary,
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxSize(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
+                    if (buttonState == YapButtonState.RECORDING) {
+                        // Слой с секундомером
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(painterResource(R.drawable.baseline_mic_24), "Mic", tint = Color.Red)
                             Text(
-                                text = "$price",
-                                color = MaterialTheme.colorScheme.background,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = (18 * baseScale).sp,
-                                lineHeight = (16 * baseScale).sp
+                                text = String.format("0:%02d", recordTimer.value),
+                                style = MaterialTheme.typography.titleLarge
                             )
-                            Spacer(modifier = Modifier.width(5.dp * baseScale))
-                            Icon(
-                                painter = painterResource(R.drawable.star), // Замени на свой ID
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.background,
-                                modifier = Modifier.size(20.dp * baseScale)
+                        }
+                    }
+                    else {
+                        Icon(
+                            painter = painterResource(id = R.drawable.yap_button_big_text), // Замени на свой ID
+                            contentDescription = "YAP Logo",
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(
+                                width = 120.dp * baseScale,
+                                height = 60.dp * baseScale
                             )
+                        )
+
+                        Surface(
+                            modifier = Modifier
+                                .offset(y = 50.dp * baseScale)
+                                .size(width = 60.dp * baseScale, height = 32.dp * baseScale),
+                            shape = RoundedCornerShape(18.dp * baseScale),
+                            color = MaterialTheme.colorScheme.tertiary,
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxSize(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Text(
+                                    text = "$price",
+                                    color = MaterialTheme.colorScheme.background,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = (18 * baseScale).sp,
+                                    lineHeight = (16 * baseScale).sp
+                                )
+                                Spacer(modifier = Modifier.width(5.dp * baseScale))
+                                Icon(
+                                    painter = painterResource(R.drawable.star), // Замени на свой ID
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.background,
+                                    modifier = Modifier.size(20.dp * baseScale)
+                                )
+                            }
                         }
                     }
                 }
