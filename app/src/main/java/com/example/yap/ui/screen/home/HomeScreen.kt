@@ -160,7 +160,7 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
         contract = ActivityResultContracts.StartIntentSenderForResult()
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
-            viewModel.setLocationToggle(true)
+            viewModel.setLocationToggle(isEnabled = true, isManualAction = true)
         } else {
             viewModel.setLocationToggle(false)
         }

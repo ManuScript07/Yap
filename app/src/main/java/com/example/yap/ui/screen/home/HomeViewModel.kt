@@ -26,6 +26,7 @@ class HomeViewModel : ViewModel() {
     )
     val state: StateFlow<HomeUiState> = _state.asStateFlow()
     private var alertJob: Job? = null
+    private var isActivatingLocation = false
 
 
     companion object {
@@ -95,8 +96,25 @@ class HomeViewModel : ViewModel() {
         UserItem(4, "User4", true, R.drawable.avatar_4)
     )
 
-    fun setLocationToggle(isEnabled: Boolean) {
+
+
+    fun setLocationToggle(isEnabled: Boolean, isManualAction: Boolean = false) {
+        if (isManualAction) isActivatingLocation = true
+
         _state.update { it.copy(isLocationEnabled = isEnabled) }
+
+        // Сбрасываем флаг через секунду, когда GPS точно проснется
+        if (isManualAction) {
+            viewModelScope.launch {
+                delay(1000)
+                isActivatingLocation = false
+            }
+        }
+    }
+
+    // Добавь проверку для защиты
+    fun shouldDisableLocation(isAvailable: Boolean): Boolean {
+        return !isAvailable && !isActivatingLocation
     }
 
     // Функция для показа нового сообщения
