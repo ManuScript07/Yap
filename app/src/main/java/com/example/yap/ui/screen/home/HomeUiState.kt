@@ -1,7 +1,7 @@
 package com.example.yap.ui.screen.home
 
 import androidx.annotation.StringRes
-import com.example.yap.data.UserItem
+import com.example.yap.data.model.UserItem
 
 data class HomeUiState(
     val users: List<UserItem> = emptyList(),

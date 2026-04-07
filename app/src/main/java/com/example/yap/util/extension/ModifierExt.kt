@@ -1,4 +1,4 @@
-package com.example.yap.ui.util
+package com.example.yap.util.extension
 
 import androidx.compose.foundation.clickable
 import androidx.compose.runtime.getValue

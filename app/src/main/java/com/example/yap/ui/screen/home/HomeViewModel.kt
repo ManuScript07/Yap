@@ -1,16 +1,15 @@
 package com.example.yap.ui.screen.home
 
-import EnergyPreferences
+import UserPreferences
 import android.app.Application
 import android.util.Log
 import androidx.annotation.StringRes
 import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.yap.R
-import com.example.yap.data.UserItem
-import com.example.yap.ui.util.countGraphemeClusters
-import com.example.yap.ui.util.isEmojiOnly
+import com.example.yap.data.model.UserItem
+import com.example.yap.util.extension.countGraphemeClusters
+import com.example.yap.util.extension.isEmojiOnly
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,7 +21,7 @@ import kotlinx.coroutines.launch
 
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val energyPrefs = EnergyPreferences(application)
+    private val energyPrefs = UserPreferences(application)
 
     private val _state = MutableStateFlow(
         HomeUiState(
@@ -61,18 +60,21 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         updateStateWithPrice { it }
 //        // Запускаем бесконечный цикл восстановления энергии при старте ViewModel
 //        startEnergyRegeneration()
-        loadEnergyFromStore()
+        loadPersistedData()
     }
 
-    private fun loadEnergyFromStore() {
+    private fun loadPersistedData() {
         viewModelScope.launch {
             val (savedStars, savedTime) = energyPrefs.energyData.first()
+            val savedUsers = energyPrefs.usersData.first()
+
             val currentTime = System.currentTimeMillis()
 
             // Объявляем переменную ЗАРАНЕЕ с дефолтным значением
             var initialDelay = REGEN_DELAY_MS
 
             _state.update { currentState ->
+
                 val baseStars = savedStars ?: currentState.currentStars
                 val max = currentState.maxStars
 
@@ -93,11 +95,17 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 lastAnchorTime = currentTime - timeSpentInCurrentCycle
 
                 val finalStars = (baseStars + restoredStars).coerceAtMost(max)
+                val finalUsers = savedUsers ?: getInitialUsers()
                 currentState.copy(
+                    users = finalUsers,
                     currentStars = finalStars,
                     progress = finalStars.toFloat() / max.toFloat()
                 )
+
+
             }
+
+            updateStateWithPrice { it }
 
             // Теперь initialDelay виден здесь
             if (_state.value.currentStars < _state.value.maxStars) {
@@ -112,6 +120,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             val updatedUsers = currentState.users.map {
                 if (it.id == userId) it.copy(isYapActive = !it.isYapActive) else it
             }
+            saveUsersToStore(updatedUsers)
             currentState.copy(users = updatedUsers)
         }
     }
@@ -125,18 +134,28 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             val randomAvatar = listOf(R.drawable.avatar_1, R.drawable.avatar_2, R.drawable.avatar_3, R.drawable.avatar_4).random()
             val newUser = UserItem(newId, "User $newId", false, randomAvatar)
 
-            currentState.copy(users = currentState.users + newUser)
+            val updatedList = currentState.users + newUser
+            saveUsersToStore(updatedList) // Сохраняем
+
+            currentState.copy(users = updatedList)
         }
+        updateStateWithPrice { it }
     }
 
     fun removeUser(userId: Int) {
         // Используем нашу защищенную функцию с пересчетом
         updateStateWithPrice { currentState ->
             val updatedUsers = currentState.users.filter { it.id != userId }
-
+            saveUsersToStore(updatedUsers)
             // Логика: если мы удаляем юзера, он автоматически перестает быть получателем.
             // updateStateWithPrice сама вызовет calculatePrice для нового списка.
             currentState.copy(users = updatedUsers)
+        }
+    }
+
+    private fun saveUsersToStore(users: List<UserItem>) {
+        viewModelScope.launch {
+            energyPrefs.saveUsers(users)
         }
     }
 

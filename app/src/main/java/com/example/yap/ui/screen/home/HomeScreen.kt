@@ -136,16 +136,16 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.yap.LocationHelper
-import com.example.yap.LocationHelper.checkLocationSettings
+
 import com.example.yap.R
-import com.example.yap.data.UserItem
+import com.example.yap.data.model.UserItem
 import com.example.yap.ui.theme.LocalAdditionColors
 import com.example.yap.ui.theme.LocalBaseScale
+import com.example.yap.util.LocationHelper
+import com.example.yap.util.LocationHelper.checkLocationSettings
 import com.google.android.gms.location.LocationServices
 
 
-// Модель пользователя
 
 
 @SuppressLint("ConfigurationScreenWidthHeight")

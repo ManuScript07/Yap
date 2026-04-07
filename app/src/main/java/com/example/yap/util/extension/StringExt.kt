@@ -1,4 +1,4 @@
-package com.example.yap.ui.util
+package com.example.yap.util.extension
 
 // Точная проверка: только эмодзи и спец-символы, никаких букв/цифр
 import java.text.BreakIterator

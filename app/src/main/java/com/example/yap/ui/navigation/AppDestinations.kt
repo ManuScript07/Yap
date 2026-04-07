@@ -1,4 +1,4 @@
-package com.example.yap.navigation
+package com.example.yap.ui.navigation
 
 import androidx.annotation.DrawableRes
 import com.example.yap.R

@@ -1,4 +1,4 @@
-package com.example.yap.ui.util
+package com.example.yap.util.compose
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue

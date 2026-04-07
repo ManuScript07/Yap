@@ -1,4 +1,4 @@
-package com.example.yap.data
+package com.example.yap.data.model
 
 data class UserItem(
     val id: Int,
