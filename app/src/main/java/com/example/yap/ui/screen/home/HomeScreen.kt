@@ -1,13 +1,34 @@
 package com.example.yap.ui.screen.home
 
 
+import android.Manifest
 import android.annotation.SuppressLint
+import android.app.Activity
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.content.pm.PackageManager
+import android.location.Location
+import android.location.LocationManager
+import android.util.Log
 import android.widget.Button
+import androidx.activity.compose.ManagedActivityResultLauncher
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.ActivityResult
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.updateTransition
@@ -18,6 +39,7 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -70,6 +92,7 @@ import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.material3.rememberStandardBottomSheetState
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -86,11 +109,15 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringArrayResource
@@ -104,11 +131,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.yap.LocationHelper
+import com.example.yap.LocationHelper.checkLocationSettings
 import com.example.yap.R
 import com.example.yap.data.UserItem
 import com.example.yap.ui.theme.LocalAdditionColors
 import com.example.yap.ui.theme.LocalBaseScale
+import com.google.android.gms.location.LocationServices
 
 
 // Модель пользователя
@@ -119,18 +153,80 @@ import com.example.yap.ui.theme.LocalBaseScale
 @Composable
 fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
     val state by viewModel.state.collectAsState()
-    // Сохраняем состояние шторки между рекомпозициями
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    val gpsResolverLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            viewModel.setLocationToggle(true)
+        } else {
+            viewModel.setLocationToggle(false)
+        }
+    }
+
+    // Твой текущий лаунчер для разрешений (Permissions)
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val isGranted = permissions.values.any { it }
+        if (isGranted) {
+            // Разрешения дали! Теперь проверяем, включен ли сам GPS датчик
+            checkLocationSettings(
+                context = context,
+                onEnabled = { viewModel.setLocationToggle(true) },
+                onShowResolver = { exception ->
+                    gpsResolverLauncher.launch(IntentSenderRequest.Builder(exception.resolution).build())
+                },
+                onFailure = { viewModel.setLocationToggle(false) }
+            )
+        } else {
+            viewModel.setLocationToggle(false)
+        }
+    }
+
+    // Следим за выключением GPS извне (шторка)
+    DisposableEffect(context) {
+        val filter = IntentFilter(LocationManager.PROVIDERS_CHANGED_ACTION)
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                context?.let {
+                    val isAvailable = LocationHelper.isLocationAvailable(it)
+                    if (state.isLocationEnabled && !isAvailable) {
+                        viewModel.setLocationToggle(false)
+//                        viewModel.showAlert(resId = R.string.location_disabled_error, durationMs = 3000)
+                    }
+                }
+            }
+        }
+        context.registerReceiver(receiver, filter)
+        onDispose { context.unregisterReceiver(receiver) }
+    }
+
+    // --- 2. ЖИЗНЕННЫЙ ЦИКЛ (На случай возврата из настроек) ---
+    // Добавляем state.isLocationEnabled в ключи (keys), чтобы эффект видел актуальное состояние
+    DisposableEffect(lifecycleOwner, state.isLocationEnabled) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                if (state.isLocationEnabled && !LocationHelper.isLocationAvailable(context)) {
+                    viewModel.setLocationToggle(false)
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // --- 3. UI СОСТОЯНИЕ ШТОРКИ ---
     val sheetState = rememberStandardBottomSheetState(
         initialValue = SheetValue.PartiallyExpanded,
         skipHiddenState = false,
-        confirmValueChange = { newState ->
-            newState != SheetValue.Hidden
-        }
+        confirmValueChange = { newState -> newState != SheetValue.Hidden }
     )
     val scaffoldState = rememberBottomSheetScaffoldState(sheetState)
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // Фон
         Image(
             painter = painterResource(id = R.drawable.bg),
             contentDescription = null,
@@ -140,18 +236,69 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
             contentScale = ContentScale.Crop
         )
 
-        // Вызов вынесенной функции
         HomeUsersBottomSheet(
             scaffoldState = scaffoldState,
             state = state,
             screenHeight = LocalConfiguration.current.screenHeightDp.dp,
             onYapClick = { userId -> viewModel.toggleUserYap(userId) },
-            onAddUserClick = { viewModel.addUser() },       // Связываем тут
-            onRemoveUserClick = { id -> viewModel.removeUser(id) }, // Связываем тут
+            onAddUserClick = { viewModel.addUser() },
+            onRemoveUserClick = { id -> viewModel.removeUser(id) },
             content = { innerPadding ->
-                HomeContent(innerPadding, viewModel = viewModel)
+                // В контенте передаем логику тумблера и отправки
+                HomeContent(
+                    innerPadding = innerPadding,
+                    viewModel = viewModel,
+                    onLocationToggle = { isChecked ->
+                        if (isChecked) {
+                            // ВЫЗЫВАЕМ НОВУЮ ЛОГИКУ
+                            handleLocationActivation(
+                                context = context,
+                                permissionLauncher = locationPermissionLauncher,
+                                gpsLauncher = gpsResolverLauncher, // Добавили новый лаунчер
+                                viewModel = viewModel
+                            )
+                        } else {
+                            viewModel.setLocationToggle(false)
+                        }
+                    }
+                )
             }
         )
+    }
+}
+
+
+
+private fun handleLocationActivation(
+    context: Context,
+    permissionLauncher: ManagedActivityResultLauncher<Array<String>, Map<String, Boolean>>,
+    gpsLauncher: ManagedActivityResultLauncher<IntentSenderRequest, ActivityResult>,
+    viewModel: HomeViewModel
+) {
+    // 1. Проверяем разрешения
+    val hasFineLocation = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+    val hasCoarseLocation = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+
+    if (hasFineLocation || hasCoarseLocation) {
+        // 2. Разрешения есть, проверяем включен ли физический GPS
+        checkLocationSettings(
+            context = context,
+            onEnabled = { viewModel.setLocationToggle(true) },
+            onShowResolver = { exception ->
+                // Включаем системное окно "Хотите включить геолокацию?"
+                gpsLauncher.launch(IntentSenderRequest.Builder(exception.resolution).build())
+            },
+            onFailure = {
+                viewModel.setLocationToggle(false)
+//                viewModel.showAlert("Ошибка проверки GPS", durationMs = 2000)
+            }
+        )
+    } else {
+        // 3. Разрешений нет — запрашиваем их
+        permissionLauncher.launch(arrayOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        ))
     }
 }
 
@@ -480,10 +627,12 @@ fun AddUserButton(onClick: () -> Unit) {
 @Composable
 fun HomeContent(
     innerPadding: PaddingValues,
-    viewModel: HomeViewModel
+    viewModel: HomeViewModel,
+    onLocationToggle: (Boolean) -> Unit
 ) {
     val state by viewModel.state.collectAsState()
     val baseScale = LocalBaseScale.current
+    val context = LocalContext.current
 
     // 🌟 ГЛАВНЫЙ BOX-ОВЕРЛЕЙ 🌟
     // Он занимает весь экран. Ничто внутри него не может "раздвинуть" экран.
@@ -514,12 +663,13 @@ fun HomeContent(
             // --- 1. ВЕРХ ---
             TopActionBar(
                 state = state,
-                onLocationToggle = { viewModel.toggleLocation(it) },
+                onLocationToggle = onLocationToggle,
                 modifier = Modifier.padding(top = 12.dp * baseScale)
             )
 
             InfoMessage(
                 message = state.currentAlertMessage,
+                messageResId = state.currentAlertResource,
                 showCloseIcon = state.canCloseMessage,
                 onClose = { viewModel.dismissMessage() },
                 baseScale = baseScale,
@@ -536,7 +686,12 @@ fun HomeContent(
                 MainYapButton(
                     price = state.yapPrice,
                     isEnoughStars = state.currentStars >= state.yapPrice,
-                    onClick = { viewModel.sendYap() }
+                    onClick = {
+                        fetchLocationAndSendYap(
+                            context = context,
+                            viewModel = viewModel,
+                            isLocationEnabled = state.isLocationEnabled
+                    )}
 //                    onClick = { viewModel.showAlert("Вы нажали на кнопку", false) }
                 )
 //                viewModel.onMessageContentChanged(YapType.YAP, false)
@@ -594,23 +749,52 @@ fun HomeContent(
     }
 }
 
+@SuppressLint("MissingPermission") // Мы уже проверили пермишены ранее
+fun fetchLocationAndSendYap(
+    context: Context,
+    viewModel: HomeViewModel,
+    isLocationEnabled: Boolean
+) {
+    if (!isLocationEnabled) {
+        // Локация выключена, отправляем как обычно, передавая null
+        viewModel.sendYap(latitude = null, longitude = null)
+        return
+    }
+
+    val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
+
+    fusedLocationClient.lastLocation.addOnSuccessListener { location: Location? ->
+        if (location != null) {
+            Log.d("YAP_LOCATION", "🌍 Успешно: Lat=${location.latitude}, Lon=${location.longitude}")
+            viewModel.sendYap(latitude = location.latitude, longitude = location.longitude)
+        } else {
+            Log.e("YAP_LOCATION", "⚠️ Локация равна null (GPS еще не поймал спутники)")
+            // Можно отправить без локации, либо показать Alert
+            viewModel.sendYap(latitude = null, longitude = null)
+            viewModel.showAlert(resId = R.string.failed_location, durationMs = 3000, canClose = false)
+        }
+    }
+}
+
 @Composable
 fun InfoMessage(
-    message: String?,
+    message: String?,          // Прямая строка (из ввода или API)
+    messageResId: Int?,        // ID из ресурсов (R.string...)
     isEmojiOnly: Boolean,
     showCloseIcon: Boolean,
     onClose: () -> Unit,
     baseScale: Float
 ) {
-    // 1. Определяем, является ли сообщение набором эмодзи
-//    val isEmojiOnly = remember(message) { message?.isEmojiOnly() ?: false }
+    // 1. Получаем итоговый текст.
+    // Если есть прямая строка — берем её, если нет — тянем из ресурсов.
+    val finalMessage = message ?: messageResId?.let { stringResource(it) } ?: ""
 
-    // 2. Выбираем размер шрифта: 44sp для эмодзи, 18sp для текста
+    // 2. Выбираем размеры на основе итогового текста
     val dynamicFontSize = if (isEmojiOnly) (32 * baseScale).sp else (18 * baseScale).sp
     val dynamicLetterSpacing = if (isEmojiOnly) (4 * baseScale).sp else TextUnit.Unspecified
 
     AnimatedVisibility(
-        visible = !message.isNullOrEmpty(),
+        visible = finalMessage.isNotEmpty(),
         enter = fadeIn() + expandVertically(),
         exit = fadeOut() + shrinkVertically()
     ) {
@@ -621,12 +805,11 @@ fun InfoMessage(
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = message ?: "",
+                text = finalMessage,
                 color = MaterialTheme.colorScheme.background,
-                fontSize = dynamicFontSize, // Применяем динамический размер
+                fontSize = dynamicFontSize,
                 letterSpacing = dynamicLetterSpacing,
                 textAlign = TextAlign.Center,
-                // Для текста оставляем Bold, для эмодзи он не критичен
                 fontWeight = if (isEmojiOnly) FontWeight.Normal else FontWeight.Bold,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -638,6 +821,7 @@ fun InfoMessage(
                     onClick = onClose,
                     modifier = Modifier
                         .align(Alignment.CenterEnd)
+                        .padding(end = 8.dp * baseScale) // Небольшой отступ от края
                         .size(32.dp * baseScale)
                 ) {
                     Icon(
@@ -972,17 +1156,78 @@ fun ProgressText(currentValue: Int, maxValue: Int = 100) {
 
 @Composable
 fun ProgressIndicatorOnly(progress: Float) {
-    Box(
+    val animatedProgress by animateFloatAsState(
+        targetValue = progress.coerceIn(0f, 1f),
+        animationSpec = tween(durationMillis = 500, easing = LinearOutSlowInEasing),
+        label = "ProgressCanvas"
+    )
+
+    // 1. Бесконечная анимация смещения
+    val infiniteTransition = rememberInfiniteTransition(label = "PulseTransition")
+    val pulseOffset by infiniteTransition.animateFloat(
+        initialValue = -0.5f, // Начинаем ЗА левым краем
+        targetValue = 1.5f,  // Заканчиваем ЗА правым краем
+        animationSpec = infiniteRepeatable(
+            animation = tween(2000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "PulseOffset"
+    )
+
+    val trackColor = Color.White.copy(alpha = 0.4f)
+    val progressColor = MaterialTheme.colorScheme.primary
+    val pulseColor = Color.White.copy(alpha = 0.6f) // Мягкий белый блик
+
+    Canvas(
         modifier = Modifier
             .fillMaxWidth()
             .height(20.dp)
-            .background(Color.White.copy(alpha = 0.4f), CircleShape)
+            .padding(horizontal = 2.dp)
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth(progress.coerceIn(0f, 1f))
-                .fillMaxHeight()
-                .background(MaterialTheme.colorScheme.primary, CircleShape)
+        val strokeWidth = size.height
+        val radius = strokeWidth / 2
+        val usableWidth = size.width - (radius * 2)
+
+        // Фон
+        drawLine(
+            color = trackColor,
+            start = Offset(radius, radius),
+            end = Offset(size.width - radius, radius),
+            cap = StrokeCap.Round,
+            strokeWidth = strokeWidth
+        )
+
+        // Прогресс
+        val startX = radius + (if (animatedProgress == 0f) 0.01f else 0f)
+        val endX = radius + (usableWidth * animatedProgress)
+
+        val progressBrush = if (progress >= 1f) {
+            // КЛЮЧ К ЦИКЛИЧНОСТИ:
+            // Мы создаем градиент, где по краям основной цвет, а в центре — блик.
+            // За счет того, что pulseOffset идет от -0.5 до 1.5,
+            // блик физически покидает видимую область линии до того, как сбросится анимация.
+
+            val pulsePosition = radius + (usableWidth * pulseOffset)
+            val blurWidth = usableWidth * 0.3f // Ширина "размытия" блика
+
+            Brush.linearGradient(
+                0.0f to progressColor,
+                0.5f to pulseColor,
+                1.0f to progressColor,
+                start = Offset(pulsePosition - blurWidth, radius),
+                end = Offset(pulsePosition + blurWidth, radius),
+                tileMode = TileMode.Clamp
+            )
+        } else {
+            SolidColor(progressColor)
+        }
+
+        drawLine(
+            brush = progressBrush,
+            start = Offset(startX, radius),
+            end = Offset(endX, radius),
+            cap = StrokeCap.Round,
+            strokeWidth = strokeWidth
         )
     }
 }

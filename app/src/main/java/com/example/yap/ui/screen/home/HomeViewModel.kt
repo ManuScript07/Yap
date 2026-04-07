@@ -1,12 +1,14 @@
 package com.example.yap.ui.screen.home
 
 import android.util.Log
+import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.yap.R
 import com.example.yap.data.UserItem
 import com.example.yap.ui.util.countGraphemeClusters
 import com.example.yap.ui.util.isEmojiOnly
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -23,6 +25,7 @@ class HomeViewModel : ViewModel() {
         )
     )
     val state: StateFlow<HomeUiState> = _state.asStateFlow()
+    private var alertJob: Job? = null
 
 
     companion object {
@@ -92,24 +95,47 @@ class HomeViewModel : ViewModel() {
         UserItem(4, "User4", true, R.drawable.avatar_4)
     )
 
-    fun toggleLocation(enabled: Boolean) {
-        _state.update { it.copy(isLocationEnabled = enabled) }
+    fun setLocationToggle(isEnabled: Boolean) {
+        _state.update { it.copy(isLocationEnabled = isEnabled) }
     }
 
     // Функция для показа нового сообщения
-    fun showAlert(message: String, canClose: Boolean = true) {
+    fun showAlert(
+        message: String? = null,
+        @StringRes resId: Int? = null,
+        canClose: Boolean = true,
+        durationMs: Long? = null
+    ) {
+        alertJob?.cancel()
+
+        val newId = System.currentTimeMillis() // Генерируем уникальный ключ
+
         _state.update { it.copy(
             currentAlertMessage = message,
+            currentAlertResource = resId,
             canCloseMessage = canClose,
-            isEmojiOnly = false
+            isEmojiOnly = false,
+            alertId = newId // Сохраняем его в стейт
         ) }
+
+        if (durationMs != null) {
+            alertJob = viewModelScope.launch {
+                delay(durationMs)
+                // ПРОВЕРКА: удаляем только если ID совпадает
+                if (_state.value.alertId == newId) {
+                    dismissMessage()
+                }
+            }
+        }
     }
 
     // Функция для скрытия (вызывается при клике на крестик)
     fun dismissMessage() {
+        alertJob?.cancel()
         updateStateWithPrice { currentState ->
             currentState.copy(
                 currentAlertMessage = null,
+                currentAlertResource = null,
                 yapType = YapType.YAP,
                 isEmojiOnly = false // Лучше сбрасывать и его, раз мы возвращаемся к обычному YAP
             )
@@ -128,6 +154,7 @@ class HomeViewModel : ViewModel() {
 
 
     fun selectEmoji(emoji: String) {
+        alertJob?.cancel()
         updateStateWithPrice { currentState ->
             val currentContent = currentState.currentAlertMessage ?: ""
 
@@ -174,14 +201,14 @@ class HomeViewModel : ViewModel() {
     }
 
     fun selectQuickMessage(message: String) {
+        alertJob?.cancel()
         updateStateWithPrice { currentState ->
             currentState.copy(
                 currentAlertMessage = message,
-                // Для быстрых сообщений ("Гоу", "Ты где?") всегда false
                 isEmojiOnly = false,
                 isChatPickerOpen = false,
                 canCloseMessage = true,
-                yapType = YapType.TEXT
+                yapType = YapType.TEXT,
             )
         }
     }
@@ -207,7 +234,7 @@ class HomeViewModel : ViewModel() {
 
 
     // 3. ОТПРАВКА YAP И СПИСАНИЕ ЗВЕЗД
-    fun sendYap() {
+    fun sendYap(latitude: Double?, longitude: Double?) {
         val state = _state.value
         if (state.yapPrice == 0) return // Защита: нет получателей
 
@@ -227,11 +254,13 @@ class HomeViewModel : ViewModel() {
             }
 
             Log.d("ViewModel", "Сообщение отправлено. Списано: ${state.yapPrice}")
+            dismissMessage()
             // TODO: Вызвать отправку сообщения на сервер/в БД
         } else {
             // Не хватает звезд -> Показываем ошибку
             // TODO: Затриггерить показ AlertMessage
             Log.d("ViewModel", "Недостаточно звезд!")
+//            showAlert(resId = R.string.not_enough_stars, canClose = false, durationMs = 3000)        }
         }
     }
 
@@ -254,6 +283,10 @@ class HomeViewModel : ViewModel() {
             }
         }
     }
+
+
+
+
 
 
 }

@@ -1,5 +1,6 @@
 package com.example.yap.ui.screen.home
 
+import androidx.annotation.StringRes
 import com.example.yap.data.UserItem
 
 data class HomeUiState(
@@ -8,12 +9,16 @@ data class HomeUiState(
     val currentStars: Int = 65,
     val maxStars: Int = 100,
     val progress: Float = 0.65f,
-    val yapPrice: Int = 65,
+    val yapPrice: Int = 0,
     val yapType: YapType = YapType.YAP,
 
     val isNiceActive: Boolean = true,
     val isLocationEnabled: Boolean = true,
+
     val currentAlertMessage: String? = null,
+    @StringRes val currentAlertResource: Int? = null,
+    val alertId: Long = 0L,
+
     val canCloseMessage: Boolean = false,
     val messageType: MessageType = MessageType.INFO,
     val isEmojiPickerOpen: Boolean = false,
