@@ -139,6 +139,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 
 import com.example.yap.R
 import com.example.yap.data.model.UserItem
+import com.example.yap.ui.components.MainYapButton
 import com.example.yap.ui.theme.LocalAdditionColors
 import com.example.yap.ui.theme.LocalBaseScale
 import com.example.yap.util.LocationHelper
@@ -232,7 +233,7 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
             contentDescription = null,
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0xFF4400FF)),
+                .background(Color(0xFF0033FF)),
             contentScale = ContentScale.Crop
         )
 
@@ -683,7 +684,7 @@ fun HomeContent(
                     .fillMaxWidth(),
                 contentAlignment = Alignment.Center
             ) {
-                MainYapButton(
+                   MainYapButton(
                     price = state.yapPrice,
                     isEnoughStars = state.currentStars >= state.yapPrice,
                     onClick = {
@@ -694,7 +695,6 @@ fun HomeContent(
                     )}
 //                    onClick = { viewModel.showAlert("Вы нажали на кнопку", false) }
                 )
-//                viewModel.onMessageContentChanged(YapType.YAP, false)
             }
 
             // --- 3. НИЗ ---
@@ -749,14 +749,13 @@ fun HomeContent(
     }
 }
 
-@SuppressLint("MissingPermission") // Мы уже проверили пермишены ранее
+@SuppressLint("MissingPermission")
 fun fetchLocationAndSendYap(
     context: Context,
     viewModel: HomeViewModel,
     isLocationEnabled: Boolean
 ) {
     if (!isLocationEnabled) {
-        // Локация выключена, отправляем как обычно, передавая null
         viewModel.sendYap(latitude = null, longitude = null)
         return
     }
@@ -835,127 +834,127 @@ fun InfoMessage(
         }
     }
 }
-@SuppressLint("ConfigurationScreenWidthHeight")
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun MainYapButton(
-    price: Int,
-    isEnoughStars: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val configuration = LocalConfiguration.current
-    val screenWidth = configuration.screenWidthDp.dp
-
-    // Вычисляем базовый размер кнопки как 50% от ширины экрана (или другой коэффициент)
-    // Это гарантирует, что на любом экране кнопка будет занимать одинаковую долю места
-    val baseScale = LocalBaseScale.current
-
-    val frontPillWidth = 196.dp * baseScale
-    val frontPillHeight = 160.dp * baseScale
-    val backPillWidth = 260.dp * baseScale
-    val backPillHeight = 212.dp * baseScale
-
-    val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
-    val transition = updateTransition(targetState = isPressed, label = "YapCollapse")
-
-    val backgroundRotation by transition.animateFloat(
-        label = "BgRotation",
-        transitionSpec = { spring(dampingRatio = Spring.DampingRatioLowBouncy) }
-    ) { pressed ->
-        if (pressed) 0f else -45f
-    }
-
-    val pillShape = RoundedCornerShape(percent = 80)
-
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = modifier // Сюда прилетает weight(1f)
-    ) {
-        // Контейнер, который держит пропорции
-        Box(
-            modifier = Modifier.size(width = backPillWidth + 40.dp, height = backPillHeight + 40.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            // --- ЗАДНЯЯ ПЛАШКА ---
-            Surface(
-                modifier = Modifier
-                    .size(width = backPillWidth, height = backPillHeight)
-                    .rotate(backgroundRotation),
-                shape = pillShape,
-                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
-            ) {}
-
-            // --- ПЕРЕДНЯЯ ПЛАШКА ---
-            Surface(
-                modifier = Modifier
-                    .size(width = frontPillWidth, height = frontPillHeight)
-                    .shadow(
-                        elevation = 6.dp * baseScale, // Тень тоже масштабируем
-                        shape = pillShape
-                    )
-                    .clip(pillShape)
-                    .clickable(
-                        onClick = onClick,
-                        interactionSource = interactionSource,
-                        indication = null
-                    ),
-                shape = pillShape,
-                color = MaterialTheme.colorScheme.primary,
-            ) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    // Логотип масштабируем пропорционально
-                    Icon(
-                        painter = painterResource(id = R.drawable.yap_button_big_text),
-                        contentDescription = "YAP Logo",
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.size(width = 120.dp * baseScale, height = 60.dp * baseScale)
-                    )
-
-                    // Плашка цены
-                    Surface(
-                        modifier = Modifier
-                            .offset(y = 50.dp * baseScale)
-                            // Фиксируем размер плашки
-                            .size(width = 60.dp * baseScale, height = 32.dp * baseScale),
-                        shape = RoundedCornerShape(18.dp * baseScale),
-                        color = MaterialTheme.colorScheme.tertiary,
-                    ) {
-                        // Используем Row с Center-позиционированием без внутренних padding
-                        Row(
-                            modifier = Modifier.fillMaxSize(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            Text(
-                                text = "$price",
-                                color = MaterialTheme.colorScheme.background,
-                                fontWeight = FontWeight.Bold,
-                                // Чуть уменьшим шрифт, если 18sp будет тесно в 60dp
-                                fontSize = (18 * baseScale).sp,
-                                lineHeight = (16 * baseScale).sp
-                            )
-
-                            Spacer(modifier = Modifier.width(5.dp * baseScale))
-
-                            Icon(
-                                painter = painterResource(R.drawable.star),
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.background,
-                                // Оптимальный размер иконки для высоты 32dp
-                                modifier = Modifier.size(20.dp * baseScale)
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
+//@SuppressLint("ConfigurationScreenWidthHeight")
+//@OptIn(ExperimentalMaterial3Api::class)
+//@Composable
+//fun MainYapButton(
+//    price: Int,
+//    isEnoughStars: Boolean,
+//    onClick: () -> Unit,
+//    modifier: Modifier = Modifier
+//) {
+//    val configuration = LocalConfiguration.current
+//    val screenWidth = configuration.screenWidthDp.dp
+//
+//    // Вычисляем базовый размер кнопки как 50% от ширины экрана (или другой коэффициент)
+//    // Это гарантирует, что на любом экране кнопка будет занимать одинаковую долю места
+//    val baseScale = LocalBaseScale.current
+//
+//    val frontPillWidth = 196.dp * baseScale
+//    val frontPillHeight = 160.dp * baseScale
+//    val backPillWidth = 260.dp * baseScale
+//    val backPillHeight = 212.dp * baseScale
+//
+//    val interactionSource = remember { MutableInteractionSource() }
+//    val isPressed by interactionSource.collectIsPressedAsState()
+//    val transition = updateTransition(targetState = isPressed, label = "YapCollapse")
+//
+//    val backgroundRotation by transition.animateFloat(
+//        label = "BgRotation",
+//        transitionSpec = { spring(dampingRatio = Spring.DampingRatioLowBouncy) }
+//    ) { pressed ->
+//        if (pressed) 0f else -45f
+//    }
+//
+//    val pillShape = RoundedCornerShape(percent = 80)
+//
+//    Box(
+//        contentAlignment = Alignment.Center,
+//        modifier = modifier // Сюда прилетает weight(1f)
+//    ) {
+//        // Контейнер, который держит пропорции
+//        Box(
+//            modifier = Modifier.size(width = backPillWidth + 40.dp, height = backPillHeight + 40.dp),
+//            contentAlignment = Alignment.Center
+//        ) {
+//            // --- ЗАДНЯЯ ПЛАШКА ---
+//            Surface(
+//                modifier = Modifier
+//                    .size(width = backPillWidth, height = backPillHeight)
+//                    .rotate(backgroundRotation),
+//                shape = pillShape,
+//                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
+//            ) {}
+//
+//            // --- ПЕРЕДНЯЯ ПЛАШКА ---
+//            Surface(
+//                modifier = Modifier
+//                    .size(width = frontPillWidth, height = frontPillHeight)
+//                    .shadow(
+//                        elevation = 6.dp * baseScale, // Тень тоже масштабируем
+//                        shape = pillShape
+//                    )
+//                    .clip(pillShape)
+//                    .clickable(
+//                        onClick = onClick,
+//                        interactionSource = interactionSource,
+//                        indication = null
+//                    ),
+//                shape = pillShape,
+//                color = MaterialTheme.colorScheme.primary,
+//            ) {
+//                Box(
+//                    modifier = Modifier.fillMaxSize(),
+//                    contentAlignment = Alignment.Center
+//                ) {
+//                    // Логотип масштабируем пропорционально
+//                    Icon(
+//                        painter = painterResource(id = R.drawable.yap_button_big_text),
+//                        contentDescription = "YAP Logo",
+//                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+//                        modifier = Modifier.size(width = 120.dp * baseScale, height = 60.dp * baseScale)
+//                    )
+//
+//                    // Плашка цены
+//                    Surface(
+//                        modifier = Modifier
+//                            .offset(y = 50.dp * baseScale)
+//                            // Фиксируем размер плашки
+//                            .size(width = 60.dp * baseScale, height = 32.dp * baseScale),
+//                        shape = RoundedCornerShape(18.dp * baseScale),
+//                        color = MaterialTheme.colorScheme.tertiary,
+//                    ) {
+//                        // Используем Row с Center-позиционированием без внутренних padding
+//                        Row(
+//                            modifier = Modifier.fillMaxSize(),
+//                            verticalAlignment = Alignment.CenterVertically,
+//                            horizontalArrangement = Arrangement.Center
+//                        ) {
+//                            Text(
+//                                text = "$price",
+//                                color = MaterialTheme.colorScheme.background,
+//                                fontWeight = FontWeight.Bold,
+//                                // Чуть уменьшим шрифт, если 18sp будет тесно в 60dp
+//                                fontSize = (18 * baseScale).sp,
+//                                lineHeight = (16 * baseScale).sp
+//                            )
+//
+//                            Spacer(modifier = Modifier.width(5.dp * baseScale))
+//
+//                            Icon(
+//                                painter = painterResource(R.drawable.star),
+//                                contentDescription = null,
+//                                tint = MaterialTheme.colorScheme.background,
+//                                // Оптимальный размер иконки для высоты 32dp
+//                                modifier = Modifier.size(20.dp * baseScale)
+//                            )
+//                        }
+//                    }
+//                }
+//            }
+//        }
+//    }
+//}
 
 @Composable
 fun ActionButtonsRow(
