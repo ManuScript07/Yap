@@ -6,9 +6,9 @@ import com.example.yap.data.UserItem
 data class HomeUiState(
     val users: List<UserItem> = emptyList(),
 
-    val currentStars: Int = 65,
+    val currentStars: Int = 100,
     val maxStars: Int = 100,
-    val progress: Float = 0.65f,
+    val progress: Float = 0.100f,
     val yapPrice: Int = 0,
     val yapType: YapType = YapType.YAP,
 

@@ -1,7 +1,10 @@
 package com.example.yap.ui.screen.home
 
+import EnergyPreferences
+import android.app.Application
 import android.util.Log
 import androidx.annotation.StringRes
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.yap.R
@@ -13,10 +16,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-class HomeViewModel : ViewModel() {
+class HomeViewModel(application: Application) : AndroidViewModel(application) {
+
+    private val energyPrefs = EnergyPreferences(application)
 
     private val _state = MutableStateFlow(
         HomeUiState(
@@ -26,14 +32,16 @@ class HomeViewModel : ViewModel() {
     )
     val state: StateFlow<HomeUiState> = _state.asStateFlow()
     private var alertJob: Job? = null
+    private var regenJob: Job? = null
     private var isActivatingLocation = false
+    private var lastAnchorTime: Long = 0L
 
 
     companion object {
         const val PRICE_TEXT = 3
         const val PRICE_EMOJI = 2
         const val PRICE_SIMPLE_YAP = 1
-        const val REGEN_DELAY_MS = 5000L // 1 звезда каждые 5 секунд
+        const val REGEN_DELAY_MS = 5000L
     }
 
 
@@ -51,8 +59,51 @@ class HomeViewModel : ViewModel() {
 
     init {
         updateStateWithPrice { it }
-        // Запускаем бесконечный цикл восстановления энергии при старте ViewModel
-        startEnergyRegeneration()
+//        // Запускаем бесконечный цикл восстановления энергии при старте ViewModel
+//        startEnergyRegeneration()
+        loadEnergyFromStore()
+    }
+
+    private fun loadEnergyFromStore() {
+        viewModelScope.launch {
+            val (savedStars, savedTime) = energyPrefs.energyData.first()
+            val currentTime = System.currentTimeMillis()
+
+            // Объявляем переменную ЗАРАНЕЕ с дефолтным значением
+            var initialDelay = REGEN_DELAY_MS
+
+            _state.update { currentState ->
+                val baseStars = savedStars ?: currentState.currentStars
+                val max = currentState.maxStars
+
+                if (savedTime == null || savedTime == 0L) {
+                    lastAnchorTime = currentTime
+                    return@update currentState.copy(
+                        currentStars = baseStars,
+                        progress = baseStars.toFloat() / max.toFloat()
+                    )
+                }
+
+                // Вычисляем задержку здесь, она запишется в переменную выше
+                val timePassed = currentTime - savedTime
+                val restoredStars = (timePassed / REGEN_DELAY_MS).toInt()
+                val timeSpentInCurrentCycle = timePassed % REGEN_DELAY_MS
+
+                initialDelay = REGEN_DELAY_MS - timeSpentInCurrentCycle
+                lastAnchorTime = currentTime - timeSpentInCurrentCycle
+
+                val finalStars = (baseStars + restoredStars).coerceAtMost(max)
+                currentState.copy(
+                    currentStars = finalStars,
+                    progress = finalStars.toFloat() / max.toFloat()
+                )
+            }
+
+            // Теперь initialDelay виден здесь
+            if (_state.value.currentStars < _state.value.maxStars) {
+                startEnergyRegeneration(initialDelay)
+            }
+        }
     }
 
     // 2. ОБНОВЛЯЕМ ВЫБОР И ПЕРЕСЧИТЫВАЕМ ЦЕНУ
@@ -259,12 +310,18 @@ class HomeViewModel : ViewModel() {
         if (state.currentStars >= state.yapPrice) {
             // Хватает звезд -> Списываем
             val newStars = state.currentStars - state.yapPrice
-            val newProgress = newStars.toFloat() / state.maxStars.toFloat()
+//            val newProgress = newStars.toFloat() / state.maxStars.toFloat()
+
+            if (state.currentStars == state.maxStars) {
+                lastAnchorTime = System.currentTimeMillis()
+                startEnergyRegeneration(REGEN_DELAY_MS)
+            }
+            saveEnergyToStore(newStars, lastAnchorTime)
 
             _state.update {
                 it.copy(
                     currentStars = newStars,
-                    progress = newProgress,
+                    progress = newStars.toFloat() / it.maxStars.toFloat(),
                     // Опционально: сбросить выделение получателей после отправки
                     // users = it.users.map { u -> u.copy(isYapActive = false) },
                     // yapPrice = 0
@@ -283,22 +340,55 @@ class HomeViewModel : ViewModel() {
     }
 
     // 4. ТАЙМЕР РЕГЕНЕРАЦИИ ЗВЕЗД
-    private fun startEnergyRegeneration() {
-        viewModelScope.launch {
+    private fun startEnergyRegeneration(initialDelay: Long = REGEN_DELAY_MS) {
+        regenJob?.cancel()
+        regenJob = viewModelScope.launch {
+            var currentDelay = initialDelay
+
             while (true) {
-                delay(REGEN_DELAY_MS)
-                _state.update { state ->
-                    if (state.currentStars < state.maxStars) {
-                        val newStars = state.currentStars + 1
+                delay(currentDelay)
+                currentDelay = REGEN_DELAY_MS // После первого остатка, всегда ждем полные 5 сек
+
+                val max = _state.value.maxStars
+                val current = _state.value.currentStars
+
+                if (current < max) {
+                    val newStars = current + 1
+
+                    // Тик произошел прямо сейчас. Обновляем якорь!
+                    lastAnchorTime = System.currentTimeMillis()
+
+                    // Сохраняем новые данные в DataStore
+                    saveEnergyToStore(newStars, lastAnchorTime)
+
+                    _state.update { state ->
                         state.copy(
                             currentStars = newStars,
                             progress = newStars.toFloat() / state.maxStars.toFloat()
                         )
-                    } else {
-                        state // Если полная шкала - ничего не делаем
                     }
+
+                    // ИСПРАВЛЕНИЕ 2: Если достигли 100 - убиваем таймер.
+                    // Он не должен работать в фоне!
+                    if (newStars >= max) {
+                        regenJob?.cancel()
+                        break
+                    }
+                } else {
+                    regenJob?.cancel()
+                    break
                 }
             }
+        }
+    }
+
+    fun saveProgress() {
+        saveEnergyToStore(_state.value.currentStars, lastAnchorTime)
+    }
+
+    private fun saveEnergyToStore(stars: Int, anchorTime: Long) {
+        viewModelScope.launch {
+            energyPrefs.saveEnergy(stars, anchorTime)
         }
     }
 
