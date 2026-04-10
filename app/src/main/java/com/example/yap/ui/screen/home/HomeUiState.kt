@@ -18,6 +18,8 @@ data class HomeUiState(
 
     val currentAlertMessage: String? = null,
     @StringRes val currentAlertResource: Int? = null,
+    val userGeneratedContent: String? = null, // СТРОГО текст сообщения (для TEXT и EMOJI)
+    val voiceAudioUri: String? = null,
     val alertId: Long = 0L,
 
     val canCloseMessage: Boolean = false,

@@ -40,6 +40,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     companion object {
         const val PRICE_TEXT = 3
         const val PRICE_EMOJI = 2
+        const val PRICE_VOICE = 10
         const val PRICE_SIMPLE_YAP = 1
         const val REGEN_DELAY_MS = 5000L
     }
@@ -225,7 +226,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             currentState.copy(
                 currentAlertMessage = null,
                 currentAlertResource = null,
-                yapType = YapType.YAP,
                 isEmojiOnly = false // Лучше сбрасывать и его, раз мы возвращаемся к обычному YAP
             )
         }
@@ -310,12 +310,24 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
 
     // 1. КАЛЬКУЛЯТОР ЦЕНЫ
+//    private fun calculatePrice(users: List<UserItem>, isEmojiOnly: Boolean, type: YapType): Int {
+//        val selectedCount = users.count { it.isYapActive }
+//        val pricePerUser = when {
+//            isEmojiOnly -> PRICE_EMOJI
+//            type == YapType.TEXT -> PRICE_TEXT // Замени на свою проверку текстового сообщения
+//            else -> PRICE_SIMPLE_YAP
+//        }
+//        return selectedCount * pricePerUser
+//    }
     private fun calculatePrice(users: List<UserItem>, isEmojiOnly: Boolean, type: YapType): Int {
         val selectedCount = users.count { it.isYapActive }
-        val pricePerUser = when {
-            isEmojiOnly -> PRICE_EMOJI
-            type == YapType.TEXT -> PRICE_TEXT // Замени на свою проверку текстового сообщения
-            else -> PRICE_SIMPLE_YAP
+        if (selectedCount == 0) return 0
+
+        val pricePerUser = when (type) {
+            YapType.EMOJI -> PRICE_EMOJI
+            YapType.TEXT -> PRICE_TEXT
+            YapType.VOICE -> PRICE_VOICE // Добавь константу, например 5 или 10 звезд
+            YapType.YAP -> PRICE_SIMPLE_YAP
         }
         return selectedCount * pricePerUser
     }
@@ -325,38 +337,71 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     // 3. ОТПРАВКА YAP И СПИСАНИЕ ЗВЕЗД
     fun sendYap(latitude: Double?, longitude: Double?) {
         val state = _state.value
-        if (state.yapPrice == 0) return // Защита: нет получателей
+        if (state.yapPrice == 0) return
 
         if (state.currentStars >= state.yapPrice) {
-            // Хватает звезд -> Списываем
+            // 1. РАССЧИТЫВАЕМ НОВЫЙ БАЛАНС
             val newStars = state.currentStars - state.yapPrice
-//            val newProgress = newStars.toFloat() / state.maxStars.toFloat()
+            val newProgress = newStars.toFloat() / state.maxStars.toFloat()
 
+            // 2. ЕСЛИ ЭНЕРГИЯ БЫЛА ПОЛНОЙ, А ТЕПЕРЬ УПАЛА — ЗАПУСКАЕМ РЕГЕНЕРАЦИЮ
             if (state.currentStars == state.maxStars) {
                 lastAnchorTime = System.currentTimeMillis()
                 startEnergyRegeneration(REGEN_DELAY_MS)
             }
+
+            // 3. СОХРАНЯЕМ В ХРАНИЛИЩЕ (DataStore)
             saveEnergyToStore(newStars, lastAnchorTime)
 
+            // 4. ОБНОВЛЯЕМ СОСТОЯНИЕ (Шкала и цифры)
             _state.update {
                 it.copy(
                     currentStars = newStars,
-                    progress = newStars.toFloat() / it.maxStars.toFloat(),
-                    // Опционально: сбросить выделение получателей после отправки
-                    // users = it.users.map { u -> u.copy(isYapActive = false) },
-                    // yapPrice = 0
+                    progress = newProgress
                 )
             }
 
-            Log.d("ViewModel", "Сообщение отправлено. Списано: ${state.yapPrice}")
-            dismissMessage()
-            // TODO: Вызвать отправку сообщения на сервер/в БД
+            // --- ЛОГИКА ОТПРАВКИ КОНТЕНТА ---
+            when (state.yapType) {
+                YapType.VOICE -> {
+                    Log.d("API1", "Отправляем ГОЛОС: ${state.voiceAudioUri}")
+                }
+                YapType.TEXT, YapType.EMOJI -> {
+                    // Берем либо текст пользователя, либо то, что в алерте (для обратной совместимости)
+                    val content = state.userGeneratedContent ?: state.currentAlertMessage
+                    Log.d("API1", "Отправляем ТЕКСТ: $content")
+                }
+                YapType.YAP -> {
+                    Log.d("API1", "Отправляем простой YAP, локация $latitude $longitude")
+                }
+            }
+
+            // 5. ОЧИСТКА И СБРОС
+            dismissMessage() // Это также сбросит цену и тип на дефолтные через updateStateWithPrice
+            resetYapButton()
+
         } else {
-            // Не хватает звезд -> Показываем ошибку
-            // TODO: Затриггерить показ AlertMessage
-            Log.d("ViewModel", "Недостаточно звезд!")
-//            showAlert(resId = R.string.not_enough_stars, canClose = false, durationMs = 3000)        }
+            // Если звезд не хватает
+            showAlert(message = "Недостаточно звезд!", durationMs = 2000)
         }
+    }
+
+    // Новая обертка, которую мы будем вызывать из fetchLocationAndSendYap
+    fun handleSendRequest(latitude: Double?, longitude: Double?) {
+        val currentState = _state.value.yapButtonState
+
+        // Если пользователь нажал на кнопку (или отпустил её) в режиме записи или лока
+        if (currentState == YapButtonState.RECORDING ||
+            currentState == YapButtonState.LOCKED ||
+            currentState == YapButtonState.REVIEW) {
+
+            // 1. Фиксируем тип VOICE и путь к файлу (если ты его хранишь во ViewModel)
+            // Если путь к файлу приходит извне, его нужно было сохранить в state ранее
+            updateStateWithPrice { it.copy(yapType = YapType.VOICE) }
+        }
+
+        // Теперь вызываем основную логику отправки
+        sendYap(latitude, longitude)
     }
 
     // 4. ТАЙМЕР РЕГЕНЕРАЦИИ ЗВЕЗД
@@ -427,12 +472,47 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(yapRecordTimeMs = timeMs) }
     }
 
+    fun prepareVoiceForReview(audioPath: String? = null) {
+        updateStateWithPrice { currentState ->
+            currentState.copy(
+                yapType = YapType.VOICE,
+                voiceAudioUri = audioPath,
+                // Для отображения в showAlert пишем подсказку,
+                // но НЕ сохраняем её в userGeneratedContent
+                currentAlertMessage = "Нажмите YAP, чтобы отправить",
+                canCloseMessage = false
+            )
+        }
+    }
+
+    // Во ViewModel
+    fun prepareVoiceContent(audioPath: String?) {
+        _state.update { it.copy(
+            yapType = YapType.VOICE,
+            voiceAudioUri = audioPath
+        ) }
+        // Принудительно обновляем цену, так как тип сменился на VOICE
+        updateStateWithPrice { it }
+    }
+
+    fun startVoiceRecording() {
+        updateStateWithPrice { it.copy(yapType = YapType.VOICE) }
+    }
+
+    fun updateVoicePath(path: String) {
+        _state.update { it.copy(voiceAudioUri = path) }
+    }
+
     fun resetYapButton() {
         _state.update { it.copy(
             yapButtonState = YapButtonState.IDLE,
+            yapType = YapType.YAP,
             yapRecordTimeMs = 0L,
             yapOffsetY = 0f,
-            didOverrideMessage = false
+            didOverrideMessage = false,
+            // Обязательно чистим контент!
+            voiceAudioUri = null,
+            userGeneratedContent = null
         ) }
     }
 }

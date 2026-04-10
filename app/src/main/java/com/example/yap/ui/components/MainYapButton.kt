@@ -17,11 +17,27 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
@@ -33,17 +49,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.yap.ui.theme.LocalBaseScale
-import kotlinx.coroutines.delay
 import com.example.yap.R
 import com.example.yap.ui.screen.home.HomeViewModel
+import com.example.yap.ui.theme.LocalBaseScale
+import kotlinx.coroutines.delay
 
 
 @SuppressLint("ConfigurationScreenWidthHeight", "DefaultLocale")
@@ -64,7 +79,7 @@ fun MainYapButton(
     val offsetY = uiState.yapOffsetY
     val recordTimeMs = uiState.yapRecordTimeMs
 
-    val configuration = LocalConfiguration.current
+//    val configuration = LocalConfiguration.current
     val baseScale = LocalBaseScale.current // Предполагаю, что он у тебя объявлен через CompositionLocal
 
     val frontPillWidth = 196.dp * baseScale
@@ -78,10 +93,10 @@ fun MainYapButton(
 
 
 //    var offsetY by rememberSaveable { mutableStateOf(0f) }
-    val recordTimer = rememberSaveable { mutableStateOf(0) }
+//    val recordTimer = rememberSaveable { mutableStateOf(0) }
     var didOverrideMessage by rememberSaveable { mutableStateOf(false) }
 //    var recordTimeMs by rememberSaveable { mutableLongStateOf(0L) }
-    val maxDurationMs = 20_000L
+//    val maxDurationMs = 20_000L
 
     // --- АНИМАЦИИ НА ОСНОВЕ СОСТОЯНИЯ ---
 
@@ -186,10 +201,17 @@ fun MainYapButton(
                 }
             }
 
+            YapButtonState.RECORDING -> {
+                // Как только вошли в режим записи — меняем тип на VOICE
+                // Чтобы цена сразу стала 10, и sendYap знал, что отправлять
+                viewModel.startVoiceRecording()
+            }
+
             YapButtonState.REVIEW -> {
                 // Мягко возвращаем кнопку в центр при входе в Review
                 viewModel.updateYapOffsetY(0f)
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                viewModel.prepareVoiceForReview(audioPath = "path/to/file.m4a")
                 viewModel.showAlert(message = "Нажмите YAP, чтобы отправить", canClose = false)
             }
 
@@ -390,6 +412,7 @@ fun MainYapButton(
                                     } else if (finalOffsetY >= 130f) {
                                         viewModel.resetYapButton() // Вызываем метод полного сброса
                                     } else {
+                                        viewModel.updateVoicePath("path/to/current/record.m4a")
                                         viewModel.updateYapButtonState(YapButtonState.FIRING)
                                     }
                                 }
@@ -398,7 +421,9 @@ fun MainYapButton(
                                     if (finalOffsetY >= 50f) {
                                         viewModel.resetYapButton()
                                     } else if (isValidTap) {
+                                        viewModel.updateVoicePath("path/to/current/record.m4a")
                                         viewModel.updateYapButtonState(YapButtonState.FIRING)
+
                                     } else {
                                         viewModel.updateYapOffsetY(-120f)
                                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)

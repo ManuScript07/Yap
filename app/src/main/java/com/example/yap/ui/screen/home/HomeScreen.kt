@@ -757,7 +757,7 @@ fun fetchLocationAndSendYap(
     isLocationEnabled: Boolean
 ) {
     if (!isLocationEnabled) {
-        viewModel.sendYap(latitude = null, longitude = null)
+        viewModel.handleSendRequest(latitude = null, longitude = null)
         return
     }
 
@@ -766,11 +766,11 @@ fun fetchLocationAndSendYap(
     fusedLocationClient.lastLocation.addOnSuccessListener { location: Location? ->
         if (location != null) {
             Log.d("YAP_LOCATION", "🌍 Успешно: Lat=${location.latitude}, Lon=${location.longitude}")
-            viewModel.sendYap(latitude = location.latitude, longitude = location.longitude)
+            viewModel.handleSendRequest(location.latitude, location.longitude)
         } else {
             Log.e("YAP_LOCATION", "⚠️ Локация равна null (GPS еще не поймал спутники)")
             // Можно отправить без локации, либо показать Alert
-            viewModel.sendYap(latitude = null, longitude = null)
+            viewModel.handleSendRequest(null, null)
             viewModel.showAlert(resId = R.string.failed_location, durationMs = 3000, canClose = false)
         }
     }
