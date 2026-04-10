@@ -2,6 +2,7 @@ package com.example.yap.ui.screen.home
 
 import androidx.annotation.StringRes
 import com.example.yap.data.model.UserItem
+import com.example.yap.ui.components.YapButtonState
 
 data class HomeUiState(
     val users: List<UserItem> = emptyList(),
@@ -26,6 +27,12 @@ data class HomeUiState(
     val isSheetExpanded: Boolean = false,
     val isEmojiOnly: Boolean = false,
     val maxUsers: Int = 20,
+
+    val yapButtonState: YapButtonState = YapButtonState.IDLE,
+    val yapRecordTimeMs: Long = 0L,
+    val yapOffsetY: Float = 0f,
+    val didOverrideMessage: Boolean = false,
+    val maxDurationMs: Long = 20_000L
 )
 
 enum class MessageType {

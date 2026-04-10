@@ -8,6 +8,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.yap.R
 import com.example.yap.data.model.UserItem
+import com.example.yap.ui.components.YapButtonState
 import com.example.yap.util.extension.countGraphemeClusters
 import com.example.yap.util.extension.isEmojiOnly
 import kotlinx.coroutines.Job
@@ -412,8 +413,26 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
 
+    // Внутри HomeViewModel
 
+    fun updateYapButtonState(newState: YapButtonState) {
+        _state.update { it.copy(yapButtonState = newState) }
+    }
 
+    fun updateYapOffsetY(offset: Float) {
+        _state.update { it.copy(yapOffsetY = offset) }
+    }
 
+    fun updateYapRecordTime(timeMs: Long) {
+        _state.update { it.copy(yapRecordTimeMs = timeMs) }
+    }
 
+    fun resetYapButton() {
+        _state.update { it.copy(
+            yapButtonState = YapButtonState.IDLE,
+            yapRecordTimeMs = 0L,
+            yapOffsetY = 0f,
+            didOverrideMessage = false
+        ) }
+    }
 }
