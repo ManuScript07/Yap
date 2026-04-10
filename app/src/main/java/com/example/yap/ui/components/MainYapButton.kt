@@ -227,7 +227,8 @@ fun MainYapButton(
             YapButtonState.IDLE -> {
                 viewModel.updateYapOffsetY(0f)
                 if (didOverrideMessage) {
-                    viewModel.dismissMessage()
+//                    viewModel.dismissMessage()
+                    viewModel.clearSystemAlertOnly()
                     didOverrideMessage = false
                 }
             }

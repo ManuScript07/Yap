@@ -243,6 +243,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
 
     fun selectEmoji(emoji: String) {
+        if (_state.value.yapType == YapType.VOICE) return
         alertJob?.cancel()
         updateStateWithPrice { currentState ->
             val currentContent = currentState.currentAlertMessage ?: ""
@@ -292,6 +293,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun selectQuickMessage(message: String) {
+        if (_state.value.yapType == YapType.VOICE) return
+
         alertJob?.cancel()
         updateStateWithPrice { currentState ->
             currentState.copy(
@@ -485,15 +488,26 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun resetYapButton() {
+        _state.update { currentState ->
+            val shouldResetType = currentState.yapType == YapType.VOICE
+
+            currentState.copy(
+                yapButtonState = YapButtonState.IDLE,
+                yapType = if (shouldResetType) YapType.YAP else currentState.yapType,
+                yapRecordTimeMs = 0L,
+                yapOffsetY = 0f,
+                // Очищаем аудио только если это был голос
+                voiceAudioUri = if (shouldResetType) null else currentState.voiceAudioUri,
+                didOverrideMessage = false,
+            )
+        }
+    }
+
+    fun clearSystemAlertOnly() {
         _state.update { it.copy(
-            yapButtonState = YapButtonState.IDLE,
-            yapType = YapType.YAP,
-            yapRecordTimeMs = 0L,
-            yapOffsetY = 0f,
-            didOverrideMessage = false,
-            // Обязательно чистим контент!
-            voiceAudioUri = null,
-            userGeneratedContent = null
+            currentAlertMessage = if (it.yapType == YapType.TEXT || it.yapType == YapType.EMOJI)
+                it.userGeneratedContent else null,
+            canCloseMessage = it.yapType == YapType.TEXT || it.yapType == YapType.EMOJI
         ) }
     }
 }
