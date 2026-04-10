@@ -22,5 +22,6 @@ data class AdditionalColors(
     val popupColor: Color,
     val darkYapButtonBackgroundColor: Color,
     val disabledYabBackgroundColor: Color,
-    val secondTextColor: Color
+    val secondTextColor: Color,
+
     )

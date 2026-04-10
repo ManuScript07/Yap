@@ -1,24 +1,39 @@
 package com.example.yap.ui.components
 
 import android.annotation.SuppressLint
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -36,7 +51,7 @@ import com.example.yap.ui.screen.home.HomeViewModel
 
 // 1. ОПРЕДЕЛЯЕМ СОСТОЯНИЯ КНОПКИ
 private enum class YapButtonState {
-    IDLE, PRESSED, READY, FIRING, RECORDING
+    IDLE, PRESSED, READY, FIRING, RECORDING, LOCKED
 }
 
 @SuppressLint("ConfigurationScreenWidthHeight", "DefaultLocale")
@@ -76,7 +91,7 @@ fun MainYapButton(
     val backColor by animateColorAsState(
         targetValue = when (buttonState) {
             YapButtonState.IDLE, YapButtonState.PRESSED -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
-            YapButtonState.READY, YapButtonState.RECORDING, YapButtonState.FIRING -> MaterialTheme.colorScheme.tertiary.copy(alpha = 0.6f)// Цвет "заряженной" кнопки
+            YapButtonState.READY, YapButtonState.RECORDING, YapButtonState.FIRING, YapButtonState.LOCKED -> MaterialTheme.colorScheme.tertiary.copy(alpha = 0.6f)// Цвет "заряженной" кнопки
         },
         animationSpec = tween(durationMillis = 150),
         label = "BgColor"
@@ -94,49 +109,72 @@ fun MainYapButton(
         label = "BgHeight"
     )
 
+
+
     val pillShape = RoundedCornerShape(percent = 80)
 
-    // 3. УПРАВЛЕНИЕ ЗАДЕРЖКАМИ И СОБЫТИЯМИ
-    LaunchedEffect(buttonState) {
+    // ДОБАВЛЯЕМ ФЛАГ: Он поможет узнать, затирала ли кнопка пользовательский ввод
+    var didOverrideMessage by remember { mutableStateOf(false) }
+
+    // 1. ЭФФЕКТ ДЛЯ ТАЙМЕРА (Зависит только от факта записи)
+    LaunchedEffect(buttonState == YapButtonState.RECORDING || buttonState == YapButtonState.LOCKED) {
+        if (buttonState == YapButtonState.RECORDING || buttonState == YapButtonState.LOCKED) {
+            while (true) {
+                delay(1000)
+                recordTimer.value++
+            }
+        } else {
+            recordTimer.value = 0
+        }
+    }
+
+// 2. ЭФФЕКТ ДЛЯ ЛОГИКИ СОСТОЯНИЙ И ПОДСКАЗОК
+    LaunchedEffect(buttonState, offsetY) {
         when (buttonState) {
             YapButtonState.PRESSED -> {
-                delay(150) // Короткая задержка: если держим палец, кнопка "заряжается"
-                haptic.performHapticFeedback(HapticFeedbackType.LongPress) // Жесткая вибрация
+                delay(150)
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 buttonState = YapButtonState.READY
-                viewModel.showAlert(resId = R.string.hold_to_record, canClose = false)
             }
 
             YapButtonState.READY -> {
-                delay(600) // Пауза перед началом записи
-                if (buttonState == YapButtonState.READY) { // Проверка, что палец всё еще там
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress) // Повторный тик — старт записи
+                delay(300)
+                if (buttonState == YapButtonState.READY) didOverrideMessage = true
+                delay(300)
+                if (buttonState == YapButtonState.READY) {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     buttonState = YapButtonState.RECORDING
                 }
-
-                // Здесь можно вызвать viewModel.startRecording()
             }
 
-            YapButtonState.RECORDING -> {
-                viewModel.showAlert(message = "Запись голосового сообщения...", canClose = false)
-
-                // Запуск таймера
-                // viewModel.startVoiceRecording()
-                while (buttonState == YapButtonState.RECORDING) {
-                    delay(1000)
-                    recordTimer.value++
+            YapButtonState.RECORDING, YapButtonState.LOCKED -> {
+                // Динамические подсказки работают плавно, перезапуск эффекта им не мешает
+                when {
+                    buttonState == YapButtonState.LOCKED ->
+                        viewModel.showAlert(message = "Запись закреплена", canClose = false)
+                    offsetY < -130f ->
+                        viewModel.showAlert(message = "Вверх - закрепить", canClose = false)
+                    offsetY > 130f ->
+                        viewModel.showAlert(message = "Вниз — отмена", canClose = false)
+                    else ->
+                        viewModel.showAlert(message = "Идёт запись...", canClose = false)
                 }
             }
 
             YapButtonState.FIRING -> {
-                delay(200) // Ждем завершения анимации уменьшения
-                onClick()  // Вызываем твою функцию
-                buttonState = YapButtonState.IDLE // Сбрасываем кнопку обратно
-                recordTimer.value = 0
+                delay(200)
+                onClick()
+                buttonState = YapButtonState.IDLE
                 offsetY = 0f
+                didOverrideMessage = false
             }
-            else -> {
-                recordTimer.value = 0
+
+            YapButtonState.IDLE -> {
                 offsetY = 0f
+                if (didOverrideMessage) {
+                    viewModel.dismissMessage()
+                    didOverrideMessage = false
+                }
             }
         }
     }
@@ -145,18 +183,85 @@ fun MainYapButton(
         contentAlignment = Alignment.Center,
         modifier = modifier
     ) {
+
+        val infiniteTransition = rememberInfiniteTransition(label = "wave")
+        val pulseAnim by infiniteTransition.animateFloat(
+            initialValue = 0f,
+            targetValue = 15f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(500, easing = LinearEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "pulse"
+        )
+
+        val waveFactor = if (buttonState == YapButtonState.RECORDING || buttonState == YapButtonState.LOCKED) pulseAnim else 0f
+
         Box(
             modifier = Modifier.size(width = backPillMaxWidth + 40.dp, height = backPillMaxHeight + 40.dp),
             contentAlignment = Alignment.Center
         ) {
-            // --- ЗАДНЯЯ ПЛАШКА ---
-            Surface(
+
+            Box(
                 modifier = Modifier
-                    .size(width = currentBackWidth, height = currentBackHeight) // Анимированные размеры
-                    .rotate(backgroundRotation),
-                shape = pillShape,
-                color = backColor, // Анимированный цвет
-            ) {}
+                    .size(
+                        width = currentBackWidth + waveFactor.dp, // Меняем размер для имитации волны
+                        height = currentBackHeight + (waveFactor / 2).dp
+                    )
+                    .rotate(backgroundRotation)
+                    .background(
+                        color = backColor,
+                        shape = pillShape
+                    )
+                    // Добавляем размытый контур для пущей "жидкости"
+                    .blur(if (buttonState == YapButtonState.RECORDING) 2.dp else 0.dp)
+            )
+
+            // Иконки Мусорки и Замка (внутри заднего пилла)
+            if (buttonState == YapButtonState.RECORDING || buttonState == YapButtonState.LOCKED) {
+
+                // 1. ИКОНКА МУСОРКИ (сверху) — активна только при движении вниз
+                val trashAlpha = (offsetY / 130f).coerceIn(0f, 1f)
+                if (trashAlpha > 0.1f) {
+                    Icon(
+                        painter = painterResource(R.drawable.baseline_delete_32),
+                        contentDescription = null,
+                        tint = Color(0xE1FFDD).copy(alpha = trashAlpha),
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(top = 20.dp)
+                            .size(24.dp)
+                            .scale(0.8f + (trashAlpha * 0.4f))
+                    )
+                }
+
+                // 2. ИКОНКА ЗАМКА (снизу)
+                // Если уже закрепили — показываем закрытый замок на 100% яркости
+                // Если еще тянем — показываем открытый замок с переменной яркостью
+                val isLocked = buttonState == YapButtonState.LOCKED
+                val lockAlpha = if (isLocked) 1f else (-offsetY / 130f).coerceIn(0f, 1f)
+
+                if (lockAlpha > 0.1f) {
+                    Icon(
+                        painter = painterResource(
+                            id = if (isLocked) {
+                                R.drawable.baseline_lock_32// Твоя иконка закрытого замка
+                            } else {
+                                R.drawable.lock_open_32  // Твоя иконка открытого замка
+                            }
+                        ),
+                        contentDescription = null,
+                        tint = Color(0xE1FFDD).copy(alpha = lockAlpha),
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 20.dp)
+                            .size(24.dp)
+                            // Слегка увеличиваем иконку, когда она становится активной (закрывается)
+                            .scale(if (isLocked) 1.2f else 0.8f + (lockAlpha * 0.2f))
+                    )
+                }
+            }
+        }
 
             // --- ПЕРЕДНЯЯ ПЛАШКА ---
             Surface(
@@ -171,52 +276,64 @@ fun MainYapButton(
 
                         awaitEachGesture {
                             val down = awaitFirstDown()
-                            buttonState = YapButtonState.PRESSED
+                            // Если мы уже в LOCKED, не сбрасываем состояние в PRESSED
+                            if (buttonState != YapButtonState.LOCKED) {
+                                buttonState = YapButtonState.PRESSED
+                            }
 
-                            var isInside = true // Флаг: находится ли палец в границах кнопки
+                            var lastChange = down // Сохраняем последнее изменение для проверки координат в конце
 
                             do {
                                 val event = awaitPointerEvent()
                                 val change = event.changes.first()
-                                val position = change.position
+                                lastChange = change // Обновляем состояние при каждом движении
 
-                                // Проверяем, не вышел ли палец за границы передней плашки
-                                isInside = position.x in 0f..size.width.toFloat() &&
-                                        position.y in 0f..size.height.toFloat()
+                                if (buttonState == YapButtonState.RECORDING || buttonState == YapButtonState.LOCKED) {
+                                    val dragY = change.position.y - down.position.y
 
-                                if (buttonState == YapButtonState.RECORDING) {
-                                    offsetY = position.y - down.position.y
-
-                                    // Логика отмены (свайп вниз)
-                                    if (offsetY > 200f) {
-                                        buttonState = YapButtonState.IDLE
-                                    }
-                                    // Логика закрепления (свайп вверх)
-                                    else if (offsetY < -200f) {
-                                        // buttonState = YapButtonState.LOCKED
+                                    if (buttonState == YapButtonState.LOCKED) {
+                                        // В режиме LOCKED кнопка "стартует" из позиции -180
+                                        offsetY = (-120f + dragY).coerceIn(-200f, 200f)
+                                    } else {
+                                        offsetY = dragY.coerceIn(-200f, 200f)
                                     }
                                 }
-
                                 change.consume()
                             } while (event.changes.any { it.pressed })
 
-                            // ПАЛЕЦ ПОДНЯЛИ: решаем, что делать
+                            // Проверяем, был ли палец внутри кнопки в момент отпускания
+                            val isInside = lastChange.position.x in 0f..size.width.toFloat() &&
+                                    lastChange.position.y in 0f..size.height.toFloat()
+
+                            // ЛОГИКА ОТПУСКАНИЯ ПАЛЬЦА
                             when {
-                                // Если мы были в режиме записи и отпустили (не отменив свайпом)
                                 buttonState == YapButtonState.RECORDING -> {
-                                    buttonState = YapButtonState.FIRING
+                                    if (offsetY <= -130f) {
+                                        buttonState = YapButtonState.LOCKED
+                                        offsetY = -120f // Фиксируем вверху
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    } else if (offsetY >= 130f) {
+                                        buttonState = YapButtonState.IDLE
+                                    } else {
+                                        buttonState = YapButtonState.FIRING
+                                    }
                                 }
 
-                                // Если мы были в READY и отпустили ВНУТРИ кнопки
+                                buttonState == YapButtonState.LOCKED -> {
+                                    // Если в режиме замка потянули вниз — отмена, иначе — отправка
+                                    if (offsetY >= 50f) { // Порог отмены из замка чуть ниже центра
+                                        buttonState = YapButtonState.IDLE
+                                    } else {
+                                        buttonState = YapButtonState.FIRING
+                                    }
+                                }
+
                                 buttonState == YapButtonState.READY && isInside -> {
                                     buttonState = YapButtonState.FIRING
                                 }
 
-                                // Во всех остальных случаях (вышли за границы, слишком быстро или отмена)
-                                else -> {
-                                    buttonState = YapButtonState.IDLE
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                }
+                                else ->
+                                    if (buttonState != YapButtonState.LOCKED) buttonState = YapButtonState.IDLE
                             }
                         }
                     },
@@ -224,13 +341,17 @@ fun MainYapButton(
                 color = MaterialTheme.colorScheme.primary,
             ) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    if (buttonState == YapButtonState.RECORDING) {
-                        // Слой с секундомером
+                    if (buttonState == YapButtonState.RECORDING || buttonState == YapButtonState.LOCKED) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(painterResource(R.drawable.baseline_mic_24), "Mic", tint = Color.Red)
+                            Icon(
+                                painter = painterResource(R.drawable.baseline_mic_24),
+                                contentDescription = "Mic",
+                                tint = if (buttonState == YapButtonState.LOCKED) Color.White else Color.Red
+                            )
                             Text(
                                 text = String.format("0:%02d", recordTimer.value),
-                                style = MaterialTheme.typography.titleLarge
+                                style = MaterialTheme.typography.titleLarge,
+                                color = Color.White
                             )
                         }
                     }
@@ -278,4 +399,3 @@ fun MainYapButton(
             }
         }
     }
-}
