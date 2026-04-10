@@ -12,7 +12,6 @@ import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationManager
 import android.util.Log
-import android.widget.Button
 import androidx.activity.compose.ManagedActivityResultLauncher
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.ActivityResult
@@ -20,7 +19,6 @@ import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
@@ -31,7 +29,6 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.updateTransition
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -45,7 +42,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -53,17 +49,14 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -77,8 +70,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -103,8 +94,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -113,7 +102,6 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.TransformOrigin
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
@@ -136,7 +124,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
-
 import com.example.yap.R
 import com.example.yap.data.model.UserItem
 import com.example.yap.ui.components.MainYapButton
@@ -145,8 +132,6 @@ import com.example.yap.ui.theme.LocalBaseScale
 import com.example.yap.util.LocationHelper
 import com.example.yap.util.LocationHelper.checkLocationSettings
 import com.google.android.gms.location.LocationServices
-
-
 
 
 @SuppressLint("ConfigurationScreenWidthHeight")
@@ -634,7 +619,6 @@ fun HomeContent(
     val state by viewModel.state.collectAsState()
     val baseScale = LocalBaseScale.current
     val context = LocalContext.current
-
     // 🌟 ГЛАВНЫЙ BOX-ОВЕРЛЕЙ 🌟
     // Он занимает весь экран. Ничто внутри него не может "раздвинуть" экран.
     Box(modifier = Modifier.fillMaxSize()) {
@@ -691,7 +675,8 @@ fun HomeContent(
                         fetchLocationAndSendYap(
                             context = context,
                             viewModel = viewModel,
-                            isLocationEnabled = state.isLocationEnabled
+                            isLocationEnabled = state.isLocationEnabled,
+                            messageType = state.yapType
                     )},
                     viewModel = viewModel
 //                    onClick = { viewModel.showAlert("Вы нажали на кнопку", false) }
@@ -754,10 +739,11 @@ fun HomeContent(
 fun fetchLocationAndSendYap(
     context: Context,
     viewModel: HomeViewModel,
-    isLocationEnabled: Boolean
+    isLocationEnabled: Boolean,
+    messageType: YapType
 ) {
     if (!isLocationEnabled) {
-        viewModel.handleSendRequest(latitude = null, longitude = null)
+        viewModel.handleSendRequest(latitude = null, longitude = null, messageType)
         return
     }
 
@@ -766,11 +752,11 @@ fun fetchLocationAndSendYap(
     fusedLocationClient.lastLocation.addOnSuccessListener { location: Location? ->
         if (location != null) {
             Log.d("YAP_LOCATION", "🌍 Успешно: Lat=${location.latitude}, Lon=${location.longitude}")
-            viewModel.handleSendRequest(location.latitude, location.longitude)
+            viewModel.handleSendRequest(location.latitude, location.longitude, messageType)
         } else {
             Log.e("YAP_LOCATION", "⚠️ Локация равна null (GPS еще не поймал спутники)")
             // Можно отправить без локации, либо показать Alert
-            viewModel.handleSendRequest(null, null)
+            viewModel.handleSendRequest(null, null, messageType)
             viewModel.showAlert(resId = R.string.failed_location, durationMs = 3000, canClose = false)
         }
     }
@@ -835,127 +821,6 @@ fun InfoMessage(
         }
     }
 }
-//@SuppressLint("ConfigurationScreenWidthHeight")
-//@OptIn(ExperimentalMaterial3Api::class)
-//@Composable
-//fun MainYapButton(
-//    price: Int,
-//    isEnoughStars: Boolean,
-//    onClick: () -> Unit,
-//    modifier: Modifier = Modifier
-//) {
-//    val configuration = LocalConfiguration.current
-//    val screenWidth = configuration.screenWidthDp.dp
-//
-//    // Вычисляем базовый размер кнопки как 50% от ширины экрана (или другой коэффициент)
-//    // Это гарантирует, что на любом экране кнопка будет занимать одинаковую долю места
-//    val baseScale = LocalBaseScale.current
-//
-//    val frontPillWidth = 196.dp * baseScale
-//    val frontPillHeight = 160.dp * baseScale
-//    val backPillWidth = 260.dp * baseScale
-//    val backPillHeight = 212.dp * baseScale
-//
-//    val interactionSource = remember { MutableInteractionSource() }
-//    val isPressed by interactionSource.collectIsPressedAsState()
-//    val transition = updateTransition(targetState = isPressed, label = "YapCollapse")
-//
-//    val backgroundRotation by transition.animateFloat(
-//        label = "BgRotation",
-//        transitionSpec = { spring(dampingRatio = Spring.DampingRatioLowBouncy) }
-//    ) { pressed ->
-//        if (pressed) 0f else -45f
-//    }
-//
-//    val pillShape = RoundedCornerShape(percent = 80)
-//
-//    Box(
-//        contentAlignment = Alignment.Center,
-//        modifier = modifier // Сюда прилетает weight(1f)
-//    ) {
-//        // Контейнер, который держит пропорции
-//        Box(
-//            modifier = Modifier.size(width = backPillWidth + 40.dp, height = backPillHeight + 40.dp),
-//            contentAlignment = Alignment.Center
-//        ) {
-//            // --- ЗАДНЯЯ ПЛАШКА ---
-//            Surface(
-//                modifier = Modifier
-//                    .size(width = backPillWidth, height = backPillHeight)
-//                    .rotate(backgroundRotation),
-//                shape = pillShape,
-//                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
-//            ) {}
-//
-//            // --- ПЕРЕДНЯЯ ПЛАШКА ---
-//            Surface(
-//                modifier = Modifier
-//                    .size(width = frontPillWidth, height = frontPillHeight)
-//                    .shadow(
-//                        elevation = 6.dp * baseScale, // Тень тоже масштабируем
-//                        shape = pillShape
-//                    )
-//                    .clip(pillShape)
-//                    .clickable(
-//                        onClick = onClick,
-//                        interactionSource = interactionSource,
-//                        indication = null
-//                    ),
-//                shape = pillShape,
-//                color = MaterialTheme.colorScheme.primary,
-//            ) {
-//                Box(
-//                    modifier = Modifier.fillMaxSize(),
-//                    contentAlignment = Alignment.Center
-//                ) {
-//                    // Логотип масштабируем пропорционально
-//                    Icon(
-//                        painter = painterResource(id = R.drawable.yap_button_big_text),
-//                        contentDescription = "YAP Logo",
-//                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-//                        modifier = Modifier.size(width = 120.dp * baseScale, height = 60.dp * baseScale)
-//                    )
-//
-//                    // Плашка цены
-//                    Surface(
-//                        modifier = Modifier
-//                            .offset(y = 50.dp * baseScale)
-//                            // Фиксируем размер плашки
-//                            .size(width = 60.dp * baseScale, height = 32.dp * baseScale),
-//                        shape = RoundedCornerShape(18.dp * baseScale),
-//                        color = MaterialTheme.colorScheme.tertiary,
-//                    ) {
-//                        // Используем Row с Center-позиционированием без внутренних padding
-//                        Row(
-//                            modifier = Modifier.fillMaxSize(),
-//                            verticalAlignment = Alignment.CenterVertically,
-//                            horizontalArrangement = Arrangement.Center
-//                        ) {
-//                            Text(
-//                                text = "$price",
-//                                color = MaterialTheme.colorScheme.background,
-//                                fontWeight = FontWeight.Bold,
-//                                // Чуть уменьшим шрифт, если 18sp будет тесно в 60dp
-//                                fontSize = (18 * baseScale).sp,
-//                                lineHeight = (16 * baseScale).sp
-//                            )
-//
-//                            Spacer(modifier = Modifier.width(5.dp * baseScale))
-//
-//                            Icon(
-//                                painter = painterResource(R.drawable.star),
-//                                contentDescription = null,
-//                                tint = MaterialTheme.colorScheme.background,
-//                                // Оптимальный размер иконки для высоты 32dp
-//                                modifier = Modifier.size(20.dp * baseScale)
-//                            )
-//                        }
-//                    }
-//                }
-//            }
-//        }
-//    }
-//}
 
 @Composable
 fun ActionButtonsRow(

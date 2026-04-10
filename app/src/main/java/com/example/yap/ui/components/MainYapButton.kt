@@ -57,6 +57,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.yap.R
 import com.example.yap.ui.screen.home.HomeViewModel
+import com.example.yap.ui.screen.home.YapType
 import com.example.yap.ui.theme.LocalBaseScale
 import kotlinx.coroutines.delay
 
@@ -67,7 +68,7 @@ import kotlinx.coroutines.delay
 fun MainYapButton(
     price: Int,
     isEnoughStars: Boolean,
-    onClick: () -> Unit,
+    onClick: (YapType) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: HomeViewModel
 ) {
@@ -216,9 +217,10 @@ fun MainYapButton(
             }
 
             YapButtonState.FIRING -> {
+                val snapshotType = viewModel.state.value.yapType
                 delay(200)
-                onClick()
-                viewModel.resetYapButton()
+                onClick(snapshotType)
+//                viewModel.resetYapButton()
                 didOverrideMessage = false
             }
 

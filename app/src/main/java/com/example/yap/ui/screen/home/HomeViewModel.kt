@@ -40,9 +40,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     companion object {
         const val PRICE_TEXT = 3
         const val PRICE_EMOJI = 2
-        const val PRICE_VOICE = 10
+        const val PRICE_VOICE = 4
         const val PRICE_SIMPLE_YAP = 1
-        const val REGEN_DELAY_MS = 5000L
+        const val REGEN_DELAY_MS = 1000L
     }
 
 
@@ -51,7 +51,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             val newState = update(currentState)
             val calculatedPrice = calculatePrice(
                 users = newState.users,
-                isEmojiOnly = newState.isEmojiOnly,
                 type = newState.yapType
             )
             newState.copy(yapPrice = calculatedPrice)
@@ -185,9 +184,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // Добавь проверку для защиты
-    fun shouldDisableLocation(isAvailable: Boolean): Boolean {
-        return !isAvailable && !isActivatingLocation
-    }
+//    fun shouldDisableLocation(isAvailable: Boolean): Boolean {
+//        return !isAvailable && !isActivatingLocation
+//    }
 
     // Функция для показа нового сообщения
     fun showAlert(
@@ -226,7 +225,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             currentState.copy(
                 currentAlertMessage = null,
                 currentAlertResource = null,
-                isEmojiOnly = false // Лучше сбрасывать и его, раз мы возвращаемся к обычному YAP
+                isEmojiOnly = false,
+                yapType = YapType.YAP
             )
         }
     }
@@ -259,6 +259,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 !wasEmojiOnly && currentContent.isNotEmpty() -> {
                     currentState.copy(
                         currentAlertMessage = emoji,
+                        userGeneratedContent = emoji,
                         isEmojiOnly = true,
                         yapType = YapType.EMOJI,
                         canCloseMessage = true
@@ -271,6 +272,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     val newCount = currentCount + 1
                     currentState.copy(
                         currentAlertMessage = newContent,
+                        userGeneratedContent = newContent,
                         isEmojiOnly = true,
                         yapType = YapType.EMOJI,
                         // Автоматически закрываем пикер, если набрали 5
@@ -294,6 +296,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         updateStateWithPrice { currentState ->
             currentState.copy(
                 currentAlertMessage = message,
+                userGeneratedContent = message,
                 isEmojiOnly = false,
                 isChatPickerOpen = false,
                 canCloseMessage = true,
@@ -302,24 +305,13 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun setSheetExpanded(expanded: Boolean) {
-        _state.update { it.copy(isSheetExpanded = expanded) }
-    }
-
-
-
-
-    // 1. КАЛЬКУЛЯТОР ЦЕНЫ
-//    private fun calculatePrice(users: List<UserItem>, isEmojiOnly: Boolean, type: YapType): Int {
-//        val selectedCount = users.count { it.isYapActive }
-//        val pricePerUser = when {
-//            isEmojiOnly -> PRICE_EMOJI
-//            type == YapType.TEXT -> PRICE_TEXT // Замени на свою проверку текстового сообщения
-//            else -> PRICE_SIMPLE_YAP
-//        }
-//        return selectedCount * pricePerUser
+//    fun setSheetExpanded(expanded: Boolean) {
+//        _state.update { it.copy(isSheetExpanded = expanded) }
 //    }
-    private fun calculatePrice(users: List<UserItem>, isEmojiOnly: Boolean, type: YapType): Int {
+
+
+
+    private fun calculatePrice(users: List<UserItem>, type: YapType): Int {
         val selectedCount = users.count { it.isYapActive }
         if (selectedCount == 0) return 0
 
@@ -350,16 +342,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 startEnergyRegeneration(REGEN_DELAY_MS)
             }
 
-            // 3. СОХРАНЯЕМ В ХРАНИЛИЩЕ (DataStore)
-            saveEnergyToStore(newStars, lastAnchorTime)
 
-            // 4. ОБНОВЛЯЕМ СОСТОЯНИЕ (Шкала и цифры)
-            _state.update {
-                it.copy(
-                    currentStars = newStars,
-                    progress = newProgress
-                )
-            }
 
             // --- ЛОГИКА ОТПРАВКИ КОНТЕНТА ---
             when (state.yapType) {
@@ -368,17 +351,27 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 YapType.TEXT, YapType.EMOJI -> {
                     // Берем либо текст пользователя, либо то, что в алерте (для обратной совместимости)
-                    val content = state.userGeneratedContent ?: state.currentAlertMessage
+                    val content = state.userGeneratedContent
                     Log.d("API1", "Отправляем ТЕКСТ: $content")
                 }
                 YapType.YAP -> {
                     Log.d("API1", "Отправляем простой YAP, локация $latitude $longitude")
                 }
             }
+            // 3. СОХРАНЯЕМ В ХРАНИЛИЩЕ (DataStore)
+            saveEnergyToStore(newStars, lastAnchorTime)
+
+
 
             // 5. ОЧИСТКА И СБРОС
             dismissMessage() // Это также сбросит цену и тип на дефолтные через updateStateWithPrice
             resetYapButton()
+            _state.update {
+                it.copy(
+                    currentStars = newStars,
+                    progress = newProgress
+                )
+            }
 
         } else {
             // Если звезд не хватает
@@ -387,20 +380,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // Новая обертка, которую мы будем вызывать из fetchLocationAndSendYap
-    fun handleSendRequest(latitude: Double?, longitude: Double?) {
-        val currentState = _state.value.yapButtonState
-
-        // Если пользователь нажал на кнопку (или отпустил её) в режиме записи или лока
-        if (currentState == YapButtonState.RECORDING ||
-            currentState == YapButtonState.LOCKED ||
-            currentState == YapButtonState.REVIEW) {
-
-            // 1. Фиксируем тип VOICE и путь к файлу (если ты его хранишь во ViewModel)
-            // Если путь к файлу приходит извне, его нужно было сохранить в state ранее
-            updateStateWithPrice { it.copy(yapType = YapType.VOICE) }
-        }
-
-        // Теперь вызываем основную логику отправки
+    fun handleSendRequest(latitude: Double?, longitude: Double?, finalType: YapType) {
+        updateStateWithPrice { it.copy(yapType = finalType) }
         sendYap(latitude, longitude)
     }
 
@@ -447,9 +428,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun saveProgress() {
-        saveEnergyToStore(_state.value.currentStars, lastAnchorTime)
-    }
+//    fun saveProgress() {
+//        saveEnergyToStore(_state.value.currentStars, lastAnchorTime)
+//    }
 
     private fun saveEnergyToStore(stars: Int, anchorTime: Long) {
         viewModelScope.launch {
@@ -486,14 +467,14 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // Во ViewModel
-    fun prepareVoiceContent(audioPath: String?) {
-        _state.update { it.copy(
-            yapType = YapType.VOICE,
-            voiceAudioUri = audioPath
-        ) }
-        // Принудительно обновляем цену, так как тип сменился на VOICE
-        updateStateWithPrice { it }
-    }
+//    fun prepareVoiceContent(audioPath: String?) {
+//        _state.update { it.copy(
+//            yapType = YapType.VOICE,
+//            voiceAudioUri = audioPath
+//        ) }
+//        // Принудительно обновляем цену, так как тип сменился на VOICE
+//        updateStateWithPrice { it }
+//    }
 
     fun startVoiceRecording() {
         updateStateWithPrice { it.copy(yapType = YapType.VOICE) }
