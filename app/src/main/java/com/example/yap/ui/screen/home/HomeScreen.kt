@@ -127,7 +127,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.yap.R
 import com.example.yap.data.model.UserItem
 import com.example.yap.ui.components.MainYapButton
-import com.example.yap.ui.components.YapButtonState
 import com.example.yap.ui.theme.LocalAdditionColors
 import com.example.yap.ui.theme.LocalBaseScale
 import com.example.yap.util.LocationHelper

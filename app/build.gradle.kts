@@ -62,6 +62,7 @@ dependencies {
     implementation(libs.androidx.compose.material)
     implementation(libs.androidx.constraintlayout.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.lifecycle.process)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

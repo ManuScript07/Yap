@@ -47,6 +47,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         const val REGEN_DELAY_MS = 1000L
     }
 
+    override fun onCleared() {
+        super.onCleared()
+        voiceManager.stopPlayback()
+        voiceManager.cancelRecording()
+    }
 
     private fun updateStateWithPrice(update: (HomeUiState) -> HomeUiState) {
         _state.update { currentState ->
@@ -337,6 +342,22 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
+        if (state.yapType == YapType.VOICE) {
+            val path = state.voiceAudioUri
+            val file = path?.let { java.io.File(it) }
+
+            // Проверяем: путь не пустой, файл существует и его размер больше 1 КБ
+            // (Чистый заголовок AAC/M4A занимает около 500-800 байт)
+            val isFileValid = file != null && file.exists() && file.length() > 1024
+
+            if (!isFileValid) {
+                Log.e("API1", "Ошибка: Голосовой файл невалиден или пуст")
+                showAlert("Ошибка записи. Попробуйте еще раз", durationMs = 2000)
+                resetYapButton()
+                return // ПРЕРЫВАЕМ выполнение, звезды не списываем
+            }
+        }
+
         if (state.currentStars >= state.yapPrice) {
             // 1. РАССЧИТЫВАЕМ НОВЫЙ БАЛАНС
             val newStars = state.currentStars - state.yapPrice
@@ -375,7 +396,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             _state.update {
                 it.copy(
                     currentStars = newStars,
-                    progress = newProgress
+                    progress = newProgress,
+                    voiceAudioUri = null
                 )
             }
 
@@ -454,17 +476,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(yapRecordTimeMs = timeMs) }
     }
 
-    fun prepareVoiceForReview(audioPath: String? = null) {
-        stopVoiceRecording()
-        updateStateWithPrice { currentState ->
-            currentState.copy(
-                yapType = YapType.VOICE,
-                voiceAudioUri = audioPath,
-                currentAlertMessage = "Нажмите YAP, чтобы отправить",
-                canCloseMessage = false
-            )
-        }
-    }
+
 
 
 
@@ -474,30 +486,41 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun stopVoiceRecording() {
-        voiceManager.stopRecording()
+        voiceManager.stopRecording() // Здесь внутри должен быть recorder.stop() и release()
         val path = voiceManager.currentRecordPath
+
         if (path != null) {
-            updateVoicePath(path)
+            // Обновляем путь и сбрасываем флаг проигрывания на всякий случай
+            _state.update { it.copy(
+                voiceAudioUri = path,
+                isPlayingVoice = false
+            ) }
         }
     }
 
     fun toggleVoicePlayback() {
         val currentState = _state.value
+
         if (currentState.isPlayingVoice) {
-            voiceManager.playPausePlayback {} // Ставим на паузу
+            // Остановка всегда мгновенная
+            voiceManager.playPausePlayback {}
             _state.update { it.copy(isPlayingVoice = false) }
         } else {
-            _state.update { it.copy(isPlayingVoice = true) }
-            voiceManager.playPausePlayback {
-                // Этот блок вызовется, когда аудио доиграет до конца
-                _state.update { it.copy(isPlayingVoice = false) }
+            // Запуск через корутину с микро-задержкой
+            viewModelScope.launch {
+                _state.update { it.copy(isPlayingVoice = true) }
+
+                // Даем 100мс системе, чтобы финализировать .m4a файл на диске
+                delay(100)
+
+                voiceManager.playPausePlayback {
+                    _state.update { it.copy(isPlayingVoice = false) }
+                }
             }
         }
     }
 
-    fun updateVoicePath(path: String) {
-        _state.update { it.copy(voiceAudioUri = path) }
-    }
+
 
     fun resetYapButton() {
         voiceManager.cancelRecording()
@@ -539,5 +562,46 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(isSystemAlertOverridden = overridden) }
     }
 
+    // В HomeViewModel.kt
+    fun finishRecordingAndGoToReview() {
+        val currentState = _state.value
+
+        // Проверяем, находимся ли мы в состоянии, которое требует завершения записи
+        if (currentState.yapButtonState == YapButtonState.RECORDING ||
+            currentState.yapButtonState == YapButtonState.LOCKED) {
+
+            // 1. Физически останавливаем запись через менеджер
+            voiceManager.stopRecording()
+            val finalPath = voiceManager.currentRecordPath
+
+            // 2. Атомарно обновляем стейт через наш метод с пересчетом цены
+            updateStateWithPrice { it.copy(
+                yapButtonState = YapButtonState.REVIEW,
+                yapType = YapType.VOICE, // Гарантируем тип VOICE для цены
+                voiceAudioUri = finalPath,
+                yapOffsetY = 0f,
+                currentAlertMessage = "Запись сохранена. Нажмите YAP для отправки",
+                canCloseMessage = false
+            ) }
+
+            // Вибрируем, так как это важный переход
+            // (Если есть доступ к haptic во ViewModel, если нет — оставим в LaunchedEffect)
+        }
+    }
+
+
+    // В ViewModel
+    fun getVoicePath(): String? = voiceManager.currentRecordPath
+
+    fun isVoiceRecordValid(): Boolean {
+        val path = getVoicePath() ?: return false
+        val file = java.io.File(path)
+        return file.exists() && file.length() > 1000 // Примерно 1кб минимум для AAC
+    }
+
+    fun cancelVoiceRecording() {
+        voiceManager.cancelRecording() // Удаляет файл физически
+        resetYapButton()
+    }
 
 }

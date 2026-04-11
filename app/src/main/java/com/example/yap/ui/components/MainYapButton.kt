@@ -36,6 +36,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -54,6 +55,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.yap.R
 import com.example.yap.ui.screen.home.HomeViewModel
@@ -176,9 +180,6 @@ fun MainYapButton(
         }
     }
 
-// 2. ЭФФЕКТ ДЛЯ ЛОГИКИ СОСТОЯНИЙ И ПОДСКАЗОК
-    // 2. ЭФФЕКТ ТОЛЬКО ДЛЯ СМЕНЫ СОСТОЯНИЙ (Ключ только buttonState)
-    // 1. ЛОГИКА ПЕРЕХОДОВ (Срабатывает ОДИН РАЗ при смене стейта)
     LaunchedEffect(buttonState) {
         when (buttonState) {
             YapButtonState.PRESSED -> {
@@ -240,15 +241,26 @@ fun MainYapButton(
             }
 
             YapButtonState.REVIEW -> {
+                if (viewModel.state.value.yapType == YapType.VOICE) {
+                    viewModel.stopVoiceRecording()
+                }
                 // Мягко возвращаем кнопку в центр при входе в Review
                 viewModel.updateYapOffsetY(0f)
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                viewModel.prepareVoiceForReview()
+//                viewModel.prepareVoiceForReview()
                 viewModel.showAlert(message = "Нажмите YAP, чтобы отправить", canClose = false)
             }
 
             YapButtonState.FIRING -> {
-                viewModel.stopVoiceRecording()
+                if (viewModel.state.value.yapType == YapType.VOICE) {
+                    viewModel.stopVoiceRecording()
+                    if (!viewModel.isVoiceRecordValid()) {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        viewModel.showAlert("Запись слишком короткая", durationMs = 1500)
+                        viewModel.resetYapButton() // Отменяем отправку
+                        return@LaunchedEffect
+                    }
+                }
                 val snapshotType = viewModel.state.value.yapType
                 delay(200)
                 onClick(snapshotType)
@@ -278,6 +290,24 @@ fun MainYapButton(
                 else -> "Идёт запись..."
             }
             viewModel.showAlert(message = message, canClose = false)
+        }
+    }
+
+
+
+    DisposableEffect(Unit) {
+        val observer = LifecycleEventObserver { _, event ->
+            // ON_PAUSE срабатывает при сворачивании или перекрытии другим окном
+            if (event == Lifecycle.Event.ON_STOP) {
+                viewModel.finishRecordingAndGoToReview()
+            }
+        }
+
+        val lifecycle = ProcessLifecycleOwner.get().lifecycle
+        lifecycle.addObserver(observer)
+
+        onDispose {
+            lifecycle.removeObserver(observer)
         }
     }
 
@@ -437,6 +467,8 @@ fun MainYapButton(
                     val finalState = viewModel.state.value.yapButtonState
                     val finalOffsetY = viewModel.state.value.yapOffsetY
 
+                    val actualPath = viewModel.getVoicePath()
+
                     when (finalState) {
                         YapButtonState.RECORDING -> {
                             if (finalOffsetY <= -130f) {
@@ -444,19 +476,27 @@ fun MainYapButton(
                                 viewModel.updateYapOffsetY(-120f)
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             } else if (finalOffsetY >= 130f) {
-                                viewModel.resetYapButton() // Вызываем метод полного сброса
+                                viewModel.cancelVoiceRecording()
+//                                viewModel.resetYapButton() // Вызываем метод полного сброса
                             } else {
-                                viewModel.updateVoicePath("path/to/current/record.m4a")
-                                viewModel.updateYapButtonState(YapButtonState.FIRING)
+                                if (viewModel.isVoiceRecordValid()) {
+                                    viewModel.updateYapButtonState(YapButtonState.FIRING)
+                                } else {
+                                    viewModel.showAlert("Запись слишком короткая")
+                                    viewModel.resetYapButton()
+                                }
                             }
                         }
 
                         YapButtonState.LOCKED -> {
                             if (finalOffsetY >= 50f) {
-                                viewModel.resetYapButton()
+                                viewModel.cancelVoiceRecording()
                             } else if (isValidTap) {
-                                viewModel.updateVoicePath("path/to/current/record.m4a")
-                                viewModel.updateYapButtonState(YapButtonState.FIRING)
+                                if (viewModel.isVoiceRecordValid()) {
+                                    viewModel.updateYapButtonState(YapButtonState.FIRING)
+                                } else {
+                                    viewModel.resetYapButton()
+                                }
 
                             } else {
                                 viewModel.updateYapOffsetY(-120f)
@@ -466,10 +506,17 @@ fun MainYapButton(
 
                         YapButtonState.REVIEW -> {
                             if (finalOffsetY >= 100f) {
-                                viewModel.resetYapButton()
+//                                viewModel.resetYapButton()
+                                viewModel.cancelVoiceRecording()
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             } else if (isValidTap) {
-                                viewModel.updateYapButtonState(YapButtonState.FIRING)
+                                if (viewModel.isVoiceRecordValid()) {
+                                    viewModel.updateYapButtonState(YapButtonState.FIRING)
+                                } else {
+                                    viewModel.showAlert("Файл поврежден")
+//                                    viewModel.resetYapButton()
+                                    viewModel.cancelVoiceRecording()
+                                }
                             } else {
                                 viewModel.updateYapOffsetY(0f)
                             }
