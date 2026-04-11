@@ -38,9 +38,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
 
     companion object {
-        const val PRICE_TEXT = 3
+        const val PRICE_TEXT = 4
         const val PRICE_EMOJI = 2
-        const val PRICE_VOICE = 4
+        const val PRICE_VOICE = 12
         const val PRICE_SIMPLE_YAP = 1
         const val REGEN_DELAY_MS = 1000L
     }
@@ -332,7 +332,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     // 3. ОТПРАВКА YAP И СПИСАНИЕ ЗВЕЗД
     fun sendYap(latitude: Double?, longitude: Double?) {
         val state = _state.value
-        if (state.yapPrice == 0) return
+
+        if (state.yapPrice == 0) {
+            resetYapButton()
+            return
+        }
 
         if (state.currentStars >= state.yapPrice) {
             // 1. РАССЧИТЫВАЕМ НОВЫЙ БАЛАНС
@@ -379,6 +383,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         } else {
             // Если звезд не хватает
             showAlert(message = "Недостаточно звезд!", durationMs = 2000)
+            resetYapButton()
         }
     }
 

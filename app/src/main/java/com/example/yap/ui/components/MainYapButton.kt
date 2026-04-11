@@ -17,11 +17,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -52,6 +55,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -187,6 +192,23 @@ fun MainYapButton(
     LaunchedEffect(buttonState) {
         when (buttonState) {
             YapButtonState.PRESSED -> {
+                val state = viewModel.state.value
+
+                // Проверяем, есть ли блокирующее условие
+                if (state.currentStars < state.yapPrice || state.yapPrice == 0) {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+
+                    // Показываем алерт ТОЛЬКО если проблема реально в звездах
+                    if (state.currentStars < state.yapPrice) {
+                        viewModel.showAlert("Недостаточно звезд!", durationMs = 1500)
+                    }
+
+                    delay(200) // Время для визуального "отскока" плашки
+                    viewModel.resetYapButton() // Возвращаем назад в IDLE
+                    return@LaunchedEffect
+                }
+
+                // Если всё хорошо — идем дальше
                 delay(150)
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 viewModel.updateYapButtonState(YapButtonState.READY)
@@ -197,8 +219,16 @@ fun MainYapButton(
                 if (buttonState == YapButtonState.READY) didOverrideMessage = true
                 delay(300)
                 if (buttonState == YapButtonState.READY) {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    viewModel.updateYapButtonState(YapButtonState.RECORDING)
+                    // Дополнительная проверка перед записью голоса (если цена стала 10)
+                    if (viewModel.state.value.currentStars >= 10) {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        viewModel.updateYapButtonState(YapButtonState.RECORDING)
+                    } else {
+                        viewModel.showAlert("Нужно 10 звезд для голоса", durationMs = 1500)
+                        // Оставляем в READY или сбрасываем — на твой вкус.
+                        // Лучше сбросить, чтобы плашка вернулась:
+                        viewModel.resetYapButton()
+                    }
                 }
             }
 
@@ -343,8 +373,7 @@ fun MainYapButton(
                     .shadow(elevation = 6.dp * baseScale, shape = pillShape)
                     .clip(pillShape)
                     // 4. ОБРАБОТКА ЖЕСТОВ
-                    .pointerInput(isEnoughStars) {
-                        if (!isEnoughStars) return@pointerInput
+                    .pointerInput(Unit) {
 
                         awaitEachGesture {
                             val down = awaitFirstDown()
@@ -463,56 +492,51 @@ fun MainYapButton(
                 shape = pillShape,
                 color = MaterialTheme.colorScheme.primary,
             ) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Box(
+                    modifier = modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    // --- 1. ЦЕНТРАЛЬНЫЙ ЭЛЕМЕНТ (Таймер или Лого) ---
                     if (buttonState == YapButtonState.RECORDING || buttonState == YapButtonState.LOCKED || buttonState == YapButtonState.REVIEW) {
-
-                        // Форматирование: 00,5/20
+                        // ТАЙМЕР ПО ЦЕНТРУ
                         val seconds = recordTimeMs / 1000
                         val tenths = (recordTimeMs % 1000) / 100
                         val timerText = String.format("%02d,%d/20", seconds, tenths)
+
                         val pillBackgroundColor by animateColorAsState(
                             targetValue = if (buttonState == YapButtonState.REVIEW) {
-                                MaterialTheme.colorScheme.secondary // <-- ТУТ ЦВЕТ ДЛЯ РЕЖИМА REVIEW
+                                MaterialTheme.colorScheme.secondary
                             } else {
                                 Color.Black.copy(alpha = 0.15f)
                             },
-                            label = "pillBgColor"
+                            label = "timerBgColor"
                         )
+
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
-                                .graphicsLayer { alpha = 1f }
                                 .clip(RoundedCornerShape(20.dp))
                                 .background(pillBackgroundColor)
                                 .clickable(enabled = buttonState == YapButtonState.LOCKED || buttonState == YapButtonState.REVIEW) {
                                     if (buttonState == YapButtonState.LOCKED) {
                                         viewModel.updateYapButtonState(YapButtonState.REVIEW)
-                                    } else if (buttonState == YapButtonState.REVIEW) {
-                                        // TODO: ВЫЗОВ ВОСПРОИЗВЕДЕНИЯ
-                                        // viewModel.playAudioMessage()
                                     }
                                 }
                                 .padding(horizontal = 12.dp, vertical = 6.dp)
                         ) {
                             if (buttonState == YapButtonState.LOCKED) {
-                                // Кнопка ПАУЗА (только в LOCKED)
                                 Icon(
-                                    painter = painterResource(R.drawable.baseline_pause_32), // Понадобится Icons.Filled.Pause
-                                    contentDescription = "Stop",
+                                    painter = painterResource(R.drawable.baseline_pause_32),
+                                    contentDescription = null,
                                     tint = Color.White,
-                                    modifier = Modifier
-                                        .size(32.dp)
-                                        .padding(end = 8.dp)
+                                    modifier = Modifier.size(32.dp).padding(end = 8.dp)
                                 )
                             } else if (buttonState == YapButtonState.REVIEW) {
-                                // Иконка прослушивания (Play)
                                 Icon(
                                     painter = painterResource(R.drawable.baseline_play_arrow_32),
-                                    contentDescription = "Listen",
+                                    contentDescription = null,
                                     tint = Color.White,
-                                    modifier = Modifier
-                                        .size(32.dp)
-                                        .padding(end = 8.dp)
+                                    modifier = Modifier.size(32.dp).padding(end = 8.dp)
                                 )
                             }
 
@@ -534,41 +558,43 @@ fun MainYapButton(
                                 height = 60.dp * baseScale
                             )
                         )
+                    }
 
-                        Surface(
+                    Surface(
+                        modifier = Modifier
+                            .offset(y = 50.dp * baseScale)
+                            .size(width = 60.dp * baseScale, height = 32.dp * baseScale),
+                        shape = RoundedCornerShape(18.dp * baseScale),
+                        color = MaterialTheme.colorScheme.tertiary,
+                    ) {
+
+
+                        Row(
                             modifier = Modifier
-                                .offset(y = 50.dp * baseScale)
-                                .size(width = 60.dp * baseScale, height = 32.dp * baseScale),
-                            shape = RoundedCornerShape(18.dp * baseScale),
-                            color = MaterialTheme.colorScheme.tertiary,
-                        ) {
-
-
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxSize(),
+                                .fillMaxSize(),
 //                                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center
-                            ) {
-                                Text(
-                                    text = "$price",
-                                    color = MaterialTheme.colorScheme.background,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = (18 * baseScale).sp,
-                                    lineHeight = (16 * baseScale).sp
-                                )
-                                Spacer(modifier = Modifier.width(5.dp * baseScale))
-                                Icon(
-                                    painter = painterResource(R.drawable.star), // Замени на свой ID
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.background,
-                                    modifier = Modifier.size(20.dp * baseScale)
-                                )
-                            }
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Text(
+                                text = "$price",
+                                color = MaterialTheme.colorScheme.background,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = (18 * baseScale).sp,
+                                lineHeight = (16 * baseScale).sp
+                            )
+                            Spacer(modifier = Modifier.width(5.dp * baseScale))
+                            Icon(
+                                painter = painterResource(R.drawable.star), // Замени на свой ID
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.background,
+                                modifier = Modifier.size(20.dp * baseScale)
+                            )
                         }
                     }
+
                 }
             }
         }
     }
+
