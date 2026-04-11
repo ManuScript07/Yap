@@ -334,6 +334,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         val state = _state.value
 
         if (state.yapPrice == 0) {
+            dismissMessage()
             resetYapButton()
             return
         }
@@ -514,5 +515,16 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 it.userGeneratedContent else null,
             canCloseMessage = it.yapType == YapType.TEXT || it.yapType == YapType.EMOJI
         ) }
+    }
+
+    // Во ViewModel: возвращает цену для конкретного типа при текущих выбранных юзерах
+    fun getPriceForType(type: YapType): Int {
+        val selectedCount = _state.value.users.count { it.isYapActive }
+        return selectedCount * when (type) {
+            YapType.EMOJI -> PRICE_EMOJI
+            YapType.TEXT -> PRICE_TEXT
+            YapType.VOICE -> PRICE_VOICE
+            YapType.YAP -> PRICE_SIMPLE_YAP
+        }
     }
 }

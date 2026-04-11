@@ -200,7 +200,7 @@ fun MainYapButton(
 
                     // Показываем алерт ТОЛЬКО если проблема реально в звездах
                     if (state.currentStars < state.yapPrice) {
-                        viewModel.showAlert("Недостаточно звезд!", durationMs = 1500)
+                        viewModel.showAlert("Недостаточно звезд!", durationMs = 1000)
                     }
 
                     delay(200) // Время для визуального "отскока" плашки
@@ -219,14 +219,14 @@ fun MainYapButton(
                 if (buttonState == YapButtonState.READY) didOverrideMessage = true
                 delay(300)
                 if (buttonState == YapButtonState.READY) {
+                    val voicePrice = viewModel.getPriceForType(YapType.VOICE)
+                    val currentStars = viewModel.state.value.currentStars
                     // Дополнительная проверка перед записью голоса (если цена стала 10)
-                    if (viewModel.state.value.currentStars >= 10) {
+                    if (currentStars >= voicePrice) {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         viewModel.updateYapButtonState(YapButtonState.RECORDING)
                     } else {
-                        viewModel.showAlert("Нужно 10 звезд для голоса", durationMs = 1500)
-                        // Оставляем в READY или сбрасываем — на твой вкус.
-                        // Лучше сбросить, чтобы плашка вернулась:
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         viewModel.resetYapButton()
                     }
                 }
@@ -366,235 +366,235 @@ fun MainYapButton(
         }
 
             // --- ПЕРЕДНЯЯ ПЛАШКА ---
-            Surface(
-                modifier = Modifier
-                    .offset(y = (animatedOffsetY / 5).dp)
-                    .size(width = frontPillWidth, height = frontPillHeight)
-                    .shadow(elevation = 6.dp * baseScale, shape = pillShape)
-                    .clip(pillShape)
-                    // 4. ОБРАБОТКА ЖЕСТОВ
-                    .pointerInput(Unit) {
+    Surface(
+        modifier = Modifier
+            .offset(y = (animatedOffsetY / 5).dp)
+            .size(width = frontPillWidth, height = frontPillHeight)
+            .shadow(elevation = 6.dp * baseScale, shape = pillShape)
+            .clip(pillShape)
+            // 4. ОБРАБОТКА ЖЕСТОВ
+            .pointerInput(Unit) {
 
-                        awaitEachGesture {
-                            val down = awaitFirstDown()
-                            var isMoved = false
+                awaitEachGesture {
+                    val down = awaitFirstDown()
+                    var isMoved = false
 
-                            // ЧИТАЕМ СВЕЖЕЕ СОСТОЯНИЕ ИЗ VIEWMODEL
-                            if (viewModel.state.value.yapButtonState != YapButtonState.LOCKED &&
-                                viewModel.state.value.yapButtonState != YapButtonState.REVIEW) {
-                                viewModel.updateYapButtonState(YapButtonState.PRESSED)
-                            }
+                    // ЧИТАЕМ СВЕЖЕЕ СОСТОЯНИЕ ИЗ VIEWMODEL
+                    if (viewModel.state.value.yapButtonState != YapButtonState.LOCKED &&
+                        viewModel.state.value.yapButtonState != YapButtonState.REVIEW) {
+                        viewModel.updateYapButtonState(YapButtonState.PRESSED)
+                    }
 
-                            var lastChange = down
+                    var lastChange = down
 
-                            do {
-                                val event = awaitPointerEvent()
-                                val change = event.changes.first()
-                                lastChange = change
+                    do {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.first()
+                        lastChange = change
 
-                                val dragY = change.position.y - down.position.y
+                        val dragY = change.position.y - down.position.y
 
-                                if (kotlin.math.abs(dragY) > 10f) {
-                                    isMoved = true
-                                }
+                        if (kotlin.math.abs(dragY) > 10f) {
+                            isMoved = true
+                        }
 
-                                // ВАЖНО: Получаем актуальное состояние прямо в момент движения пальца!
-                                val currentState = viewModel.state.value.yapButtonState
+                        // ВАЖНО: Получаем актуальное состояние прямо в момент движения пальца!
+                        val currentState = viewModel.state.value.yapButtonState
 
-                                if (currentState == YapButtonState.RECORDING ||
-                                    currentState == YapButtonState.LOCKED ||
-                                    currentState == YapButtonState.REVIEW
-                                ) {
-                                    val newLocalY = when (currentState) {
-                                        YapButtonState.LOCKED -> {
-                                            (-120f + dragY).coerceIn(-200f, 200f)
-                                        }
-                                        YapButtonState.REVIEW -> {
-                                            // В режиме Review позволяем тянуть только вниз (удаление)
-                                            dragY.coerceIn(0f, 200f)
-                                        }
-                                        else -> {
-                                            dragY.coerceIn(-200f, 200f)
-                                        }
-                                    }
-                                    // Отправляем во ViewModel
-                                    viewModel.updateYapOffsetY(newLocalY)
-                                }
-
-                                if (isMoved) {
-                                    change.consume()
-                                }
-                            } while (event.changes.any { it.pressed })
-
-                            val isInside = lastChange.position.x in 0f..size.width.toFloat() &&
-                                    lastChange.position.y in 0f..size.height.toFloat()
-
-                            val isValidTap = !isMoved && isInside && !lastChange.isConsumed
-
-                            // ЛОГИКА ОТПУСКАНИЯ (Читаем актуальные данные перед принятием решения)
-                            val finalState = viewModel.state.value.yapButtonState
-                            val finalOffsetY = viewModel.state.value.yapOffsetY
-
-                            when (finalState) {
-                                YapButtonState.RECORDING -> {
-                                    if (finalOffsetY <= -130f) {
-                                        viewModel.updateYapButtonState(YapButtonState.LOCKED)
-                                        viewModel.updateYapOffsetY(-120f)
-                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    } else if (finalOffsetY >= 130f) {
-                                        viewModel.resetYapButton() // Вызываем метод полного сброса
-                                    } else {
-                                        viewModel.updateVoicePath("path/to/current/record.m4a")
-                                        viewModel.updateYapButtonState(YapButtonState.FIRING)
-                                    }
-                                }
-
+                        if (currentState == YapButtonState.RECORDING ||
+                            currentState == YapButtonState.LOCKED ||
+                            currentState == YapButtonState.REVIEW
+                        ) {
+                            val newLocalY = when (currentState) {
                                 YapButtonState.LOCKED -> {
-                                    if (finalOffsetY >= 50f) {
-                                        viewModel.resetYapButton()
-                                    } else if (isValidTap) {
-                                        viewModel.updateVoicePath("path/to/current/record.m4a")
-                                        viewModel.updateYapButtonState(YapButtonState.FIRING)
-
-                                    } else {
-                                        viewModel.updateYapOffsetY(-120f)
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    }
+                                    (-120f + dragY).coerceIn(-200f, 200f)
                                 }
-
                                 YapButtonState.REVIEW -> {
-                                    if (finalOffsetY >= 100f) {
-                                        viewModel.resetYapButton()
-                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    } else if (isValidTap) {
-                                        viewModel.updateYapButtonState(YapButtonState.FIRING)
-                                    } else {
-                                        viewModel.updateYapOffsetY(0f)
-                                    }
+                                    // В режиме Review позволяем тянуть только вниз (удаление)
+                                    dragY.coerceIn(0f, 200f)
                                 }
-
-                                YapButtonState.READY -> {
-                                    if (isInside) {
-                                        viewModel.updateYapButtonState(YapButtonState.FIRING)
-                                    } else {
-                                        viewModel.resetYapButton()
-                                    }
-                                }
-
                                 else -> {
-                                    if (finalState != YapButtonState.LOCKED && finalState != YapButtonState.REVIEW) {
-                                        viewModel.resetYapButton()
-                                    }
+                                    dragY.coerceIn(-200f, 200f)
                                 }
                             }
+                            // Отправляем во ViewModel
+                            viewModel.updateYapOffsetY(newLocalY)
                         }
-                    },
-                shape = pillShape,
-                color = MaterialTheme.colorScheme.primary,
-            ) {
-                Box(
-                    modifier = modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    // --- 1. ЦЕНТРАЛЬНЫЙ ЭЛЕМЕНТ (Таймер или Лого) ---
-                    if (buttonState == YapButtonState.RECORDING || buttonState == YapButtonState.LOCKED || buttonState == YapButtonState.REVIEW) {
-                        // ТАЙМЕР ПО ЦЕНТРУ
-                        val seconds = recordTimeMs / 1000
-                        val tenths = (recordTimeMs % 1000) / 100
-                        val timerText = String.format("%02d,%d/20", seconds, tenths)
 
-                        val pillBackgroundColor by animateColorAsState(
-                            targetValue = if (buttonState == YapButtonState.REVIEW) {
-                                MaterialTheme.colorScheme.secondary
+                        if (isMoved) {
+                            change.consume()
+                        }
+                    } while (event.changes.any { it.pressed })
+
+                    val isInside = lastChange.position.x in 0f..size.width.toFloat() &&
+                            lastChange.position.y in 0f..size.height.toFloat()
+
+                    val isValidTap = !isMoved && isInside && !lastChange.isConsumed
+
+                    // ЛОГИКА ОТПУСКАНИЯ (Читаем актуальные данные перед принятием решения)
+                    val finalState = viewModel.state.value.yapButtonState
+                    val finalOffsetY = viewModel.state.value.yapOffsetY
+
+                    when (finalState) {
+                        YapButtonState.RECORDING -> {
+                            if (finalOffsetY <= -130f) {
+                                viewModel.updateYapButtonState(YapButtonState.LOCKED)
+                                viewModel.updateYapOffsetY(-120f)
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            } else if (finalOffsetY >= 130f) {
+                                viewModel.resetYapButton() // Вызываем метод полного сброса
                             } else {
-                                Color.Black.copy(alpha = 0.15f)
-                            },
-                            label = "timerBgColor"
-                        )
-
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(20.dp))
-                                .background(pillBackgroundColor)
-                                .clickable(enabled = buttonState == YapButtonState.LOCKED || buttonState == YapButtonState.REVIEW) {
-                                    if (buttonState == YapButtonState.LOCKED) {
-                                        viewModel.updateYapButtonState(YapButtonState.REVIEW)
-                                    }
-                                }
-                                .padding(horizontal = 12.dp, vertical = 6.dp)
-                        ) {
-                            if (buttonState == YapButtonState.LOCKED) {
-                                Icon(
-                                    painter = painterResource(R.drawable.baseline_pause_32),
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(32.dp).padding(end = 8.dp)
-                                )
-                            } else if (buttonState == YapButtonState.REVIEW) {
-                                Icon(
-                                    painter = painterResource(R.drawable.baseline_play_arrow_32),
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(32.dp).padding(end = 8.dp)
-                                )
+                                viewModel.updateVoicePath("path/to/current/record.m4a")
+                                viewModel.updateYapButtonState(YapButtonState.FIRING)
                             }
+                        }
 
-                            Text(
-                                text = timerText,
-                                style = MaterialTheme.typography.titleLarge,
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold
-                            )
+                        YapButtonState.LOCKED -> {
+                            if (finalOffsetY >= 50f) {
+                                viewModel.resetYapButton()
+                            } else if (isValidTap) {
+                                viewModel.updateVoicePath("path/to/current/record.m4a")
+                                viewModel.updateYapButtonState(YapButtonState.FIRING)
+
+                            } else {
+                                viewModel.updateYapOffsetY(-120f)
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            }
+                        }
+
+                        YapButtonState.REVIEW -> {
+                            if (finalOffsetY >= 100f) {
+                                viewModel.resetYapButton()
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            } else if (isValidTap) {
+                                viewModel.updateYapButtonState(YapButtonState.FIRING)
+                            } else {
+                                viewModel.updateYapOffsetY(0f)
+                            }
+                        }
+
+                        YapButtonState.READY -> {
+                            if (isInside) {
+                                viewModel.updateYapButtonState(YapButtonState.FIRING)
+                            } else {
+                                viewModel.resetYapButton()
+                            }
+                        }
+
+                        else -> {
+                            if (finalState != YapButtonState.LOCKED && finalState != YapButtonState.REVIEW) {
+                                viewModel.resetYapButton()
+                            }
                         }
                     }
-                    else {
+                }
+            },
+        shape = pillShape,
+        color = MaterialTheme.colorScheme.primary,
+    ) {
+        Box(
+            modifier = modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            // --- 1. ЦЕНТРАЛЬНЫЙ ЭЛЕМЕНТ (Таймер или Лого) ---
+            if (buttonState == YapButtonState.RECORDING || buttonState == YapButtonState.LOCKED || buttonState == YapButtonState.REVIEW) {
+                // ТАЙМЕР ПО ЦЕНТРУ
+                val seconds = recordTimeMs / 1000
+                val tenths = (recordTimeMs % 1000) / 100
+                val timerText = String.format("%02d,%d/20", seconds, tenths)
+
+                val pillBackgroundColor by animateColorAsState(
+                    targetValue = if (buttonState == YapButtonState.REVIEW) {
+                        MaterialTheme.colorScheme.secondary
+                    } else {
+                        Color.Black.copy(alpha = 0.15f)
+                    },
+                    label = "timerBgColor"
+                )
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(pillBackgroundColor)
+                        .clickable(enabled = buttonState == YapButtonState.LOCKED || buttonState == YapButtonState.REVIEW) {
+                            if (buttonState == YapButtonState.LOCKED) {
+                                viewModel.updateYapButtonState(YapButtonState.REVIEW)
+                            }
+                        }
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    if (buttonState == YapButtonState.LOCKED) {
                         Icon(
-                            painter = painterResource(id = R.drawable.yap_button_big_text), // Замени на свой ID
-                            contentDescription = "YAP Logo",
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.size(
-                                width = 120.dp * baseScale,
-                                height = 60.dp * baseScale
-                            )
+                            painter = painterResource(R.drawable.baseline_pause_32),
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(32.dp).padding(end = 8.dp)
+                        )
+                    } else if (buttonState == YapButtonState.REVIEW) {
+                        Icon(
+                            painter = painterResource(R.drawable.baseline_play_arrow_32),
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(32.dp).padding(end = 8.dp)
                         )
                     }
 
-                    Surface(
-                        modifier = Modifier
-                            .offset(y = 50.dp * baseScale)
-                            .size(width = 60.dp * baseScale, height = 32.dp * baseScale),
-                        shape = RoundedCornerShape(18.dp * baseScale),
-                        color = MaterialTheme.colorScheme.tertiary,
-                    ) {
-
-
-                        Row(
-                            modifier = Modifier
-                                .fillMaxSize(),
-//                                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            Text(
-                                text = "$price",
-                                color = MaterialTheme.colorScheme.background,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = (18 * baseScale).sp,
-                                lineHeight = (16 * baseScale).sp
-                            )
-                            Spacer(modifier = Modifier.width(5.dp * baseScale))
-                            Icon(
-                                painter = painterResource(R.drawable.star), // Замени на свой ID
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.background,
-                                modifier = Modifier.size(20.dp * baseScale)
-                            )
-                        }
-                    }
-
+                    Text(
+                        text = timerText,
+                        style = MaterialTheme.typography.titleLarge,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
+            else {
+                Icon(
+                    painter = painterResource(id = R.drawable.yap_button_big_text), // Замени на свой ID
+                    contentDescription = "YAP Logo",
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.size(
+                        width = 120.dp * baseScale,
+                        height = 60.dp * baseScale
+                    )
+                )
+            }
+
+            Surface(
+                modifier = Modifier
+                    .offset(y = 50.dp * baseScale)
+                    .size(width = 60.dp * baseScale, height = 32.dp * baseScale),
+                shape = RoundedCornerShape(18.dp * baseScale),
+                color = MaterialTheme.colorScheme.tertiary,
+            ) {
+
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize(),
+//                                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = "$price",
+                        color = MaterialTheme.colorScheme.background,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = (18 * baseScale).sp,
+                        lineHeight = (16 * baseScale).sp
+                    )
+                    Spacer(modifier = Modifier.width(5.dp * baseScale))
+                    Icon(
+                        painter = painterResource(R.drawable.star), // Замени на свой ID
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.background,
+                        modifier = Modifier.size(20.dp * baseScale)
+                    )
+                }
+            }
+
         }
     }
+}
+}
 
