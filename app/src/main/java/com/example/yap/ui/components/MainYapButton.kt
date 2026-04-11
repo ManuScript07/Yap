@@ -2,6 +2,7 @@ package com.example.yap.ui.components
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.content.Context
 import android.content.pm.PackageManager
 import androidx.compose.animation.animateColorAsState
@@ -144,41 +145,59 @@ fun MainYapButton(
 
     val pillShape = RoundedCornerShape(percent = 80)
 
+//    LaunchedEffect(Unit) {
+//        viewModel.syncPlaybackState()
+//    }
+
     // 1. ЭФФЕКТ ДЛЯ ТАЙМЕРА (Зависит только от факта записи)
-    LaunchedEffect(buttonState) {
-        // Проверяем, нужно ли запускать/продолжать таймер
-        if (buttonState == YapButtonState.RECORDING || buttonState == YapButtonState.LOCKED) {
-
-            // Вычисляем точку старта относительно уже накопленного времени (из стейта)
-            val startTime = System.currentTimeMillis() - uiState.yapRecordTimeMs
-
-            while (viewModel.state.value.yapButtonState.let { it == YapButtonState.RECORDING || it == YapButtonState.LOCKED }) {
-                val currentMs = System.currentTimeMillis() - startTime
-
-                // Обновляем время в общем стейте
-                viewModel.updateYapRecordTime(currentMs)
-
-                // Проверка лимита в 20 секунд
-                if (currentMs >= uiState.maxDurationMs) {
-                    viewModel.updateYapRecordTime(uiState.maxDurationMs)
-                    viewModel.updateYapButtonState(YapButtonState.REVIEW)
-                    viewModel.updateYapOffsetY(0f) // Плавно возвращаем в центр
-                    break
+    LaunchedEffect(buttonState, uiState.isPlayingVoice) {
+        when {
+            // 1. ЛОГИКА ЗАПИСИ
+            buttonState == YapButtonState.RECORDING || buttonState == YapButtonState.LOCKED -> {
+                val startPoint = viewModel.state.value.recordStartDate ?: System.currentTimeMillis()
+                while (viewModel.state.value.yapButtonState.let { it == YapButtonState.RECORDING || it == YapButtonState.LOCKED }) {
+                    val elapsedMs = System.currentTimeMillis() - startPoint
+                    viewModel.updateYapRecordTime(elapsedMs)
+                    if (elapsedMs >= uiState.maxDurationMs) {
+                        viewModel.updateYapButtonState(YapButtonState.REVIEW)
+                        break
+                    }
+                    delay(50)
                 }
-                delay(50) // 20 кадров в секунду для плавности 1/10 сек
             }
-        } else if (buttonState == YapButtonState.IDLE) {
-            // Если кнопка сброшена — обнуляем время во ViewModel
-            viewModel.updateYapRecordTime(0L)
+
+            // 2. ЛОГИКА REVIEW (ПРОСЛУШИВАНИЯ)
+            buttonState == YapButtonState.REVIEW -> {
+                if (uiState.isPlayingVoice) {
+                    val playbackStartPoint = System.currentTimeMillis() - viewModel.getPlaybackPosition()
+                    while (true) {
+                        // Проверяем актуальное состояние из Flow, чтобы выйти из цикла
+                        val state = viewModel.state.value
+                        if (!state.isPlayingVoice || state.yapButtonState != YapButtonState.REVIEW) break
+
+                        val elapsed = System.currentTimeMillis() - playbackStartPoint
+                        val safeElapsed = elapsed.coerceAtMost(uiState.totalDurationMs)
+                        viewModel.updateYapRecordTime(safeElapsed)
+                        delay(50)
+                    }
+                }
+                // УБРАЛИ else { updateYapRecordTime(0L) }
+                // Теперь при паузе время просто перестает обновляться и "замирает"
+            }
+
+            // 3. СБРОС
+            buttonState == YapButtonState.IDLE -> {
+                viewModel.updateYapRecordTime(0L)
+            }
         }
     }
 
-    LaunchedEffect(buttonState) {
-        if (buttonState == YapButtonState.REVIEW) {
-            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-            // Можно добавить вибрацию и для других переходов, если нужно
-        }
-    }
+//    LaunchedEffect(buttonState) {
+//        if (buttonState == YapButtonState.REVIEW) {
+//            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+//            // Можно добавить вибрацию и для других переходов, если нужно
+//        }
+//    }
 
     LaunchedEffect(buttonState) {
         when (buttonState) {
@@ -241,13 +260,17 @@ fun MainYapButton(
             }
 
             YapButtonState.REVIEW -> {
-                if (viewModel.state.value.yapType == YapType.VOICE) {
-                    viewModel.stopVoiceRecording()
-                }
-                // Мягко возвращаем кнопку в центр при входе в Review
+//                if (viewModel.state.value.yapType == YapType.VOICE) {
+//                    viewModel.stopVoiceRecording()
+//                }
+//                // Мягко возвращаем кнопку в центр при входе в Review
                 viewModel.updateYapOffsetY(0f)
-                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+//                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
 //                viewModel.prepareVoiceForReview()
+                val activity = context as? Activity
+                if (activity?.isChangingConfigurations == false) {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                }
                 viewModel.showAlert(message = "Нажмите YAP, чтобы отправить", canClose = false)
             }
 
@@ -547,9 +570,22 @@ fun MainYapButton(
             ) {
                 // --- 1. ЦЕНТРАЛЬНЫЙ ЭЛЕМЕНТ (Таймер или Лого) ---
                 if (buttonState == YapButtonState.RECORDING || buttonState == YapButtonState.LOCKED || buttonState == YapButtonState.REVIEW) {
-                    val seconds = recordTimeMs / 1000
-                    val tenths = (recordTimeMs % 1000) / 100
-                    val timerText = String.format("%02d,%d/20", seconds, tenths)
+                    val timerText = if (buttonState == YapButtonState.REVIEW) {
+                        // Формат: 01,2 / 05,4
+                        val curSec = recordTimeMs / 1000
+                        val curTen = (recordTimeMs % 1000) / 100
+
+                        val totalMs = uiState.totalDurationMs
+                        val totSec = totalMs / 1000
+                        val totTen = (totalMs % 1000) / 100
+
+                        String.format("%d,%d/%d,%d", curSec, curTen, totSec, totTen)
+                    } else {
+                        // Старый формат для записи: 01,2 / 20
+                        val seconds = recordTimeMs / 1000
+                        val tenths = (recordTimeMs % 1000) / 100
+                        String.format("%02d,%d/20", seconds, tenths)
+                    }
 
                     val pillBackgroundColor by animateColorAsState(
                         targetValue = if (buttonState == YapButtonState.REVIEW) {

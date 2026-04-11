@@ -12,6 +12,8 @@ class VoiceManager(private val context: Context) {
     var currentRecordPath: String? = null
         private set
 
+
+
     fun startRecording() {
         val file = File(context.cacheDir, "yap_record_${System.currentTimeMillis()}.m4a")
         currentRecordPath = file.absolutePath
@@ -66,25 +68,27 @@ class VoiceManager(private val context: Context) {
         currentRecordPath = null
     }
 
-    fun playPausePlayback(onCompletion: () -> Unit) {
+    fun playPausePlayback(
+        onStateChanged: (Boolean) -> Unit, // Новый коллбэк для мгновенного обновления иконки
+        onCompletion: () -> Unit
+    ) {
         if (player?.isPlaying == true) {
             player?.pause()
+            onStateChanged(false) // Уведомляем: теперь пауза
             return
         }
 
-        // Если плеер в паузе — просто запускаем
         if (player != null) {
             player?.start()
+            onStateChanged(true) // Уведомляем: теперь играет
             return
         }
 
-        // Если плеера нет — создаем с нуля
         val path = currentRecordPath ?: return
         val file = File(path)
 
         if (!file.exists() || file.length() < 100) {
-            Log.e("VoiceManager", "Файл не готов: ${file.length()} байт")
-            onCompletion() // Возвращаем UI в стоп
+            onCompletion()
             return
         }
 
@@ -93,13 +97,13 @@ class VoiceManager(private val context: Context) {
                 setDataSource(path)
                 prepare()
                 setOnCompletionListener {
-                    stopPlayback() // Важно: зануляем плеер после конца
+                    stopPlayback()
                     onCompletion()
                 }
                 start()
+                onStateChanged(true) // Уведомляем: начали играть
             }
         } catch (e: Exception) {
-            Log.e("VoiceManager", "Ошибка плеера: ${e.message}")
             stopPlayback()
             onCompletion()
         }
@@ -117,20 +121,22 @@ class VoiceManager(private val context: Context) {
             player = null
         }
     }
-
-    fun deleteCurrentRecord() {
+    // В VoiceManager
+    fun pausePlaybackOnly() {
         try {
-            currentRecordPath?.let { path ->
-                val file = File(path)
-                if (file.exists()) {
-                    val deleted = file.delete()
-                    Log.d("VoiceManager", "Файл удален: $path, успех: $deleted")
-                }
+            if (player?.isPlaying == true) {
+                player?.pause()
             }
         } catch (e: Exception) {
-            Log.e("VoiceManager", "Ошибка при удалении файла: ${e.message}")
-        } finally {
-            currentRecordPath = null
+            Log.e("VoiceManager", "Ошибка паузы: ${e.message}")
         }
     }
+
+    // Убедись, что этот метод у тебя точно есть:
+    fun isActuallyPlaying(): Boolean = player?.isPlaying ?: false
+
+
+    fun getCurrentPosition(): Int = player?.currentPosition ?: 0
+
+
 }

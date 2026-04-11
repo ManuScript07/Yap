@@ -21,6 +21,7 @@ data class HomeUiState(
     val userGeneratedContent: String? = null, // СТРОГО текст сообщения (для TEXT и EMOJI)
     val voiceAudioUri: String? = null,
     val alertId: Long = 0L,
+    val recordStartDate: Long? = null,
 
     val canCloseMessage: Boolean = false,
     val messageType: MessageType = MessageType.INFO,
@@ -35,6 +36,7 @@ data class HomeUiState(
     val yapOffsetY: Float = 0f,
     val didOverrideMessage: Boolean = false,
     val maxDurationMs: Long = 20_000L,
+    val totalDurationMs: Long = 0L,
 
     val isSystemAlertOverridden: Boolean = false,
     val isPlayingVoice: Boolean = false,

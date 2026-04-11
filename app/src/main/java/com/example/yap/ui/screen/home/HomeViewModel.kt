@@ -465,7 +465,13 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
 
     fun updateYapButtonState(newState: YapButtonState) {
+        val oldState = _state.value.yapButtonState
         _state.update { it.copy(yapButtonState = newState) }
+
+        if ((oldState == YapButtonState.RECORDING || oldState == YapButtonState.LOCKED)
+            && newState == YapButtonState.REVIEW) {
+            stopVoiceRecording()
+        }
     }
 
     fun updateYapOffsetY(offset: Float) {
@@ -481,42 +487,47 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
 
     fun startVoiceRecording() {
-        updateStateWithPrice { it.copy(yapType = YapType.VOICE) }
+        val startTime = System.currentTimeMillis()
+        updateStateWithPrice {
+            it.copy(
+                yapType = YapType.VOICE,
+                recordStartDate = startTime,
+                yapRecordTimeMs = 0L
+            ) }
         voiceManager.startRecording()
     }
 
     fun stopVoiceRecording() {
         voiceManager.stopRecording() // Здесь внутри должен быть recorder.stop() и release()
         val path = voiceManager.currentRecordPath
+        val finalDuration = _state.value.yapRecordTimeMs
 
         if (path != null) {
-            // Обновляем путь и сбрасываем флаг проигрывания на всякий случай
             _state.update { it.copy(
                 voiceAudioUri = path,
-                isPlayingVoice = false
+                isPlayingVoice = false,
+                totalDurationMs = finalDuration,
+                yapRecordTimeMs = 0L
             ) }
         }
     }
 
     fun toggleVoicePlayback() {
-        val currentState = _state.value
-
-        if (currentState.isPlayingVoice) {
-            // Остановка всегда мгновенная
-            voiceManager.playPausePlayback {}
-            _state.update { it.copy(isPlayingVoice = false) }
-        } else {
-            // Запуск через корутину с микро-задержкой
-            viewModelScope.launch {
-                _state.update { it.copy(isPlayingVoice = true) }
-
-                // Даем 100мс системе, чтобы финализировать .m4a файл на диске
-                delay(100)
-
-                voiceManager.playPausePlayback {
-                    _state.update { it.copy(isPlayingVoice = false) }
+        // Мы не меняем стейт здесь вручную,
+        // доверяем это коллбэкам от VoiceManager
+        viewModelScope.launch {
+            voiceManager.playPausePlayback(
+                onStateChanged = { isPlaying ->
+                    _state.update { it.copy(isPlayingVoice = isPlaying) }
+                },
+                onCompletion = {
+                    _state.update {
+                        it.copy(
+                            isPlayingVoice = false,
+                            yapRecordTimeMs = it.totalDurationMs
+                        ) }
                 }
-            }
+            )
         }
     }
 
@@ -532,6 +543,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 yapButtonState = YapButtonState.IDLE,
                 yapType = if (shouldResetType) YapType.YAP else currentState.yapType,
                 yapRecordTimeMs = 0L,
+                recordStartDate = null,
                 yapOffsetY = 0f,
                 voiceAudioUri = if (shouldResetType) null else currentState.voiceAudioUri,
                 didOverrideMessage = false,
@@ -603,5 +615,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         voiceManager.cancelRecording() // Удаляет файл физически
         resetYapButton()
     }
+
+    fun getPlaybackPosition(): Long {
+        return voiceManager.getCurrentPosition().toLong()
+    }
+
 
 }
