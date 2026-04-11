@@ -1,6 +1,7 @@
 package com.example.yap.ui.screen.home
 
 import UserPreferences
+import VoiceManager
 import android.app.Application
 import android.util.Log
 import androidx.annotation.StringRes
@@ -23,6 +24,7 @@ import kotlinx.coroutines.launch
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     private val energyPrefs = UserPreferences(application)
+    private val voiceManager = VoiceManager(application)
 
     private val _state = MutableStateFlow(
         HomeUiState(
@@ -308,10 +310,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-//    fun setSheetExpanded(expanded: Boolean) {
-//        _state.update { it.copy(isSheetExpanded = expanded) }
-//    }
-
 
 
     private fun calculatePrice(users: List<UserItem>, type: YapType): Int {
@@ -388,7 +386,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // Новая обертка, которую мы будем вызывать из fetchLocationAndSendYap
     fun handleSendRequest(latitude: Double?, longitude: Double?, finalType: YapType) {
         updateStateWithPrice { it.copy(yapType = finalType) }
         sendYap(latitude, longitude)
@@ -402,7 +399,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
             while (true) {
                 delay(currentDelay)
-                currentDelay = REGEN_DELAY_MS // После первого остатка, всегда ждем полные 5 сек
+                currentDelay = REGEN_DELAY_MS
 
                 val max = _state.value.maxStars
                 val current = _state.value.currentStars
@@ -410,7 +407,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 if (current < max) {
                     val newStars = current + 1
 
-                    // Тик произошел прямо сейчас. Обновляем якорь!
                     lastAnchorTime = System.currentTimeMillis()
 
                     // Сохраняем новые данные в DataStore
@@ -437,9 +433,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-//    fun saveProgress() {
-//        saveEnergyToStore(_state.value.currentStars, lastAnchorTime)
-//    }
 
     private fun saveEnergyToStore(stars: Int, anchorTime: Long) {
         viewModelScope.launch {
@@ -448,7 +441,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
 
-    // Внутри HomeViewModel
 
     fun updateYapButtonState(newState: YapButtonState) {
         _state.update { it.copy(yapButtonState = newState) }
@@ -463,30 +455,44 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun prepareVoiceForReview(audioPath: String? = null) {
+        stopVoiceRecording()
         updateStateWithPrice { currentState ->
             currentState.copy(
                 yapType = YapType.VOICE,
                 voiceAudioUri = audioPath,
-                // Для отображения в showAlert пишем подсказку,
-                // но НЕ сохраняем её в userGeneratedContent
                 currentAlertMessage = "Нажмите YAP, чтобы отправить",
                 canCloseMessage = false
             )
         }
     }
 
-    // Во ViewModel
-//    fun prepareVoiceContent(audioPath: String?) {
-//        _state.update { it.copy(
-//            yapType = YapType.VOICE,
-//            voiceAudioUri = audioPath
-//        ) }
-//        // Принудительно обновляем цену, так как тип сменился на VOICE
-//        updateStateWithPrice { it }
-//    }
+
 
     fun startVoiceRecording() {
         updateStateWithPrice { it.copy(yapType = YapType.VOICE) }
+        voiceManager.startRecording()
+    }
+
+    fun stopVoiceRecording() {
+        voiceManager.stopRecording()
+        val path = voiceManager.currentRecordPath
+        if (path != null) {
+            updateVoicePath(path)
+        }
+    }
+
+    fun toggleVoicePlayback() {
+        val currentState = _state.value
+        if (currentState.isPlayingVoice) {
+            voiceManager.playPausePlayback {} // Ставим на паузу
+            _state.update { it.copy(isPlayingVoice = false) }
+        } else {
+            _state.update { it.copy(isPlayingVoice = true) }
+            voiceManager.playPausePlayback {
+                // Этот блок вызовется, когда аудио доиграет до конца
+                _state.update { it.copy(isPlayingVoice = false) }
+            }
+        }
     }
 
     fun updateVoicePath(path: String) {
@@ -494,7 +500,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun resetYapButton() {
-        _state.update { currentState ->
+        voiceManager.cancelRecording()
+        voiceManager.stopPlayback()
+        updateStateWithPrice { currentState ->
             val shouldResetType = currentState.yapType == YapType.VOICE
 
             currentState.copy(
@@ -502,9 +510,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 yapType = if (shouldResetType) YapType.YAP else currentState.yapType,
                 yapRecordTimeMs = 0L,
                 yapOffsetY = 0f,
-                // Очищаем аудио только если это был голос
                 voiceAudioUri = if (shouldResetType) null else currentState.voiceAudioUri,
                 didOverrideMessage = false,
+                isPlayingVoice = false,
             )
         }
     }
@@ -517,7 +525,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         ) }
     }
 
-    // Во ViewModel: возвращает цену для конкретного типа при текущих выбранных юзерах
     fun getPriceForType(type: YapType): Int {
         val selectedCount = _state.value.users.count { it.isYapActive }
         return selectedCount * when (type) {
@@ -527,4 +534,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             YapType.YAP -> PRICE_SIMPLE_YAP
         }
     }
+
+    fun setAlertOverridden(overridden: Boolean) {
+        _state.update { it.copy(isSystemAlertOverridden = overridden) }
+    }
+
+
 }

@@ -127,6 +127,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.yap.R
 import com.example.yap.data.model.UserItem
 import com.example.yap.ui.components.MainYapButton
+import com.example.yap.ui.components.YapButtonState
 import com.example.yap.ui.theme.LocalAdditionColors
 import com.example.yap.ui.theme.LocalBaseScale
 import com.example.yap.util.LocationHelper
@@ -149,6 +150,17 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
             viewModel.setLocationToggle(isEnabled = true, isManualAction = true)
         } else {
             viewModel.setLocationToggle(false)
+        }
+    }
+
+    val microphonePermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        viewModel.resetYapButton()
+        if (!isGranted) {
+            // Юзер отказал
+//            viewModel.resetYapButton()
+            viewModel.showAlert("Нужно разрешение на микрофон", durationMs = 2000)
         }
     }
 
@@ -246,13 +258,14 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
                         } else {
                             viewModel.setLocationToggle(false)
                         }
-                    }
+                    },
+                    onRequestMicrophonePermission = {
+                        microphonePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)}
                 )
             }
         )
     }
 }
-
 
 
 private fun handleLocationActivation(
@@ -614,7 +627,8 @@ fun AddUserButton(onClick: () -> Unit) {
 fun HomeContent(
     innerPadding: PaddingValues,
     viewModel: HomeViewModel,
-    onLocationToggle: (Boolean) -> Unit
+    onLocationToggle: (Boolean) -> Unit,
+    onRequestMicrophonePermission: () -> Unit,
 ) {
     val state by viewModel.state.collectAsState()
     val baseScale = LocalBaseScale.current
@@ -670,7 +684,6 @@ fun HomeContent(
             ) {
                    MainYapButton(
                     price = state.yapPrice,
-                    isEnoughStars = state.currentStars >= state.yapPrice,
                     onClick = {
                         fetchLocationAndSendYap(
                             context = context,
@@ -678,8 +691,9 @@ fun HomeContent(
                             isLocationEnabled = state.isLocationEnabled,
                             messageType = state.yapType
                     )},
-                    viewModel = viewModel
-//                    onClick = { viewModel.showAlert("Вы нажали на кнопку", false) }
+                    viewModel = viewModel,
+                    context = context,
+                    onRequestMicrophonePermission = onRequestMicrophonePermission
                 )
             }
 

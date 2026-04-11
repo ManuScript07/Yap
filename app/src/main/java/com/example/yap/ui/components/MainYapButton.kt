@@ -1,6 +1,9 @@
 package com.example.yap.ui.components
 
+import android.Manifest
 import android.annotation.SuppressLint
+import android.content.Context
+import android.content.pm.PackageManager
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
@@ -17,14 +20,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -38,9 +38,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
@@ -49,16 +46,14 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.yap.R
 import com.example.yap.ui.screen.home.HomeViewModel
@@ -72,10 +67,11 @@ import kotlinx.coroutines.delay
 @Composable
 fun MainYapButton(
     price: Int,
-    isEnoughStars: Boolean,
     onClick: (YapType) -> Unit,
     modifier: Modifier = Modifier,
-    viewModel: HomeViewModel
+    viewModel: HomeViewModel,
+    context: Context,
+    onRequestMicrophonePermission: () -> Unit,
 ) {
 
     val uiState by viewModel.state.collectAsStateWithLifecycle()
@@ -85,8 +81,7 @@ fun MainYapButton(
     val offsetY = uiState.yapOffsetY
     val recordTimeMs = uiState.yapRecordTimeMs
 
-//    val configuration = LocalConfiguration.current
-    val baseScale = LocalBaseScale.current // Предполагаю, что он у тебя объявлен через CompositionLocal
+    val baseScale = LocalBaseScale.current
 
     val frontPillWidth = 196.dp * baseScale
     val frontPillHeight = 160.dp * baseScale
@@ -94,15 +89,11 @@ fun MainYapButton(
     val backPillMaxHeight = 212.dp * baseScale
 
     // 2. ИНИЦИАЛИЗИРУЕМ ИНСТРУМЕНТЫ
-//    var buttonState by rememberSaveable { mutableStateOf(YapButtonState.IDLE) }
     val haptic = LocalHapticFeedback.current
 
 
-//    var offsetY by rememberSaveable { mutableStateOf(0f) }
-//    val recordTimer = rememberSaveable { mutableStateOf(0) }
-    var didOverrideMessage by rememberSaveable { mutableStateOf(false) }
-//    var recordTimeMs by rememberSaveable { mutableLongStateOf(0L) }
-//    val maxDurationMs = 20_000L
+
+
 
     // --- АНИМАЦИИ НА ОСНОВЕ СОСТОЯНИЯ ---
 
@@ -150,7 +141,6 @@ fun MainYapButton(
     val pillShape = RoundedCornerShape(percent = 80)
 
     // 1. ЭФФЕКТ ДЛЯ ТАЙМЕРА (Зависит только от факта записи)
-    // 1. ЭФФЕКТ ДЛЯ ТАЙМЕРА (Считывает состояние из ViewModel)
     LaunchedEffect(buttonState) {
         // Проверяем, нужно ли запускать/продолжать таймер
         if (buttonState == YapButtonState.RECORDING || buttonState == YapButtonState.LOCKED) {
@@ -158,7 +148,7 @@ fun MainYapButton(
             // Вычисляем точку старта относительно уже накопленного времени (из стейта)
             val startTime = System.currentTimeMillis() - uiState.yapRecordTimeMs
 
-            while (buttonState == YapButtonState.RECORDING || buttonState == YapButtonState.LOCKED) {
+            while (viewModel.state.value.yapButtonState.let { it == YapButtonState.RECORDING || it == YapButtonState.LOCKED }) {
                 val currentMs = System.currentTimeMillis() - startTime
 
                 // Обновляем время в общем стейте
@@ -216,15 +206,26 @@ fun MainYapButton(
 
             YapButtonState.READY -> {
                 delay(300)
-                if (buttonState == YapButtonState.READY) didOverrideMessage = true
+                if (viewModel.state.value.yapButtonState == YapButtonState.READY)
+                    viewModel.setAlertOverridden(true)
                 delay(300)
-                if (buttonState == YapButtonState.READY) {
+                if (viewModel.state.value.yapButtonState == YapButtonState.READY) {
                     val voicePrice = viewModel.getPriceForType(YapType.VOICE)
                     val currentStars = viewModel.state.value.currentStars
                     // Дополнительная проверка перед записью голоса (если цена стала 10)
                     if (currentStars >= voicePrice) {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        viewModel.updateYapButtonState(YapButtonState.RECORDING)
+                        val hasPermission = ContextCompat.checkSelfPermission(
+                            context,
+                            Manifest.permission.RECORD_AUDIO
+                        ) == PackageManager.PERMISSION_GRANTED
+                        if (hasPermission) {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            viewModel.updateYapButtonState(YapButtonState.RECORDING)
+                        } else {
+                            // Если прав нет, запрашиваем их и сбрасываем кнопку
+                            onRequestMicrophonePermission()
+                            viewModel.resetYapButton()
+                        }
                     } else {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         viewModel.resetYapButton()
@@ -242,24 +243,25 @@ fun MainYapButton(
                 // Мягко возвращаем кнопку в центр при входе в Review
                 viewModel.updateYapOffsetY(0f)
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                viewModel.prepareVoiceForReview(audioPath = "path/to/file.m4a")
+                viewModel.prepareVoiceForReview()
                 viewModel.showAlert(message = "Нажмите YAP, чтобы отправить", canClose = false)
             }
 
             YapButtonState.FIRING -> {
+                viewModel.stopVoiceRecording()
                 val snapshotType = viewModel.state.value.yapType
                 delay(200)
                 onClick(snapshotType)
 //                viewModel.resetYapButton()
-                didOverrideMessage = false
+                viewModel.setAlertOverridden(false)
             }
 
             YapButtonState.IDLE -> {
                 viewModel.updateYapOffsetY(0f)
-                if (didOverrideMessage) {
+                if (viewModel.state.value.isSystemAlertOverridden) {
 //                    viewModel.dismissMessage()
                     viewModel.clearSystemAlertOnly()
-                    didOverrideMessage = false
+                    viewModel.setAlertOverridden(false)
                 }
             }
             else -> {}
@@ -328,7 +330,7 @@ fun MainYapButton(
                     Icon(
                         painter = painterResource(R.drawable.baseline_delete_32),
                         contentDescription = null,
-                        tint = Color(0xE1FFDD).copy(alpha = trashAlpha),
+                        tint = Color(0xFFE1FFDD).copy(alpha = trashAlpha),
                         modifier = Modifier
                             .align(Alignment.TopCenter)
                             .padding(top = 30.dp)
@@ -353,7 +355,7 @@ fun MainYapButton(
                             }
                         ),
                         contentDescription = null,
-                        tint = Color(0xE1FFDD).copy(alpha = lockAlpha),
+                        tint = Color(0xFFE1FFDD).copy(alpha = lockAlpha),
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .padding(bottom = 30.dp)
@@ -482,7 +484,7 @@ fun MainYapButton(
                         }
 
                         else -> {
-                            if (finalState != YapButtonState.LOCKED && finalState != YapButtonState.REVIEW) {
+                            if (finalState == YapButtonState.PRESSED) {
                                 viewModel.resetYapButton()
                             }
                         }
@@ -491,110 +493,112 @@ fun MainYapButton(
             },
         shape = pillShape,
         color = MaterialTheme.colorScheme.primary,
-    ) {
-        Box(
-            modifier = modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
         ) {
-            // --- 1. ЦЕНТРАЛЬНЫЙ ЭЛЕМЕНТ (Таймер или Лого) ---
-            if (buttonState == YapButtonState.RECORDING || buttonState == YapButtonState.LOCKED || buttonState == YapButtonState.REVIEW) {
-                // ТАЙМЕР ПО ЦЕНТРУ
-                val seconds = recordTimeMs / 1000
-                val tenths = (recordTimeMs % 1000) / 100
-                val timerText = String.format("%02d,%d/20", seconds, tenths)
+            Box(
+                modifier = modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                // --- 1. ЦЕНТРАЛЬНЫЙ ЭЛЕМЕНТ (Таймер или Лого) ---
+                if (buttonState == YapButtonState.RECORDING || buttonState == YapButtonState.LOCKED || buttonState == YapButtonState.REVIEW) {
+                    val seconds = recordTimeMs / 1000
+                    val tenths = (recordTimeMs % 1000) / 100
+                    val timerText = String.format("%02d,%d/20", seconds, tenths)
 
-                val pillBackgroundColor by animateColorAsState(
-                    targetValue = if (buttonState == YapButtonState.REVIEW) {
-                        MaterialTheme.colorScheme.secondary
-                    } else {
-                        Color.Black.copy(alpha = 0.15f)
-                    },
-                    label = "timerBgColor"
-                )
+                    val pillBackgroundColor by animateColorAsState(
+                        targetValue = if (buttonState == YapButtonState.REVIEW) {
+                            MaterialTheme.colorScheme.secondary
+                        } else {
+                            Color.Black.copy(alpha = 0.15f)
+                        },
+                        label = "timerBgColor"
+                    )
 
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(pillBackgroundColor)
-                        .clickable(enabled = buttonState == YapButtonState.LOCKED || buttonState == YapButtonState.REVIEW) {
-                            if (buttonState == YapButtonState.LOCKED) {
-                                viewModel.updateYapButtonState(YapButtonState.REVIEW)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(pillBackgroundColor)
+                            .clickable(enabled = buttonState == YapButtonState.LOCKED || buttonState == YapButtonState.REVIEW) {
+                                if (buttonState == YapButtonState.LOCKED) {
+                                    viewModel.updateYapButtonState(YapButtonState.REVIEW)
+                                } else if (buttonState == YapButtonState.REVIEW) {
+                                    viewModel.toggleVoicePlayback()
+                                }
                             }
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        if (buttonState == YapButtonState.LOCKED) {
+                            Icon(
+                                painter = painterResource(R.drawable.baseline_pause_32),
+                                contentDescription = "Stop Recording",
+                                tint = Color.White,
+                                modifier = Modifier.size(32.dp).padding(end = 8.dp)
+                            )
+                        } else if (buttonState == YapButtonState.REVIEW) {
+                            Icon(
+                                painter = painterResource(
+                                    id = if (uiState.isPlayingVoice) R.drawable.baseline_pause_32
+                                    else R.drawable.baseline_play_arrow_32
+                                ),
+                                contentDescription = "Play/Pause Audio",
+                                tint = Color.White,
+                                modifier = Modifier.size(32.dp).padding(end = 8.dp)
+                            )
                         }
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                ) {
-                    if (buttonState == YapButtonState.LOCKED) {
-                        Icon(
-                            painter = painterResource(R.drawable.baseline_pause_32),
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(32.dp).padding(end = 8.dp)
-                        )
-                    } else if (buttonState == YapButtonState.REVIEW) {
-                        Icon(
-                            painter = painterResource(R.drawable.baseline_play_arrow_32),
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(32.dp).padding(end = 8.dp)
+
+                        Text(
+                            text = timerText,
+                            style = MaterialTheme.typography.titleLarge,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold
                         )
                     }
-
-                    Text(
-                        text = timerText,
-                        style = MaterialTheme.typography.titleLarge,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold
-                    )
                 }
-            }
-            else {
-                Icon(
-                    painter = painterResource(id = R.drawable.yap_button_big_text), // Замени на свой ID
-                    contentDescription = "YAP Logo",
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.size(
-                        width = 120.dp * baseScale,
-                        height = 60.dp * baseScale
-                    )
-                )
-            }
-
-            Surface(
-                modifier = Modifier
-                    .offset(y = 50.dp * baseScale)
-                    .size(width = 60.dp * baseScale, height = 32.dp * baseScale),
-                shape = RoundedCornerShape(18.dp * baseScale),
-                color = MaterialTheme.colorScheme.tertiary,
-            ) {
-
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxSize(),
-//                                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    Text(
-                        text = "$price",
-                        color = MaterialTheme.colorScheme.background,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = (18 * baseScale).sp,
-                        lineHeight = (16 * baseScale).sp
-                    )
-                    Spacer(modifier = Modifier.width(5.dp * baseScale))
+                else {
                     Icon(
-                        painter = painterResource(R.drawable.star), // Замени на свой ID
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.background,
-                        modifier = Modifier.size(20.dp * baseScale)
+                        painter = painterResource(id = R.drawable.yap_button_big_text),
+                        contentDescription = "YAP Logo",
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.size(
+                            width = 120.dp * baseScale,
+                            height = 60.dp * baseScale
+                        )
                     )
                 }
-            }
 
+                Surface(
+                    modifier = Modifier
+                        .offset(y = 50.dp * baseScale)
+                        .size(width = 60.dp * baseScale, height = 32.dp * baseScale),
+                    shape = RoundedCornerShape(18.dp * baseScale),
+                    color = MaterialTheme.colorScheme.tertiary,
+                ) {
+
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxSize(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = "$price",
+                            color = MaterialTheme.colorScheme.background,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = (18 * baseScale).sp,
+                            lineHeight = (16 * baseScale).sp
+                        )
+                        Spacer(modifier = Modifier.width(5.dp * baseScale))
+                        Icon(
+                            painter = painterResource(R.drawable.star),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.background,
+                            modifier = Modifier.size(20.dp * baseScale)
+                        )
+                    }
+                }
+            }
         }
     }
-}
 }
 

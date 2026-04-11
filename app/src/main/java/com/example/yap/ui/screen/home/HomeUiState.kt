@@ -34,7 +34,10 @@ data class HomeUiState(
     val yapRecordTimeMs: Long = 0L,
     val yapOffsetY: Float = 0f,
     val didOverrideMessage: Boolean = false,
-    val maxDurationMs: Long = 20_000L
+    val maxDurationMs: Long = 20_000L,
+
+    val isSystemAlertOverridden: Boolean = false,
+    val isPlayingVoice: Boolean = false,
 )
 
 enum class MessageType {
