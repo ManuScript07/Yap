@@ -1,17 +1,15 @@
 package com.example.yap.ui.screen.home
 
-import GoogleTranscriptionService
 import UserPreferences
+import com.example.yap.data.manager.VoiceManager
 import android.app.Application
-import android.net.Uri
 import android.util.Log
 import androidx.annotation.StringRes
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.yap.R
-import com.example.yap.VoiceManager
 import com.example.yap.data.model.UserItem
-import com.example.yap.service.VoskTranscriptionService
+import com.example.yap.service.GroqTranscriptionService
 import com.example.yap.ui.components.YapButtonState
 import com.example.yap.util.extension.countGraphemeClusters
 import com.example.yap.util.extension.isEmojiOnly
@@ -30,7 +28,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     private val energyPrefs = UserPreferences(application)
     private val voiceManager = VoiceManager(application)
-    private val transcriptionService = VoskTranscriptionService(application)
+//    private val transcriptionService = VoskTranscriptionService(application)
+//    private val transcriptionService = ServerTranscriptionService()
+    private val transcriptionService = GroqTranscriptionService()
 
     private val _state = MutableStateFlow(
         HomeUiState(
@@ -51,7 +51,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         loadPersistedData()
 
         viewModelScope.launch {
-            transcriptionService.initModel()
+//            transcriptionService.initModel()
         }
     }
     companion object {
@@ -355,7 +355,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
             if (state.yapType == YapType.VOICE) {
                 val path = state.voiceAudioUri
-                val file = path?.let { java.io.File(it) }
+                val file = path?.let { File(it) }
 
                 // Проверяем: путь не пустой, файл существует и его размер больше 1 КБ
                 // (Чистый заголовок AAC/M4A занимает около 500-800 байт)
@@ -526,7 +526,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         val finalDuration = _state.value.yapRecordTimeMs
 
         if (path != null) {
-            val file = java.io.File(path)
+            val file = File(path)
 
             _state.update { it.copy(
                 voiceAudioUri = path,
@@ -541,7 +541,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun toggleVoicePlayback() {
         // Мы не меняем стейт здесь вручную,
-        // доверяем это коллбэкам от VoiceManager
+        // доверяем это коллбэкам от com.example.yap.data.manager.VoiceManager
         viewModelScope.launch {
             voiceManager.playPausePlayback(
                 onStateChanged = { isPlaying ->
@@ -635,7 +635,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun isVoiceRecordValid(): Boolean {
         val path = getVoicePath() ?: return false
-        val file = java.io.File(path)
+        val file = File(path)
         return file.exists() && file.length() > 1000 // Примерно 1кб минимум для AAC
     }
 

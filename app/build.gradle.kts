@@ -49,9 +49,10 @@ android {
 }
 
 dependencies {
-//    implementation(group = "net.java.dev.jna", name = "jna", version = "5.7.0")
-    implementation(group = "com.alphacephei", name = "vosk-android", version = "0.3.32+")
-    implementation("net.java.dev.jna:jna:5.13.0@aar")
+    implementation("com.squareup.retrofit2:retrofit:2.9.0")
+    implementation("com.squareup.retrofit2:converter-gson:2.9.0")
+    implementation("com.squareup.okhttp3:logging-interceptor:4.10.0")
+
     implementation("com.google.code.gson:gson:2.10.1")
 
     implementation("androidx.datastore:datastore-preferences:1.1.1")
