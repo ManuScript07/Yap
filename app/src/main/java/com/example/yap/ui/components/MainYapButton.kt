@@ -276,18 +276,16 @@ fun MainYapButton(
 
             YapButtonState.FIRING -> {
                 if (viewModel.state.value.yapType == YapType.VOICE) {
-                    viewModel.stopVoiceRecording()
                     if (!viewModel.isVoiceRecordValid()) {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         viewModel.showAlert("Запись слишком короткая", durationMs = 1500)
-                        viewModel.resetYapButton() // Отменяем отправку
+                        viewModel.resetYapButton()
                         return@LaunchedEffect
                     }
                 }
                 val snapshotType = viewModel.state.value.yapType
                 delay(200)
                 onClick(snapshotType)
-//                viewModel.resetYapButton()
                 viewModel.setAlertOverridden(false)
             }
 
@@ -554,7 +552,10 @@ fun MainYapButton(
                         }
 
                         else -> {
-                            if (finalState == YapButtonState.PRESSED) {
+                            if (viewModel.isVoiceRecordValid()) {
+                                // Даем ViewModel шанс переключить стейты
+                                viewModel.updateYapButtonState(YapButtonState.FIRING)
+                            } else {
                                 viewModel.resetYapButton()
                             }
                         }

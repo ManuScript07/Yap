@@ -353,79 +353,64 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
 
-            if (state.yapType == YapType.VOICE) {
-                val path = state.voiceAudioUri
-                val file = path?.let { File(it) }
+            // Локальные переменные, чтобы не зависеть от изменений стейта в процессе
+            val currentYapType = state.yapType
+            val audioPath = state.voiceAudioUri
 
-                // Проверяем: путь не пустой, файл существует и его размер больше 1 КБ
-                // (Чистый заголовок AAC/M4A занимает около 500-800 байт)
-                val isFileValid = file != null && file.exists() && file.length() > 1024
-
-                if (!isFileValid) {
-                    Log.e("API1", "Ошибка: Голосовой файл невалиден или пуст")
-                    showAlert("Ошибка записи. Попробуйте еще раз", durationMs = 2000)
+            // --- 1. ПРОВЕРКА ФАЙЛА (БЕЗ ОЖИДАНИЯ ТЕКСТА) ---
+            if (currentYapType == YapType.VOICE) {
+                val file = audioPath?.let { File(it) }
+                // Проверяем только наличие файла, а не текст
+                if (file == null || !file.exists() || file.length() < 500) {
+                    Log.e("API1", "Ошибка: Файл не готов")
                     resetYapButton()
-                    return@launch // ПРЕРЫВАЕМ выполнение, звезды не списываем
-                }
-
-                if (state.isTranscribing) {
-                    // Если пользователь нажал "отправить" слишком быстро
-                    // Можно показать сообщение "Обработка голоса..."
-                    transcriptionJob?.join() // Ждем завершения корутины расшифровки
+                    return@launch
                 }
             }
 
-            val finalState = _state.value
+            if (state.currentStars >= state.yapPrice) {
+                // Расчет энергии (оставляем как было)
+                val newStars = state.currentStars - state.yapPrice
+                val newProgress = newStars.toFloat() / state.maxStars.toFloat()
 
-            if (finalState.currentStars >= finalState.yapPrice) {
-                // 1. РАССЧИТЫВАЕМ НОВЫЙ БАЛАНС
-                val newStars = finalState.currentStars - finalState.yapPrice
-                val newProgress = newStars.toFloat() / finalState.maxStars.toFloat()
-
-                // 2. ЕСЛИ ЭНЕРГИЯ БЫЛА ПОЛНОЙ, А ТЕПЕРЬ УПАЛА — ЗАПУСКАЕМ РЕГЕНЕРАЦИЮ
-                if (finalState.currentStars == finalState.maxStars) {
+                if (state.currentStars == state.maxStars) {
                     lastAnchorTime = System.currentTimeMillis()
                     startEnergyRegeneration(REGEN_DELAY_MS)
                 }
 
-
-                // --- ЛОГИКА ОТПРАВКИ КОНТЕНТА ---
-                when (finalState.yapType) {
+                // --- 2. МГНОВЕННАЯ ОТПРАВКА ---
+                when (currentYapType) {
                     YapType.VOICE -> {
-                        val resultText = finalState.transcribedText ?: "[Голосовое сообщение]"
-                        Log.d("API1", "Отправляем ГОЛОС: ${finalState.voiceAudioUri}")
-                        Log.d("API1", "Текст расшифровки: $resultText")
-                    }
+                        // Мы НЕ ждем текст. Если он уже есть — берем, если нет — отправляем заглушку
+                        val currentText = _state.value.transcribedText ?: "[Голосовое сообщение...]"
+                        Log.d("API1", "МГНОВЕННАЯ ОТПРАВКА ГОЛОСА: $audioPath")
+                        Log.d("API1", "Текущий текст (может быть пустым): $currentText")
 
+                        // Если расшифровка еще идет, она сама обновит сообщение позже
+                        // (Здесь обычно вызывается метод репозитория: repository.sendVoice(file, currentText))
+                    }
                     YapType.TEXT, YapType.EMOJI -> {
-                        // Берем либо текст пользователя, либо то, что в алерте (для обратной совместимости)
-                        val content = finalState.userGeneratedContent
-                        Log.d("API1", "Отправляем ТЕКСТ: $content")
+                        Log.d("API1", "Отправляем ТЕКСТ: ${state.userGeneratedContent}")
                     }
-
                     YapType.YAP -> {
-                        Log.d("API1", "Отправляем простой YAP, локация $latitude $longitude")
+                        Log.d("API1", "Отправляем простой YAP")
                     }
                 }
-                // 3. СОХРАНЯЕМ В ХРАНИЛИЩЕ (DataStore)
+
+                // --- 3. МГНОВЕННЫЙ СБРОС UI ---
                 saveEnergyToStore(newStars, lastAnchorTime)
-
-
-                // 5. ОЧИСТКА И СБРОС
-                dismissMessage() // Это также сбросит цену и тип на дефолтные через updateStateWithPrice
+                dismissMessage()
                 resetYapButton()
-                _state.update {
-                    it.copy(
-                        currentStars = newStars,
-                        progress = newProgress,
-                        voiceAudioUri = null,
-                        transcribedText = null
-                    )
-                }
+
+                _state.update { it.copy(
+                    currentStars = newStars,
+                    progress = newProgress,
+                    // voiceAudioUri = null, // НЕ зануляй сразу, если хочешь дождаться текста!
+                    // transcribedText = null
+                ) }
 
             } else {
-                // Если звезд не хватает
-                showAlert(message = "Недостаточно звезд!", durationMs = 2000)
+                showAlert("Недостаточно звезд!", durationMs = 2000)
                 resetYapButton()
             }
         }
@@ -491,8 +476,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         val oldState = _state.value.yapButtonState
         _state.update { it.copy(yapButtonState = newState) }
 
-        if ((oldState == YapButtonState.RECORDING || oldState == YapButtonState.LOCKED)
-            && newState == YapButtonState.REVIEW) {
+        val wasRecording = oldState == YapButtonState.RECORDING || oldState == YapButtonState.LOCKED
+        val isStillRecording = newState == YapButtonState.RECORDING || newState == YapButtonState.LOCKED
+
+        if (wasRecording && !isStillRecording) {
+            // Обязательно вызываем стоп, куда бы мы ни ушли
             stopVoiceRecording()
         }
     }
@@ -521,21 +509,36 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun stopVoiceRecording() {
-        voiceManager.stopRecording() // Здесь внутри должен быть recorder.stop() и release()
-        val path = voiceManager.currentRecordPath
-        val finalDuration = _state.value.yapRecordTimeMs
+        viewModelScope.launch {
+            voiceManager.stopRecording() // Здесь внутри должен быть recorder.stop() и release()
+            val finalDuration = _state.value.yapRecordTimeMs
 
-        if (path != null) {
-            val file = File(path)
+            if (finalDuration < 300) {
+                voiceManager.cancelRecording() // Метод, который просто удаляет файл и стопает рекордер
+                resetYapButton()
+                Log.d("API1", "Запись слишком короткая ($finalDuration мс), игнорируем")
+                return@launch
+            }
 
-            _state.update { it.copy(
-                voiceAudioUri = path,
-                isPlayingVoice = false,
-                totalDurationMs = finalDuration,
-                yapRecordTimeMs = 0L,
-                transcribedText = null
-            ) }
-            runTranscription(file)
+            voiceManager.stopRecording()
+            delay(200)
+
+            val path = voiceManager.currentRecordPath
+            if (path != null) {
+                val file = File(path)
+                if (file.exists() && file.length() > 0) {
+                    Log.d("API1", "Файл записан. Размер: ${file.length()} байт")
+
+                    _state.update { it.copy(
+                        voiceAudioUri = path,
+                        isPlayingVoice = false,
+                        totalDurationMs = finalDuration,
+                        yapRecordTimeMs = 0L,
+                        transcribedText = null
+                    ) }
+                    runTranscription(file)
+                }
+            }
         }
     }
 
@@ -652,20 +655,35 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
 
     private fun runTranscription(file: File) {
-        transcriptionJob?.cancel()
+        // Отменяем старую расшифровку, если пользователь начал записывать новый "яп"
+//        transcriptionJob?.cancel()
 
-        // Теперь мы используем Dispatchers.IO, так как это тяжелая работа с файлом
-        transcriptionJob = viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(Dispatchers.IO) {
+            // Устанавливаем флаг загрузки, но это теперь не блокирует кнопку Send
             _state.update { it.copy(isTranscribing = true, transcribedText = null) }
 
-            // Вызываем Vosk, передавая File напрямую
+            Log.d("STT", "Начинаем расшифровку файла: ${file.name} (${file.length()} байт)")
+
             transcriptionService.transcribe(file)
                 .onSuccess { text ->
-                    Log.d("STT", "Расшифровка успешна: $text")
-                    _state.update { it.copy(transcribedText = text, isTranscribing = false) }
+                    Log.d("STT", "Groq успешно вернул текст: $text")
+
+                    // Обновляем состояние. Если пользователь еще не нажал Send,
+                    // при нажатии он подтянет этот готовый текст.
+                    _state.update { it.copy(
+                        transcribedText = text,
+                        isTranscribing = false
+                    ) }
+
+                    // --- ЛОГИКА ДЛЯ БУДУЩЕГО (Firebase) ---
+                    // Если ты уже отправил сообщение (например, сохранил ID последнего сообщения),
+                    // здесь можно вызвать:
+                    // repository.updateMessageText(lastMessageId, text)
                 }
                 .onFailure { error ->
-                    Log.e("STT", "Ошибка расшифровки: ${error.message}")
+                    // Если интернета нет, Groq упадет сюда.
+                    // Интерфейс при этом не зависнет, просто текст останется null.
+                    Log.e("STT", "Ошибка расшифровки (возможно, нет сети): ${error.message}")
                     _state.update { it.copy(isTranscribing = false) }
                 }
         }

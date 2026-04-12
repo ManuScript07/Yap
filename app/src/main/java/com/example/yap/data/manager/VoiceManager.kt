@@ -14,54 +14,66 @@ class VoiceManager(private val context: Context) {
     var currentRecordPath: String? = null
         private set
 
+    var isRecording: Boolean = false
+        private set
+
 
 
     fun startRecording() {
+        if (isRecording)
+            return
+
         val file = File(context.cacheDir, "yap_record_${System.currentTimeMillis()}.m4a")
         currentRecordPath = file.absolutePath
 
-        recorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            MediaRecorder(context)
-        } else {
-            @Suppress("DEPRECATION")
-            (MediaRecorder())
-        }.apply {
-            setAudioSource(MediaRecorder.AudioSource.MIC)
-            setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-            setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+        try {
+            recorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                MediaRecorder(context)
+            } else {
+                @Suppress("DEPRECATION")
+                (MediaRecorder())
+            }.apply {
+                setAudioSource(MediaRecorder.AudioSource.MIC)
+                setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+                setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
 
-            // --- Настройки качества ---
-            setAudioSamplingRate(44100) // Частота дискретизации (как на CD)
-            setAudioEncodingBitRate(128000) // Битрейт 128 кбит/с (золотой стандарт для голоса)
-            setAudioChannels(1) // Для голоса лучше моно, чтобы не было фазовых искажений
-            // --------------------------
+                setAudioSamplingRate(44100)
+                setAudioEncodingBitRate(128000)
+                setAudioChannels(1)
 
-            setOutputFile(currentRecordPath)
-            prepare()
-            start()
+                setOutputFile(currentRecordPath)
+                prepare()
+                start()
+            }
+
+            isRecording = true
+
+        }catch (e: Exception) {
+            Log.e("VoiceManager", "Не удалось начать запись: ${e.message}")
+            isRecording = false
         }
     }
 
     fun stopRecording() {
+        if (!isRecording) return
+
         try {
             recorder?.apply {
                 stop()
-                reset() // КРИТИЧЕСНО: Сбрасывает рекордер в состояние Idle, закрывая дескриптор файла
+                reset()
                 release()
             }
         } catch (e: Exception) {
             Log.e("VoiceManager", "Ошибка при стопе: ${e.message}")
         } finally {
             recorder = null
+            isRecording = false
         }
     }
 
     fun cancelRecording() {
-        try {
-            stopRecording()
-        } catch (e: Exception) {
-            // Игнорируем ошибки остановки, нам главное удалить файл
-        }
+
+        stopRecording()
 
         currentRecordPath?.let { path ->
             val file = File(path)

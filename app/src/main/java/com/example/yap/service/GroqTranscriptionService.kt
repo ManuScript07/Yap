@@ -11,14 +11,17 @@ import okhttp3.RequestBody.Companion.asRequestBody
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.io.File
+import java.util.concurrent.TimeUnit
 
 class GroqTranscriptionService {
     private val apiKey = "Bearer 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"
     val okHttpClient = OkHttpClient.Builder()
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
         .addInterceptor { chain ->
             val response = chain.proceed(chain.request())
 
-            // Извлекаем заголовки лимитов Groq
             val remainingRequests = response.header("x-ratelimit-remaining-requests")
             val remainingTokens = response.header("x-ratelimit-remaining-tokens")
             val resetTime = response.header("x-ratelimit-reset-requests")
