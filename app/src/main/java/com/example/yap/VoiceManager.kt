@@ -1,66 +1,94 @@
+package com.example.yap
+
 import android.content.Context
 import android.media.MediaPlayer
 import android.media.MediaRecorder
-import android.os.Build
 import android.util.Log
+
 import java.io.File
 
+import android.annotation.SuppressLint
+
+import android.media.AudioFormat
+import android.media.AudioRecord
+
+import java.io.FileOutputStream
+import java.io.RandomAccessFile
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+
 class VoiceManager(private val context: Context) {
-    private var recorder: MediaRecorder? = null
+
+    // Настройки для Vosk
+    private val sampleRate = 16000
+    private val channelConfig = AudioFormat.CHANNEL_IN_MONO
+    private val audioFormat = AudioFormat.ENCODING_PCM_16BIT
+
+    private var audioRecord: AudioRecord? = null
     private var player: MediaPlayer? = null
+    private var isRecording = false
+    private var recordingThread: Thread? = null
 
     var currentRecordPath: String? = null
         private set
 
-
-
+    @SuppressLint("MissingPermission")
     fun startRecording() {
-        val file = File(context.cacheDir, "yap_record_${System.currentTimeMillis()}.m4a")
+        val file = File(context.cacheDir, "yap_record_${System.currentTimeMillis()}.wav")
         currentRecordPath = file.absolutePath
 
-        recorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            MediaRecorder(context)
-        } else {
-            @Suppress("DEPRECATION")
-            MediaRecorder()
-        }.apply {
-            setAudioSource(MediaRecorder.AudioSource.MIC)
-            setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-            setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+        val bufferSize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat)
+        audioRecord = AudioRecord(
+            MediaRecorder.AudioSource.MIC,
+            sampleRate,
+            channelConfig,
+            audioFormat,
+            bufferSize
+        )
 
-            // --- Настройки качества ---
-            setAudioSamplingRate(44100) // Частота дискретизации (как на CD)
-            setAudioEncodingBitRate(128000) // Битрейт 128 кбит/с (золотой стандарт для голоса)
-            setAudioChannels(1) // Для голоса лучше моно, чтобы не было фазовых искажений
-            // --------------------------
+        audioRecord?.startRecording()
+        isRecording = true
 
-            setOutputFile(currentRecordPath)
-            prepare()
-            start()
+        recordingThread = Thread {
+            writeAudioDataToFile(file, bufferSize)
+        }.apply { start() }
+    }
+
+    private fun writeAudioDataToFile(file: File, bufferSize: Int) {
+        val data = ByteArray(bufferSize)
+        FileOutputStream(file).use { out ->
+            // 1. Резервируем место под заголовок (44 байта)
+            out.write(ByteArray(44))
+
+            while (isRecording) {
+                val read = audioRecord?.read(data, 0, bufferSize) ?: 0
+                if (read > 0) {
+                    out.write(data, 0, read)
+                }
+            }
         }
+        // 2. Когда запись окончена, записываем правильные размеры в заголовок
+        updateWavHeader(file)
     }
 
     fun stopRecording() {
+        isRecording = false
         try {
-            recorder?.apply {
+            recordingThread?.join()
+            audioRecord?.apply {
                 stop()
-                reset() // КРИТИЧЕСНО: Сбрасывает рекордер в состояние Idle, закрывая дескриптор файла
                 release()
             }
         } catch (e: Exception) {
-            Log.e("VoiceManager", "Ошибка при стопе: ${e.message}")
+            Log.e("VoiceManager", "Ошибка при остановке записи: ${e.message}")
         } finally {
-            recorder = null
+            audioRecord = null
+            recordingThread = null
         }
     }
 
     fun cancelRecording() {
-        try {
-            stopRecording()
-        } catch (e: Exception) {
-            // Игнорируем ошибки остановки, нам главное удалить файл
-        }
-
+        stopRecording()
         currentRecordPath?.let { path ->
             val file = File(path)
             if (file.exists()) file.delete()
@@ -68,30 +96,20 @@ class VoiceManager(private val context: Context) {
         currentRecordPath = null
     }
 
-    fun playPausePlayback(
-        onStateChanged: (Boolean) -> Unit, // Новый коллбэк для мгновенного обновления иконки
-        onCompletion: () -> Unit
-    ) {
+    // Метод проигрывания остается почти таким же, MediaPlayer отлично играет WAV
+    fun playPausePlayback(onStateChanged: (Boolean) -> Unit, onCompletion: () -> Unit) {
         if (player?.isPlaying == true) {
             player?.pause()
-            onStateChanged(false) // Уведомляем: теперь пауза
+            onStateChanged(false)
             return
         }
-
         if (player != null) {
             player?.start()
-            onStateChanged(true) // Уведомляем: теперь играет
+            onStateChanged(true)
             return
         }
 
         val path = currentRecordPath ?: return
-        val file = File(path)
-
-        if (!file.exists() || file.length() < 100) {
-            onCompletion()
-            return
-        }
-
         try {
             player = MediaPlayer().apply {
                 setDataSource(path)
@@ -101,7 +119,7 @@ class VoiceManager(private val context: Context) {
                     onCompletion()
                 }
                 start()
-                onStateChanged(true) // Уведомляем: начали играть
+                onStateChanged(true)
             }
         } catch (e: Exception) {
             stopPlayback()
@@ -110,33 +128,46 @@ class VoiceManager(private val context: Context) {
     }
 
     fun stopPlayback() {
-        try {
-            if (player?.isPlaying == true) {
-                player?.stop()
-            }
-        } catch (e: Exception) {
-            // Игнорируем ошибки при остановке
-        } finally {
-            player?.release()
-            player = null
+        player?.apply {
+            if (isPlaying) stop()
+            release()
         }
+        player = null
     }
-    // В VoiceManager
-    fun pausePlaybackOnly() {
-        try {
-            if (player?.isPlaying == true) {
-                player?.pause()
-            }
-        } catch (e: Exception) {
-            Log.e("VoiceManager", "Ошибка паузы: ${e.message}")
-        }
-    }
-
-    // Убедись, что этот метод у тебя точно есть:
-    fun isActuallyPlaying(): Boolean = player?.isPlaying ?: false
-
 
     fun getCurrentPosition(): Int = player?.currentPosition ?: 0
 
+    // Вспомогательный метод для создания заголовка WAV
+    private fun updateWavHeader(file: File) {
+        val fileSize = file.length()
+        val dataSize = fileSize - 44
+        val header = createWavHeader(dataSize)
 
+        RandomAccessFile(file, "rw").use { raf ->
+            raf.seek(0)
+            raf.write(header)
+        }
+    }
+
+    private fun createWavHeader(dataSize: Long): ByteArray {
+        val buffer = ByteBuffer.allocate(44).order(ByteOrder.LITTLE_ENDIAN)
+        val sampleRate = 16000L
+        val byteRate = sampleRate * 2 // 16 bit = 2 bytes, 1 channel
+
+        buffer.put("RIFF".toByteArray()) // ChunkID
+        buffer.putInt((dataSize + 36).toInt()) // ChunkSize
+        buffer.put("WAVE".toByteArray()) // Format
+        buffer.put("fmt ".toByteArray()) // Subchunk1ID
+        buffer.putInt(16) // Subchunk1Size (16 для PCM)
+        buffer.putShort(1.toShort()) // AudioFormat (1 для PCM)
+        buffer.putShort(1.toShort()) // NumChannels
+        buffer.putInt(sampleRate.toInt()) // SampleRate
+        buffer.putInt(byteRate.toInt()) // ByteRate
+        buffer.putShort(2.toShort()) // BlockAlign
+        buffer.putShort(16.toShort()) // BitsPerSample
+        buffer.put("data".toByteArray()) // Subchunk2ID
+        buffer.putInt(dataSize.toInt()) // Subchunk2Size
+
+        return buffer.array()
+    }
 }

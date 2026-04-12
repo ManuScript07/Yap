@@ -11,6 +11,12 @@ android {
         version = release(36)
     }
 
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+
     defaultConfig {
         applicationId = "com.example.yap"
         minSdk = 25
@@ -43,6 +49,9 @@ android {
 }
 
 dependencies {
+//    implementation(group = "net.java.dev.jna", name = "jna", version = "5.7.0")
+    implementation(group = "com.alphacephei", name = "vosk-android", version = "0.3.32+")
+    implementation("net.java.dev.jna:jna:5.13.0@aar")
     implementation("com.google.code.gson:gson:2.10.1")
 
     implementation("androidx.datastore:datastore-preferences:1.1.1")
@@ -63,6 +72,7 @@ dependencies {
     implementation(libs.androidx.constraintlayout.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.process)
+    implementation(libs.androidx.room3.external.antlr)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

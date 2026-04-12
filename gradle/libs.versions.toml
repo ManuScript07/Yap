@@ -16,6 +16,7 @@ firebaseFirestoreKtx = "26.1.2"
 firebaseCrashlyticsBuildtools = "3.0.6"
 lifecycleRuntimeCompose = "2.10.0"
 lifecycleProcess = "2.10.0"
+room3ExternalAntlr = "3.0.0-alpha02"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -41,6 +42,7 @@ firebase-firestore-ktx = { group = "com.google.firebase", name = "firebase-fires
 firebase-crashlytics-buildtools = { group = "com.google.firebase", name = "firebase-crashlytics-buildtools", version.ref = "firebaseCrashlyticsBuildtools" }
 androidx-lifecycle-runtime-compose = { group = "androidx.lifecycle", name = "lifecycle-runtime-compose", version.ref = "lifecycleRuntimeCompose" }
 androidx-lifecycle-process = { group = "androidx.lifecycle", name = "lifecycle-process", version.ref = "lifecycleProcess" }
+androidx-room3-external-antlr = { group = "androidx.room3", name = "room3-external-antlr", version.ref = "room3ExternalAntlr" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

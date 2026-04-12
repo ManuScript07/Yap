@@ -40,6 +40,9 @@ data class HomeUiState(
 
     val isSystemAlertOverridden: Boolean = false,
     val isPlayingVoice: Boolean = false,
+
+    val transcribedText: String? = null,
+    val isTranscribing: Boolean = false
 )
 
 enum class MessageType {

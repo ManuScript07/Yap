@@ -1,17 +1,21 @@
 package com.example.yap.ui.screen.home
 
+import GoogleTranscriptionService
 import UserPreferences
-import VoiceManager
 import android.app.Application
+import android.net.Uri
 import android.util.Log
 import androidx.annotation.StringRes
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.yap.R
+import com.example.yap.VoiceManager
 import com.example.yap.data.model.UserItem
+import com.example.yap.service.VoskTranscriptionService
 import com.example.yap.ui.components.YapButtonState
 import com.example.yap.util.extension.countGraphemeClusters
 import com.example.yap.util.extension.isEmojiOnly
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,11 +24,13 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.io.File
 
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     private val energyPrefs = UserPreferences(application)
     private val voiceManager = VoiceManager(application)
+    private val transcriptionService = VoskTranscriptionService(application)
 
     private val _state = MutableStateFlow(
         HomeUiState(
@@ -35,10 +41,19 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     val state: StateFlow<HomeUiState> = _state.asStateFlow()
     private var alertJob: Job? = null
     private var regenJob: Job? = null
+    private var transcriptionJob: Job? = null
     private var isActivatingLocation = false
     private var lastAnchorTime: Long = 0L
 
+    init {
+        updateStateWithPrice { it }
 
+        loadPersistedData()
+
+        viewModelScope.launch {
+            transcriptionService.initModel()
+        }
+    }
     companion object {
         const val PRICE_TEXT = 4
         const val PRICE_EMOJI = 2
@@ -64,12 +79,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    init {
-        updateStateWithPrice { it }
-//        // Запускаем бесконечный цикл восстановления энергии при старте ViewModel
-//        startEnergyRegeneration()
-        loadPersistedData()
-    }
+
 
     private fun loadPersistedData() {
         viewModelScope.launch {
@@ -334,77 +344,90 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     // 3. ОТПРАВКА YAP И СПИСАНИЕ ЗВЕЗД
     fun sendYap(latitude: Double?, longitude: Double?) {
-        val state = _state.value
+        viewModelScope.launch {
+            val state = _state.value
 
-        if (state.yapPrice == 0) {
-            dismissMessage()
-            resetYapButton()
-            return
-        }
-
-        if (state.yapType == YapType.VOICE) {
-            val path = state.voiceAudioUri
-            val file = path?.let { java.io.File(it) }
-
-            // Проверяем: путь не пустой, файл существует и его размер больше 1 КБ
-            // (Чистый заголовок AAC/M4A занимает около 500-800 байт)
-            val isFileValid = file != null && file.exists() && file.length() > 1024
-
-            if (!isFileValid) {
-                Log.e("API1", "Ошибка: Голосовой файл невалиден или пуст")
-                showAlert("Ошибка записи. Попробуйте еще раз", durationMs = 2000)
+            if (state.yapPrice == 0) {
+                dismissMessage()
                 resetYapButton()
-                return // ПРЕРЫВАЕМ выполнение, звезды не списываем
-            }
-        }
-
-        if (state.currentStars >= state.yapPrice) {
-            // 1. РАССЧИТЫВАЕМ НОВЫЙ БАЛАНС
-            val newStars = state.currentStars - state.yapPrice
-            val newProgress = newStars.toFloat() / state.maxStars.toFloat()
-
-            // 2. ЕСЛИ ЭНЕРГИЯ БЫЛА ПОЛНОЙ, А ТЕПЕРЬ УПАЛА — ЗАПУСКАЕМ РЕГЕНЕРАЦИЮ
-            if (state.currentStars == state.maxStars) {
-                lastAnchorTime = System.currentTimeMillis()
-                startEnergyRegeneration(REGEN_DELAY_MS)
+                return@launch
             }
 
+            if (state.yapType == YapType.VOICE) {
+                val path = state.voiceAudioUri
+                val file = path?.let { java.io.File(it) }
 
+                // Проверяем: путь не пустой, файл существует и его размер больше 1 КБ
+                // (Чистый заголовок AAC/M4A занимает около 500-800 байт)
+                val isFileValid = file != null && file.exists() && file.length() > 1024
 
-            // --- ЛОГИКА ОТПРАВКИ КОНТЕНТА ---
-            when (state.yapType) {
-                YapType.VOICE -> {
-                    Log.d("API1", "Отправляем ГОЛОС: ${state.voiceAudioUri}")
+                if (!isFileValid) {
+                    Log.e("API1", "Ошибка: Голосовой файл невалиден или пуст")
+                    showAlert("Ошибка записи. Попробуйте еще раз", durationMs = 2000)
+                    resetYapButton()
+                    return@launch // ПРЕРЫВАЕМ выполнение, звезды не списываем
                 }
-                YapType.TEXT, YapType.EMOJI -> {
-                    // Берем либо текст пользователя, либо то, что в алерте (для обратной совместимости)
-                    val content = state.userGeneratedContent
-                    Log.d("API1", "Отправляем ТЕКСТ: $content")
-                }
-                YapType.YAP -> {
-                    Log.d("API1", "Отправляем простой YAP, локация $latitude $longitude")
+
+                if (state.isTranscribing) {
+                    // Если пользователь нажал "отправить" слишком быстро
+                    // Можно показать сообщение "Обработка голоса..."
+                    transcriptionJob?.join() // Ждем завершения корутины расшифровки
                 }
             }
-            // 3. СОХРАНЯЕМ В ХРАНИЛИЩЕ (DataStore)
-            saveEnergyToStore(newStars, lastAnchorTime)
+
+            val finalState = _state.value
+
+            if (finalState.currentStars >= finalState.yapPrice) {
+                // 1. РАССЧИТЫВАЕМ НОВЫЙ БАЛАНС
+                val newStars = finalState.currentStars - finalState.yapPrice
+                val newProgress = newStars.toFloat() / finalState.maxStars.toFloat()
+
+                // 2. ЕСЛИ ЭНЕРГИЯ БЫЛА ПОЛНОЙ, А ТЕПЕРЬ УПАЛА — ЗАПУСКАЕМ РЕГЕНЕРАЦИЮ
+                if (finalState.currentStars == finalState.maxStars) {
+                    lastAnchorTime = System.currentTimeMillis()
+                    startEnergyRegeneration(REGEN_DELAY_MS)
+                }
 
 
+                // --- ЛОГИКА ОТПРАВКИ КОНТЕНТА ---
+                when (finalState.yapType) {
+                    YapType.VOICE -> {
+                        val resultText = finalState.transcribedText ?: "[Голосовое сообщение]"
+                        Log.d("API1", "Отправляем ГОЛОС: ${finalState.voiceAudioUri}")
+                        Log.d("API1", "Текст расшифровки: $resultText")
+                    }
 
-            // 5. ОЧИСТКА И СБРОС
-            dismissMessage() // Это также сбросит цену и тип на дефолтные через updateStateWithPrice
-            resetYapButton()
-            _state.update {
-                it.copy(
-                    currentStars = newStars,
-                    progress = newProgress,
-                    voiceAudioUri = null
-                )
+                    YapType.TEXT, YapType.EMOJI -> {
+                        // Берем либо текст пользователя, либо то, что в алерте (для обратной совместимости)
+                        val content = finalState.userGeneratedContent
+                        Log.d("API1", "Отправляем ТЕКСТ: $content")
+                    }
+
+                    YapType.YAP -> {
+                        Log.d("API1", "Отправляем простой YAP, локация $latitude $longitude")
+                    }
+                }
+                // 3. СОХРАНЯЕМ В ХРАНИЛИЩЕ (DataStore)
+                saveEnergyToStore(newStars, lastAnchorTime)
+
+
+                // 5. ОЧИСТКА И СБРОС
+                dismissMessage() // Это также сбросит цену и тип на дефолтные через updateStateWithPrice
+                resetYapButton()
+                _state.update {
+                    it.copy(
+                        currentStars = newStars,
+                        progress = newProgress,
+                        voiceAudioUri = null,
+                        transcribedText = null
+                    )
+                }
+
+            } else {
+                // Если звезд не хватает
+                showAlert(message = "Недостаточно звезд!", durationMs = 2000)
+                resetYapButton()
             }
-
-        } else {
-            // Если звезд не хватает
-            showAlert(message = "Недостаточно звезд!", durationMs = 2000)
-            resetYapButton()
         }
     }
 
@@ -503,12 +526,16 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         val finalDuration = _state.value.yapRecordTimeMs
 
         if (path != null) {
+            val file = java.io.File(path)
+
             _state.update { it.copy(
                 voiceAudioUri = path,
                 isPlayingVoice = false,
                 totalDurationMs = finalDuration,
-                yapRecordTimeMs = 0L
+                yapRecordTimeMs = 0L,
+                transcribedText = null
             ) }
+            runTranscription(file)
         }
     }
 
@@ -536,6 +563,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun resetYapButton() {
         voiceManager.cancelRecording()
         voiceManager.stopPlayback()
+        transcriptionJob?.cancel()
         updateStateWithPrice { currentState ->
             val shouldResetType = currentState.yapType == YapType.VOICE
 
@@ -620,5 +648,27 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         return voiceManager.getCurrentPosition().toLong()
     }
 
+
+
+
+    private fun runTranscription(file: File) {
+        transcriptionJob?.cancel()
+
+        // Теперь мы используем Dispatchers.IO, так как это тяжелая работа с файлом
+        transcriptionJob = viewModelScope.launch(Dispatchers.IO) {
+            _state.update { it.copy(isTranscribing = true, transcribedText = null) }
+
+            // Вызываем Vosk, передавая File напрямую
+            transcriptionService.transcribe(file)
+                .onSuccess { text ->
+                    Log.d("STT", "Расшифровка успешна: $text")
+                    _state.update { it.copy(transcribedText = text, isTranscribing = false) }
+                }
+                .onFailure { error ->
+                    Log.e("STT", "Ошибка расшифровки: ${error.message}")
+                    _state.update { it.copy(isTranscribing = false) }
+                }
+        }
+    }
 
 }
