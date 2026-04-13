@@ -510,7 +510,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun stopVoiceRecording() {
         viewModelScope.launch {
-            val finalDuration = _state.value.yapRecordTimeMs
+            val state = _state.value
+            val startTime = state.recordStartDate ?: return@launch
+
+            val finalDuration = System.currentTimeMillis() - startTime
             voiceManager.stopRecording()
             if (finalDuration < 300) {
                 voiceManager.cancelRecording() // Метод, который просто удаляет файл и стопает рекордер
@@ -519,8 +522,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
 
-            voiceManager.stopRecording()
-            delay(200)
+//            voiceManager.stopRecording()
+            delay(250)
 
             val path = voiceManager.currentRecordPath
             if (path != null) {
@@ -533,7 +536,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         isPlayingVoice = false,
                         totalDurationMs = finalDuration,
                         yapRecordTimeMs = 0L,
-                        transcribedText = null
+                        transcribedText = null,
+                        recordStartDate = null,
+                        isTranscribing = true
                     ) }
                     runTranscription(file)
                 }
@@ -567,7 +572,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         voiceManager.stopPlayback()
 
         _state.update { currentState ->
-            // Нам нужно занулить файл, только если мы НЕ ждем расшифровку прямо сейчас
             val shouldResetType = currentState.yapType == YapType.VOICE
 
             currentState.copy(
@@ -617,15 +621,16 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             currentState.yapButtonState == YapButtonState.LOCKED) {
 
             // 1. Физически останавливаем запись через менеджер
-            voiceManager.stopRecording()
-            val finalPath = voiceManager.currentRecordPath
-
+//            voiceManager.stopRecording()
+//            val finalPath = voiceManager.currentRecordPath
+            updateYapButtonState(YapButtonState.REVIEW)
+            updateYapOffsetY(0f)
             // 2. Атомарно обновляем стейт через наш метод с пересчетом цены
-            updateStateWithPrice { it.copy(
-                yapButtonState = YapButtonState.REVIEW,
+            _state.update { it.copy(
+//                yapButtonState = YapButtonState.REVIEW,
                 yapType = YapType.VOICE, // Гарантируем тип VOICE для цены
-                voiceAudioUri = finalPath,
-                yapOffsetY = 0f,
+//                voiceAudioUri = finalPath,
+//                yapOffsetY = 0f,
                 currentAlertMessage = "Запись сохранена. Нажмите YAP для отправки",
                 canCloseMessage = false
             ) }
@@ -640,7 +645,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun getVoicePath(): String? = voiceManager.currentRecordPath
 
     fun isVoiceRecordValid(): Boolean {
-        val path = getVoicePath() ?: return false
+        val state = _state.value
+        if (state.yapType != YapType.VOICE) return false
+        val path = state.voiceAudioUri ?: return false
         val file = File(path)
         return file.exists() && file.length() > 1000 // Примерно 1кб минимум для AAC
     }

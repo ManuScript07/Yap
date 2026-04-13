@@ -5,6 +5,7 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
 import android.content.pm.PackageManager
+import android.util.Log
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
@@ -208,8 +209,9 @@ fun MainYapButton(
                 if (state.currentStars < state.yapPrice || state.yapPrice == 0) {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
 
-                    // Показываем алерт ТОЛЬКО если проблема реально в звездах
-                    if (state.currentStars < state.yapPrice) {
+                    if (state.yapPrice == 0) {
+                        viewModel.showAlert("Выберите получателей", durationMs = 1000)
+                    } else {
                         viewModel.showAlert("Недостаточно звезд!", durationMs = 1000)
                     }
 
@@ -488,7 +490,6 @@ fun MainYapButton(
                     val finalState = viewModel.state.value.yapButtonState
                     val finalOffsetY = viewModel.state.value.yapOffsetY
 
-                    val actualPath = viewModel.getVoicePath()
 
                     when (finalState) {
                         YapButtonState.RECORDING -> {
@@ -497,6 +498,7 @@ fun MainYapButton(
                                 viewModel.updateYapOffsetY(-120f)
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             } else if (finalOffsetY >= 130f) {
+                                Log.d("CANCEL", "Сброс из записи")
                                 viewModel.cancelVoiceRecording()
 //                                viewModel.resetYapButton() // Вызываем метод полного сброса
                             } else {
@@ -511,6 +513,7 @@ fun MainYapButton(
 
                         YapButtonState.LOCKED -> {
                             if (finalOffsetY >= 50f) {
+                                Log.d("CANCEL", "Сброс из закрепления")
                                 viewModel.cancelVoiceRecording()
                             } else if (isValidTap) {
                                 if (viewModel.isVoiceRecordValid()) {
@@ -528,7 +531,9 @@ fun MainYapButton(
                         YapButtonState.REVIEW -> {
                             if (finalOffsetY >= 100f) {
 //                                viewModel.resetYapButton()
+                                Log.d("CANCEL", "Сброс из ревью")
                                 viewModel.cancelVoiceRecording()
+
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             } else if (isValidTap) {
                                 if (viewModel.isVoiceRecordValid()) {
@@ -536,6 +541,7 @@ fun MainYapButton(
                                 } else {
                                     viewModel.showAlert("Файл поврежден")
 //                                    viewModel.resetYapButton()
+                                    Log.d("CANCEL", "Файл повреждеён")
                                     viewModel.cancelVoiceRecording()
                                 }
                             } else {
@@ -552,11 +558,19 @@ fun MainYapButton(
                         }
 
                         else -> {
-                            if (viewModel.isVoiceRecordValid()) {
-                                // Даем ViewModel шанс переключить стейты
-                                viewModel.updateYapButtonState(YapButtonState.FIRING)
+                            if (finalState == YapButtonState.PRESSED || finalState == YapButtonState.READY) {
+                                if (isInside) {
+                                    // ПРОВЕРКА: Если цена 0, не даем кнопке перейти в FIRING
+                                    if (viewModel.state.value.yapPrice > 0) {
+                                        viewModel.updateYapButtonState(YapButtonState.FIRING)
+                                    } else {
+                                        viewModel.updateYapButtonState(YapButtonState.IDLE)
+                                    }
+                                } else {
+                                    viewModel.updateYapButtonState(YapButtonState.IDLE)
+                                }
                             } else {
-                                viewModel.resetYapButton()
+                                viewModel.updateYapButtonState(YapButtonState.IDLE)
                             }
                         }
                     }

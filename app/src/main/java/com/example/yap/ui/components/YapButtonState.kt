@@ -3,7 +3,6 @@ package com.example.yap.ui.components
 import android.os.Parcelable
 import kotlinx.parcelize.Parcelize
 
-// 1. ОПРЕДЕЛЯ ЕМ СОСТОЯНИЯ КНОПКИ
 
 
 @Parcelize
