@@ -510,9 +510,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun stopVoiceRecording() {
         viewModelScope.launch {
-            voiceManager.stopRecording() // Здесь внутри должен быть recorder.stop() и release()
             val finalDuration = _state.value.yapRecordTimeMs
-
+            voiceManager.stopRecording()
             if (finalDuration < 300) {
                 voiceManager.cancelRecording() // Метод, который просто удаляет файл и стопает рекордер
                 resetYapButton()
@@ -564,10 +563,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
 
     fun resetYapButton() {
-        voiceManager.cancelRecording()
+        voiceManager.stopRecording()
         voiceManager.stopPlayback()
-        transcriptionJob?.cancel()
-        updateStateWithPrice { currentState ->
+
+        _state.update { currentState ->
+            // Нам нужно занулить файл, только если мы НЕ ждем расшифровку прямо сейчас
             val shouldResetType = currentState.yapType == YapType.VOICE
 
             currentState.copy(
@@ -576,12 +576,15 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 yapRecordTimeMs = 0L,
                 recordStartDate = null,
                 yapOffsetY = 0f,
+                // Если транскрибация идет — оставляем URI, чтобы runTranscription достучался до файла
+                // Если нет — чистим, чтобы не было "призраков" старых записей
                 voiceAudioUri = if (shouldResetType) null else currentState.voiceAudioUri,
                 didOverrideMessage = false,
                 isPlayingVoice = false,
             )
         }
     }
+
 
     fun clearSystemAlertOnly() {
         _state.update { it.copy(

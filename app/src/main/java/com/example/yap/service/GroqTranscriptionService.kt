@@ -8,6 +8,7 @@ import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.RequestBody.Companion.asRequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.io.File
@@ -54,6 +55,19 @@ class GroqTranscriptionService {
             Result.success(response.text)
         } catch (e: Exception) {
             Log.e("GroqSTT", "Ошибка API: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    suspend fun transcribeBytes(bytes: ByteArray, fileName: String): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            // Создаем RequestBody напрямую из массива байтов
+            val requestFile = bytes.toRequestBody("audio/m4a".toMediaTypeOrNull())
+            val body = MultipartBody.Part.createFormData("file", fileName, requestFile)
+
+            val response = api.transcribe(apiKey, body)
+            Result.success(response.text)
+        } catch (e: Exception) {
             Result.failure(e)
         }
     }
