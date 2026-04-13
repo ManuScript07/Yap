@@ -277,7 +277,19 @@ fun MainYapButton(
             }
 
             YapButtonState.FIRING -> {
-                if (viewModel.state.value.yapType == YapType.VOICE) {
+                val currentState = viewModel.state.value
+
+                val actualType = if (currentState.recordStartDate != null || currentState.voiceAudioUri != null) {
+                    YapType.VOICE
+                } else {
+                    currentState.yapType
+                }
+
+                if (actualType == YapType.VOICE) {
+                    // Даем шанс stopVoiceRecording завершиться (он там ждет 250мс)
+                    // Если вызвать onClick мгновенно, файл еще не будет закрыт
+                    delay(300)
+
                     if (!viewModel.isVoiceRecordValid()) {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         viewModel.showAlert("Запись слишком короткая", durationMs = 1500)
@@ -285,9 +297,11 @@ fun MainYapButton(
                         return@LaunchedEffect
                     }
                 }
-                val snapshotType = viewModel.state.value.yapType
-                delay(200)
-                onClick(snapshotType)
+                viewModel.updateYapButtonState(YapButtonState.IDLE)
+
+                // 3. Передаем ВЫЧИСЛЕННЫЙ тип, а не тот, что в старом стейте
+                onClick(actualType)
+
                 viewModel.setAlertOverridden(false)
             }
 
@@ -502,12 +516,13 @@ fun MainYapButton(
                                 viewModel.cancelVoiceRecording()
 //                                viewModel.resetYapButton() // Вызываем метод полного сброса
                             } else {
-                                if (viewModel.isVoiceRecordValid()) {
-                                    viewModel.updateYapButtonState(YapButtonState.FIRING)
-                                } else {
-                                    viewModel.showAlert("Запись слишком короткая")
-                                    viewModel.resetYapButton()
-                                }
+                                viewModel.updateYapButtonState(YapButtonState.FIRING)
+//                                if (viewModel.isVoiceRecordValid()) {
+//                                    viewModel.updateYapButtonState(YapButtonState.FIRING)
+//                                } else {
+//                                    viewModel.showAlert("Запись слишком короткая")
+//                                    viewModel.resetYapButton()
+//                                }
                             }
                         }
 
@@ -516,11 +531,12 @@ fun MainYapButton(
                                 Log.d("CANCEL", "Сброс из закрепления")
                                 viewModel.cancelVoiceRecording()
                             } else if (isValidTap) {
-                                if (viewModel.isVoiceRecordValid()) {
-                                    viewModel.updateYapButtonState(YapButtonState.FIRING)
-                                } else {
-                                    viewModel.resetYapButton()
-                                }
+                                viewModel.updateYapButtonState(YapButtonState.FIRING)
+//                                if (viewModel.isVoiceRecordValid()) {
+//                                    viewModel.updateYapButtonState(YapButtonState.FIRING)
+//                                } else {
+//                                    viewModel.resetYapButton()
+//                                }
 
                             } else {
                                 viewModel.updateYapOffsetY(-120f)

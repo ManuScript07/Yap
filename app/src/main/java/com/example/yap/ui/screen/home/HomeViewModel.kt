@@ -343,33 +343,49 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
 
     // 3. ОТПРАВКА YAP И СПИСАНИЕ ЗВЕЗД
+    // 3. ОТПРАВКА YAP И СПИСАНИЕ ЗВЕЗД
     fun sendYap(latitude: Double?, longitude: Double?) {
         viewModelScope.launch {
-            val state = _state.value
+            Log.d("API1","Старт")
+            val initialState = _state.value
 
-            if (state.yapPrice == 0) {
+            if (initialState.yapPrice == 0) {
                 dismissMessage()
                 resetYapButton()
                 return@launch
             }
 
-            // Локальные переменные, чтобы не зависеть от изменений стейта в процессе
-            val currentYapType = state.yapType
-            val audioPath = state.voiceAudioUri
+            // --- 1. СИНХРОНИЗАЦИЯ: ПРОВЕРКА И ОЖИДАНИЕ ФАЙЛА ---
+            if (initialState.yapType == YapType.VOICE) {
+                // Если recordStartDate не null, значит stopVoiceRecording еще висит в delay(250)
+                if (_state.value.recordStartDate != null) {
+                    Log.d("API1", "Ожидание формирования аудиофайла...")
+                    var waitCount = 0
+                    // Ждем, пока stopVoiceRecording не закончит работу (максимум 1 секунду)
+                    while (_state.value.recordStartDate != null && waitCount < 20) {
+                        delay(50)
+                        waitCount++
+                    }
+                }
 
-            // --- 1. ПРОВЕРКА ФАЙЛА (БЕЗ ОЖИДАНИЯ ТЕКСТА) ---
-            if (currentYapType == YapType.VOICE) {
-                val file = audioPath?.let { File(it) }
-                // Проверяем только наличие файла, а не текст
+                // Теперь берем СВЕЖИЙ стейт, в котором stopVoiceRecording уже прописал voiceAudioUri
+                val freshState = _state.value
+                val file = freshState.voiceAudioUri?.let { File(it) }
+
                 if (file == null || !file.exists() || file.length() < 500) {
-                    Log.e("API1", "Ошибка: Файл не готов")
+                    Log.e("API1", "Ошибка: Файл не готов даже после ожидания")
                     resetYapButton()
                     return@launch
                 }
             }
 
+            // --- ОБНОВЛЯЕМ ПЕРЕМЕННЫЕ ИЗ АКТУАЛЬНОГО СТЕЙТА ---
+            val state = _state.value
+            val currentYapType = state.yapType
+            val audioPath = state.voiceAudioUri
+
             if (state.currentStars >= state.yapPrice) {
-                // Расчет энергии (оставляем как было)
+                // Расчет энергии
                 val newStars = state.currentStars - state.yapPrice
                 val newProgress = newStars.toFloat() / state.maxStars.toFloat()
 
@@ -381,19 +397,16 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 // --- 2. МГНОВЕННАЯ ОТПРАВКА ---
                 when (currentYapType) {
                     YapType.VOICE -> {
-                        // Мы НЕ ждем текст. Если он уже есть — берем, если нет — отправляем заглушку
+                        // Файл гарантированно готов, а расшифровка УЖЕ запущена в фоне!
                         val currentText = _state.value.transcribedText ?: "[Голосовое сообщение...]"
                         Log.d("API1", "МГНОВЕННАЯ ОТПРАВКА ГОЛОСА: $audioPath")
                         Log.d("API1", "Текущий текст (может быть пустым): $currentText")
-
-                        // Если расшифровка еще идет, она сама обновит сообщение позже
-                        // (Здесь обычно вызывается метод репозитория: repository.sendVoice(file, currentText))
                     }
                     YapType.TEXT, YapType.EMOJI -> {
                         Log.d("API1", "Отправляем ТЕКСТ: ${state.userGeneratedContent}")
                     }
                     YapType.YAP -> {
-                        Log.d("API1", "Отправляем простой YAP")
+                        Log.d("API1", "Отправляем простой YAP $longitude $latitude")
                     }
                 }
 
@@ -404,9 +417,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
                 _state.update { it.copy(
                     currentStars = newStars,
-                    progress = newProgress,
-                    // voiceAudioUri = null, // НЕ зануляй сразу, если хочешь дождаться текста!
-                    // transcribedText = null
+                    progress = newProgress
                 ) }
 
             } else {
@@ -417,6 +428,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun handleSendRequest(latitude: Double?, longitude: Double?, finalType: YapType) {
+        Log.d("API1", "HandleSendRequest type: $finalType")
         updateStateWithPrice { it.copy(yapType = finalType) }
         sendYap(latitude, longitude)
     }

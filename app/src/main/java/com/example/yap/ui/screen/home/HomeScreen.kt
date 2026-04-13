@@ -683,12 +683,12 @@ fun HomeContent(
             ) {
                    MainYapButton(
                     price = state.yapPrice,
-                    onClick = {
+                    onClick = { selectedType ->
                         fetchLocationAndSendYap(
                             context = context,
                             viewModel = viewModel,
                             isLocationEnabled = state.isLocationEnabled,
-                            messageType = state.yapType
+                            messageType = selectedType
                     )},
                     viewModel = viewModel,
                     context = context,
