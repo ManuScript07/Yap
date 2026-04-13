@@ -542,6 +542,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 val file = File(path)
                 if (file.exists() && file.length() > 0) {
                     Log.d("API1", "Файл записан. Размер: ${file.length()} байт")
+                    val currentPrice = _state.value.yapPrice
+                    val shouldTranscribe = currentPrice > 0
 
                     _state.update { it.copy(
                         voiceAudioUri = path,
@@ -550,9 +552,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         yapRecordTimeMs = 0L,
                         transcribedText = null,
                         recordStartDate = null,
-                        isTranscribing = true
+                        isTranscribing = shouldTranscribe
                     ) }
-                    runTranscription(file)
+                    if (shouldTranscribe)
+                        runTranscription(file)
+                    else
+                        Log.d("STT1", "Расшифровка пропущена: цена сообщения 0 (нет получателей)")
                 }
             }
         }
