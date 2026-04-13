@@ -590,13 +590,15 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 yapButtonState = YapButtonState.IDLE,
                 yapType = if (shouldResetType) YapType.YAP else currentState.yapType,
                 yapRecordTimeMs = 0L,
+                totalDurationMs = 0L,
                 recordStartDate = null,
                 yapOffsetY = 0f,
                 // Если транскрибация идет — оставляем URI, чтобы runTranscription достучался до файла
                 // Если нет — чистим, чтобы не было "призраков" старых записей
-                voiceAudioUri = if (shouldResetType) null else currentState.voiceAudioUri,
+                voiceAudioUri = null,
                 didOverrideMessage = false,
                 isPlayingVoice = false,
+                transcribedText = null
             )
         }
     }
@@ -658,10 +660,26 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun isVoiceRecordValid(): Boolean {
         val state = _state.value
-        if (state.yapType != YapType.VOICE) return false
-        val path = state.voiceAudioUri ?: return false
-        val file = File(path)
-        return file.exists() && file.length() > 1000 // Примерно 1кб минимум для AAC
+        val startTime = state.recordStartDate
+
+        val duration = if (startTime != null) {
+            // Запись еще считается "активной" в памяти
+            System.currentTimeMillis() - startTime
+        } else {
+            // Запись уже завершена методом stopVoiceRecording
+            state.totalDurationMs
+        }
+
+        Log.d("API1", "Проверка длительности: $duration мс (startTime был $startTime)")
+        return duration > 600 // Увеличим порог до 600мс для надежности
+    }
+
+    // В HomeViewModel
+    fun isVoiceRecordReady(): Boolean {
+        val state = _state.value
+        // Если recordStartDate еще не null, значит stopVoiceRecording еще в процессе выполнения
+        // Нам нужно дождаться, пока он станет null
+        return state.recordStartDate == null && state.voiceAudioUri != null
     }
 
     fun cancelVoiceRecording() {
@@ -684,11 +702,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             // Устанавливаем флаг загрузки, но это теперь не блокирует кнопку Send
             _state.update { it.copy(isTranscribing = true, transcribedText = null) }
 
-            Log.d("STT", "Начинаем расшифровку файла: ${file.name} (${file.length()} байт)")
+            Log.d("STT1", "Начинаем расшифровку файла: ${file.name} (${file.length()} байт)")
 
             transcriptionService.transcribe(file)
                 .onSuccess { text ->
-                    Log.d("STT", "Groq успешно вернул текст: $text")
+                    Log.d("STT1", "Groq успешно вернул текст: $text")
 
                     // Обновляем состояние. Если пользователь еще не нажал Send,
                     // при нажатии он подтянет этот готовый текст.
@@ -705,7 +723,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 .onFailure { error ->
                     // Если интернета нет, Groq упадет сюда.
                     // Интерфейс при этом не зависнет, просто текст останется null.
-                    Log.e("STT", "Ошибка расшифровки (возможно, нет сети): ${error.message}")
+                    Log.e("STT1", "Ошибка расшифровки (возможно, нет сети): ${error.message}")
                     _state.update { it.copy(isTranscribing = false) }
                 }
         }

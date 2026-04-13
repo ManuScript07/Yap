@@ -278,29 +278,32 @@ fun MainYapButton(
 
             YapButtonState.FIRING -> {
                 val currentState = viewModel.state.value
+                // Проверяем, был ли это голос
+                val isActuallyVoice = currentState.recordStartDate != null || currentState.yapButtonState == YapButtonState.REVIEW
+                val typeToSend = if (isActuallyVoice) YapType.VOICE else currentState.yapType
 
-                val actualType = if (currentState.recordStartDate != null || currentState.voiceAudioUri != null) {
-                    YapType.VOICE
-                } else {
-                    currentState.yapType
-                }
+                if (typeToSend == YapType.VOICE) {
+                    // ЖДЕМ: пока ViewModel закончит stopVoiceRecording (пока recordStartDate не станет null)
+                    var waitCount = 0
+                    while (viewModel.state.value.recordStartDate != null && waitCount < 10) {
+                        delay(50)
+                        waitCount++
+                    }
 
-                if (actualType == YapType.VOICE) {
-                    // Даем шанс stopVoiceRecording завершиться (он там ждет 250мс)
-                    // Если вызвать onClick мгновенно, файл еще не будет закрыт
-                    delay(300)
-
+                    // Теперь проверка будет честной
                     if (!viewModel.isVoiceRecordValid()) {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         viewModel.showAlert("Запись слишком короткая", durationMs = 1500)
-                        viewModel.resetYapButton()
+                        viewModel.resetYapButton() // Это очистит стейт, чтобы ошибка не висела
                         return@LaunchedEffect
                     }
                 }
-                viewModel.updateYapButtonState(YapButtonState.IDLE)
 
-                // 3. Передаем ВЫЧИСЛЕННЫЙ тип, а не тот, что в старом стейте
-                onClick(actualType)
+                // Если прошли проверку или это не голос — отправляем
+                viewModel.updateYapButtonState(YapButtonState.IDLE)
+                onClick(typeToSend)
+
+//                delay(100)
 
                 viewModel.setAlertOverridden(false)
             }
