@@ -577,19 +577,16 @@ fun MainYapButton(
                         }
 
                         else -> {
-                            if (finalState == YapButtonState.PRESSED || finalState == YapButtonState.READY) {
+                            if (finalState == YapButtonState.READY) {
                                 if (isInside) {
-                                    // ПРОВЕРКА: Если цена 0, не даем кнопке перейти в FIRING
-                                    if (viewModel.state.value.yapPrice > 0) {
-                                        viewModel.updateYapButtonState(YapButtonState.FIRING)
-                                    } else {
-                                        viewModel.updateYapButtonState(YapButtonState.IDLE)
-                                    }
+                                    viewModel.updateYapButtonState(YapButtonState.FIRING)
                                 } else {
-                                    viewModel.updateYapButtonState(YapButtonState.IDLE)
+                                    viewModel.resetYapButton()
                                 }
                             } else {
-                                viewModel.updateYapButtonState(YapButtonState.IDLE)
+                                // Если это был быстрый тап (состояние PRESSED), просто сбрасываем в IDLE
+                                // Это и есть защита от случайного касания.
+                                viewModel.resetYapButton()
                             }
                         }
                     }
