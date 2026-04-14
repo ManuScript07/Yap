@@ -19,3 +19,17 @@ fun <T> rememberLambda(onClick: (T) -> Unit): (T) -> Unit {
         }
     }
 }
+
+@Composable
+fun rememberClickLambda(onClick: () -> Unit): () -> Unit {
+    var lastClickTime by remember { mutableLongStateOf(0L) }
+    return remember(onClick) {
+        {
+            val currentTime = System.currentTimeMillis()
+            if (currentTime - lastClickTime > 600L) {
+                lastClickTime = currentTime
+                onClick()
+            }
+        }
+    }
+}

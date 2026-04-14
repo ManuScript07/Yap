@@ -73,6 +73,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Surface
@@ -111,6 +112,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -142,7 +144,8 @@ import com.google.android.gms.location.LocationServices
 @Composable
 fun HomeScreen(
     viewModel: HomeViewModel = viewModel(),
-    onNavigateToProfile: (Int) -> Unit
+    onNavigateToProfile: (Int) -> Unit,
+    onNavigateToNotifications: () -> Unit,
 ) {
     StatusBarIconsColor(isLight = true)
     val state by viewModel.state.collectAsState()
@@ -165,19 +168,15 @@ fun HomeScreen(
     ) { isGranted ->
         viewModel.resetYapButton()
         if (!isGranted) {
-            // Юзер отказал
-//            viewModel.resetYapButton()
             viewModel.showAlert("Нужно разрешение на микрофон", durationMs = 2000)
         }
     }
 
-    // Твой текущий лаунчер для разрешений (Permissions)
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         val isGranted = permissions.values.any { it }
         if (isGranted) {
-            // Разрешения дали! Теперь проверяем, включен ли сам GPS датчик
             checkLocationSettings(
                 context = context,
                 onEnabled = { viewModel.setLocationToggle(true) },
@@ -235,6 +234,10 @@ fun HomeScreen(
         onNavigateToProfile(userId)
     }
 
+    val guardedNavigateToNotifications = rememberLambda<Unit> {
+        onNavigateToNotifications()
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         Image(
             painter = painterResource(id = R.drawable.bg),
@@ -272,7 +275,9 @@ fun HomeScreen(
                         }
                     },
                     onRequestMicrophonePermission = {
-                        microphonePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)}
+                        microphonePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                    },
+                    onNotificationsClick = {guardedNavigateToNotifications(Unit)}
                 )
             }
         )
@@ -305,7 +310,6 @@ private fun handleLocationActivation(
             }
         )
     } else {
-        // 3. Разрешений нет — запрашиваем их
         permissionLauncher.launch(arrayOf(
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.ACCESS_COARSE_LOCATION
@@ -321,8 +325,8 @@ fun HomeUsersBottomSheet(
     screenHeight: Dp,
     onYapClick: (Int) -> Unit,
     onUserClick: (Int) -> Unit,
-    onAddUserClick: () -> Unit, // НОВОЕ
-    onRemoveUserClick: (Int) -> Unit, // НОВОЕ
+    onAddUserClick: () -> Unit,
+    onRemoveUserClick: (Int) -> Unit,
     content: @Composable (PaddingValues) -> Unit
 ) {
     val adaptivePeekHeight = screenHeight * 0.28f
@@ -665,7 +669,8 @@ fun HomeContent(
     viewModel: HomeViewModel,
     onLocationToggle: (Boolean) -> Unit,
     onRequestMicrophonePermission: () -> Unit,
-) {
+    onNotificationsClick: () -> Unit
+    ) {
     val state by viewModel.state.collectAsState()
     val baseScale = LocalBaseScale.current
     val context = LocalContext.current
@@ -699,7 +704,8 @@ fun HomeContent(
             TopActionBar(
                 state = state,
                 onLocationToggle = onLocationToggle,
-                modifier = Modifier.padding(top = 12.dp * baseScale)
+                modifier = Modifier.padding(top = 12.dp * baseScale),
+                onNotificationsClick = onNotificationsClick
             )
 
             InfoMessage(
@@ -1153,6 +1159,7 @@ fun ProgressIndicatorOnly(progress: Float) {
 fun TopActionBar(
     state: HomeUiState,
     onLocationToggle: (Boolean) -> Unit,
+    onNotificationsClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -1162,21 +1169,55 @@ fun TopActionBar(
         verticalAlignment = Alignment.CenterVertically
     ) {
         // 1. КНОПКА УВЕДОМЛЕНИЙ
-        Surface(
-            modifier = Modifier.size(52.dp),
-            shape = RoundedCornerShape(16.dp),
-            color = MaterialTheme.colorScheme.primaryContainer,
-            onClick = { /* TODO */ }
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    painter = painterResource(id = R.drawable.baseline_notifications_24),
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onBackground,
-                    modifier = Modifier.size(40.dp)
-                )
+        Box(modifier = Modifier.size(56.dp)) {
+            Surface(
+                modifier = Modifier.size(52.dp),
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.primaryContainer,
+                onClick = { onNotificationsClick() }
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.baseline_notifications_24),
+                        contentDescription = "Notifications",
+                        tint = MaterialTheme.colorScheme.onBackground,
+                        modifier = Modifier.size(40.dp)
+                    )
+
+                }
             }
+            if (state.notificationsCount > 0) {
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .size(20.dp)
+                        .offset(x = (2).dp, y = (-2).dp),
+                    shape = CircleShape,
+                    color = Color.Red,
+                ) {
+                    Box(contentAlignment = Alignment.Center,
+                        modifier = Modifier.fillMaxSize()) {
+                        Text(
+                            modifier = Modifier.offset(y = (-0.5).dp),
+                            text = if (state.notificationsCount > 9) "9+" else state.notificationsCount.toString(),
+                            color = Color.White,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center,
+                            style = LocalTextStyle.current.copy(
+                                lineHeight = 10.sp,
+                                lineHeightStyle = LineHeightStyle(
+                                    alignment = LineHeightStyle.Alignment.Center,
+                                    trim = LineHeightStyle.Trim.Both
+                                )
+                            ),
+                        )
+                    }
+                }
+            }
+
         }
+
 
         // ОТСТУП 12.dp между уведомлениями и локацией
         Spacer(modifier = Modifier.width(12.dp))

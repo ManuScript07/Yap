@@ -15,6 +15,7 @@ data class HomeUiState(
 
     val isNiceActive: Boolean = true,
     val isLocationEnabled: Boolean = true,
+    val notificationsCount: Int = 8,
 
     val currentAlertMessage: String? = null,
     @StringRes val currentAlertResource: Int? = null,

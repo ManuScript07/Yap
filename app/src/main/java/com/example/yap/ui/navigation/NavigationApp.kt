@@ -46,7 +46,7 @@ import com.example.yap.ui.screen.FriendsScreen
 import com.example.yap.ui.screen.home.HomeScreen
 import com.example.yap.ui.screen.MapScreen
 import com.example.yap.ui.screen.ProfileScreen
-import com.example.yap.ui.screen.user_profile.AppDestinations
+import com.example.yap.ui.screen.notification.NotificationsScreen
 import com.example.yap.ui.screen.user_profile.UserProfileScreen
 import com.example.yap.ui.theme.LocalAdditionColors
 
@@ -201,7 +201,20 @@ fun NavigationApp() {
                                             route = AppDestinations.createProfileRoute(userId),
                                             lockState = navLockTime
                                         )
+                                    },
+                                    onNavigateToNotifications = {
+                                        safeNavigate(
+                                            controller = navControllers[screen],
+                                            route = AppDestinations.NOTIFICATIONS,
+                                            lockState = navLockTime
+                                        )
                                     }
+                                )
+                            }
+
+                            composable(AppDestinations.NOTIFICATIONS) {
+                                NotificationsScreen(
+                                    onBack = { navControllers[screen]?.popBackStack() }
                                 )
                             }
                             userProfileComposable(navControllers[screen])
