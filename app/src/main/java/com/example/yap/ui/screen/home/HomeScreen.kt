@@ -132,6 +132,7 @@ import com.example.yap.ui.theme.LocalAdditionColors
 import com.example.yap.ui.theme.LocalBaseScale
 import com.example.yap.util.LocationHelper
 import com.example.yap.util.LocationHelper.checkLocationSettings
+import com.example.yap.util.compose.StatusBarIconsColor
 import com.example.yap.util.compose.rememberLambda
 import com.google.android.gms.location.LocationServices
 
@@ -143,6 +144,7 @@ fun HomeScreen(
     viewModel: HomeViewModel = viewModel(),
     onNavigateToProfile: (Int) -> Unit
 ) {
+    StatusBarIconsColor(isLight = true)
     val state by viewModel.state.collectAsState()
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
