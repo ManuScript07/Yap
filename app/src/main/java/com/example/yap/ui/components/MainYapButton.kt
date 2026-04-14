@@ -60,6 +60,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ProcessLifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.yap.R
 import com.example.yap.ui.screen.home.HomeViewModel
@@ -205,7 +206,14 @@ fun MainYapButton(
             YapButtonState.PRESSED -> {
                 val state = viewModel.state.value
 
-                // Проверяем, есть ли блокирующее условие
+                if (!viewModel.isNetworkAvailable()) {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    viewModel.showAlert("Нет интернета", durationMs = 1000)
+                    delay(200)
+                    viewModel.resetYapButton()
+                    return@LaunchedEffect
+                }
+
                 if (state.currentStars < state.yapPrice || state.yapPrice == 0) {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
 
@@ -215,12 +223,11 @@ fun MainYapButton(
                         viewModel.showAlert("Недостаточно звезд!", durationMs = 1000)
                     }
 
-                    delay(200) // Время для визуального "отскока" плашки
-                    viewModel.resetYapButton() // Возвращаем назад в IDLE
+                    delay(200)
+                    viewModel.resetYapButton()
                     return@LaunchedEffect
                 }
 
-                // Если всё хорошо — идем дальше
                 delay(150)
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 viewModel.updateYapButtonState(YapButtonState.READY)
@@ -234,7 +241,7 @@ fun MainYapButton(
                 if (viewModel.state.value.yapButtonState == YapButtonState.READY) {
                     val voicePrice = viewModel.getPriceForType(YapType.VOICE)
                     val currentStars = viewModel.state.value.currentStars
-                    // Дополнительная проверка перед записью голоса (если цена стала 10)
+
                     if (currentStars >= voicePrice) {
                         val hasPermission = ContextCompat.checkSelfPermission(
                             context,
@@ -244,7 +251,7 @@ fun MainYapButton(
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             viewModel.updateYapButtonState(YapButtonState.RECORDING)
                         } else {
-                            // Если прав нет, запрашиваем их и сбрасываем кнопку
+
                             onRequestMicrophonePermission()
                             viewModel.resetYapButton()
                         }
@@ -256,19 +263,13 @@ fun MainYapButton(
             }
 
             YapButtonState.RECORDING -> {
-                // Как только вошли в режим записи — меняем тип на VOICE
-                // Чтобы цена сразу стала 10, и sendYap знал, что отправлять
                 viewModel.startVoiceRecording()
             }
 
             YapButtonState.REVIEW -> {
-//                if (viewModel.state.value.yapType == YapType.VOICE) {
-//                    viewModel.stopVoiceRecording()
-//                }
-//                // Мягко возвращаем кнопку в центр при входе в Review
+
                 viewModel.updateYapOffsetY(0f)
-//                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-//                viewModel.prepareVoiceForReview()
+
                 val activity = context as? Activity
                 if (activity?.isChangingConfigurations == false) {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -277,34 +278,35 @@ fun MainYapButton(
             }
 
             YapButtonState.FIRING -> {
+
+                if (!viewModel.isNetworkAvailable()) {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    viewModel.showAlert("Связь потеряна!", durationMs = 1500)
+                    viewModel.resetYapButton()
+                    return@LaunchedEffect
+                }
+
                 val currentState = viewModel.state.value
-                // Проверяем, был ли это голос
                 val isActuallyVoice = currentState.recordStartDate != null || currentState.yapButtonState == YapButtonState.REVIEW
                 val typeToSend = if (isActuallyVoice) YapType.VOICE else currentState.yapType
 
                 if (typeToSend == YapType.VOICE) {
-                    // ЖДЕМ: пока ViewModel закончит stopVoiceRecording (пока recordStartDate не станет null)
                     var waitCount = 0
                     while (viewModel.state.value.recordStartDate != null && waitCount < 10) {
                         delay(50)
                         waitCount++
                     }
 
-                    // Теперь проверка будет честной
                     if (!viewModel.isVoiceRecordValid()) {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         viewModel.showAlert("Запись слишком короткая", durationMs = 1500)
-                        viewModel.resetYapButton() // Это очистит стейт, чтобы ошибка не висела
+                        viewModel.resetYapButton()
                         return@LaunchedEffect
                     }
                 }
 
-                // Если прошли проверку или это не голос — отправляем
                 viewModel.updateYapButtonState(YapButtonState.IDLE)
                 onClick(typeToSend)
-
-//                delay(100)
-
                 viewModel.setAlertOverridden(false)
             }
 
@@ -335,19 +337,33 @@ fun MainYapButton(
 
 
 
-    DisposableEffect(Unit) {
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            // ON_PAUSE срабатывает при сворачивании или перекрытии другим окном
-            if (event == Lifecycle.Event.ON_STOP) {
-                viewModel.finishRecordingAndGoToReview()
+            if (event == Lifecycle.Event.ON_PAUSE) {
+                // Проверяем, сворачивается ли приложение или открывается новый экран.
+                // isChangingConfigurations == true означает, что это поворот или смена темы.
+                val activity = context as? Activity
+                val isChangingConfig = activity?.isChangingConfigurations ?: false
+
+                if (!isChangingConfig) {
+                    viewModel.finishRecordingAndGoToReview()
+                }
             }
         }
 
-        val lifecycle = ProcessLifecycleOwner.get().lifecycle
-        lifecycle.addObserver(observer)
+        lifecycleOwner.lifecycle.addObserver(observer)
 
         onDispose {
-            lifecycle.removeObserver(observer)
+            lifecycleOwner.lifecycle.removeObserver(observer)
+
+            // ВАЖНО: onDispose сработает при уходе на другой таб.
+            // Чтобы не сработало при повороте экрана, проверяем isChangingConfigurations.
+            val activity = context as? Activity
+            if (activity?.isChangingConfigurations == false) {
+                viewModel.finishRecordingAndGoToReview()
+            }
         }
     }
 

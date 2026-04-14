@@ -7,13 +7,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 
 @Composable
-fun rememberLambda(onClick: () -> Unit): () -> Unit {
+fun <T> rememberLambda(onClick: (T) -> Unit): (T) -> Unit {
     var lastClickTime by remember { mutableLongStateOf(0L) }
-    return {
-        val currentTime = System.currentTimeMillis()
-        if (currentTime - lastClickTime > 600L) { // Игнорируем клики чаще чем раз в 0.5 сек
-            lastClickTime = currentTime
-            onClick()
+    return remember(onClick) {
+        { arg ->
+            val currentTime = System.currentTimeMillis()
+            if (currentTime - lastClickTime > 600L) {
+                lastClickTime = currentTime
+                onClick(arg)
+            }
         }
     }
 }

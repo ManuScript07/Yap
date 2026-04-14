@@ -112,6 +112,7 @@ import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.TextUnit
@@ -131,16 +132,21 @@ import com.example.yap.ui.theme.LocalAdditionColors
 import com.example.yap.ui.theme.LocalBaseScale
 import com.example.yap.util.LocationHelper
 import com.example.yap.util.LocationHelper.checkLocationSettings
+import com.example.yap.util.compose.rememberLambda
 import com.google.android.gms.location.LocationServices
 
 
 @SuppressLint("ConfigurationScreenWidthHeight")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
+fun HomeScreen(
+    viewModel: HomeViewModel = viewModel(),
+    onNavigateToProfile: (Int) -> Unit
+) {
     val state by viewModel.state.collectAsState()
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+
 
     val gpsResolverLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartIntentSenderForResult()
@@ -223,6 +229,10 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
     )
     val scaffoldState = rememberBottomSheetScaffoldState(sheetState)
 
+    val guardedNavigateToProfile = rememberLambda<Int> { userId ->
+        onNavigateToProfile(userId)
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         Image(
             painter = painterResource(id = R.drawable.bg),
@@ -237,6 +247,7 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
             scaffoldState = scaffoldState,
             state = state,
             screenHeight = LocalConfiguration.current.screenHeightDp.dp,
+            onUserClick = guardedNavigateToProfile,
             onYapClick = { userId -> viewModel.toggleUserYap(userId) },
             onAddUserClick = { viewModel.addUser() },
             onRemoveUserClick = { id -> viewModel.removeUser(id) },
@@ -307,6 +318,7 @@ fun HomeUsersBottomSheet(
     state: HomeUiState,
     screenHeight: Dp,
     onYapClick: (Int) -> Unit,
+    onUserClick: (Int) -> Unit,
     onAddUserClick: () -> Unit, // НОВОЕ
     onRemoveUserClick: (Int) -> Unit, // НОВОЕ
     content: @Composable (PaddingValues) -> Unit
@@ -344,6 +356,7 @@ fun HomeUsersBottomSheet(
             ) {
                 UsersBottomSheet(
                     users = state.users,
+                    onUserClick = onUserClick,
                     onYapClick = onYapClick,
                     onAddUser = onAddUserClick,
                     onRemoveUser = onRemoveUserClick,
@@ -360,6 +373,7 @@ fun HomeUsersBottomSheet(
 fun UsersBottomSheet(
     users: List<UserItem>,
     onYapClick: (Int) -> Unit,
+    onUserClick: (Int) -> Unit,
     onAddUser: () -> Unit,
     onRemoveUser: (Int) -> Unit,
     maxUsers: Int
@@ -370,7 +384,7 @@ fun UsersBottomSheet(
         modifier = Modifier
             .fillMaxWidth()
             .defaultMinSize(minHeight = 300.dp * baseScale),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+        contentPadding = PaddingValues(vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         if (users.isEmpty()) {
@@ -406,6 +420,7 @@ fun UsersBottomSheet(
                 )) {
                     UserListItem(
                         user = user,
+                        onUserClick = onUserClick,
                         onYapClick = onYapClick,
                         onRemoveClick = onRemoveUser
                     )
@@ -427,17 +442,28 @@ fun UsersBottomSheet(
 fun UserListItem(
     user: UserItem,
     onYapClick: (Int) -> Unit,
-    onRemoveClick: (Int) -> Unit // Новый параметр
+    onUserClick: (Int) -> Unit,
+    onRemoveClick: (Int) -> Unit
 ) {
     var showMenu by rememberSaveable { mutableStateOf(false) }
+    val baseScale = LocalBaseScale.current
 
+    // Основной контейнер
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 5.dp, horizontal = 2.dp),
+            // Сначала вешаем клик, чтобы он занял ВПЕРЕДИ всю доступную ширину
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = ripple(bounded = true), // Эффект от края до края
+                onClick = { onUserClick(user.id) }
+            )
+            // Теперь добавляем падинги. Горизонтальные — только внутри,
+            // чтобы ripple игнорировал их и рисовал до краев.
+            .padding(horizontal = 16.dp, vertical = 6.dp * baseScale),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // ... Аватар, Имя и Кнопка YAP остаются такими же (код из твоего вопроса) ...
+        // --- АВАТАР ---
         Image(
             painter = painterResource(user.avatarRes),
             contentDescription = null,
@@ -455,11 +481,13 @@ fun UserListItem(
             modifier = Modifier.weight(1f),
             fontSize = 19.sp,
             fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onPrimaryContainer
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
 
+        // --- КНОПКА YAP ---
         val iconTint = if (user.isYapActive) Color.Black else LocalAdditionColors.current.secondTextColor
-        // --- КНОПКА YAP (CHECKBOX) ---
         Box(
             modifier = Modifier
                 .height(35.dp)
@@ -469,7 +497,12 @@ fun UserListItem(
                     if (user.isYapActive) LocalAdditionColors.current.darkYapButtonBackgroundColor
                     else LocalAdditionColors.current.disabledYabBackgroundColor
                 )
-                .clickable { onYapClick(user.id) },
+                // Отдельный clickable для кнопки, чтобы не срабатывал переход в профиль
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = ripple(bounded = true),
+                    onClick = { onYapClick(user.id) }
+                ),
             contentAlignment = Alignment.Center
         ) {
             Icon(
@@ -478,8 +511,10 @@ fun UserListItem(
                 tint = iconTint,
             )
         }
-        Spacer(modifier = Modifier.width(4.dp))
 
+        Spacer(modifier = Modifier.width(8.dp))
+
+        // --- МЕНЮ ---
         Box(contentAlignment = Alignment.Center) {
             IconButton(
                 onClick = { showMenu = true },

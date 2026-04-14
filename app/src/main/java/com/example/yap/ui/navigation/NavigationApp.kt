@@ -3,6 +3,11 @@ package com.example.yap.ui.navigation
 import android.annotation.SuppressLint
 import android.app.Activity
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,8 +20,11 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.MutableLongState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -28,14 +36,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.example.yap.ui.screen.ChatsScreen
 import com.example.yap.ui.screen.FriendsScreen
 import com.example.yap.ui.screen.home.HomeScreen
 import com.example.yap.ui.screen.MapScreen
 import com.example.yap.ui.screen.ProfileScreen
+import com.example.yap.ui.screen.user_profile.AppDestinations
+import com.example.yap.ui.screen.user_profile.UserProfileScreen
 import com.example.yap.ui.theme.LocalAdditionColors
 
 
@@ -46,6 +58,8 @@ fun NavigationApp() {
 
     // NavController для каждой вкладки
     val navControllers: Map<Screen, NavHostController> = bottomItems.associateWith { rememberNavController() }
+
+    val navLockTime = remember { mutableLongStateOf(0L) }
 
     // Saver для сохранения текущей вкладки при пересоздании Activity
     val screenSaver = Saver<Screen, String>(
@@ -180,8 +194,17 @@ fun NavigationApp() {
                     when (screen) {
                         Screen.Home -> {
                             composable(Screen.Home.route) {
-                                HomeScreen()
+                                HomeScreen(
+                                    onNavigateToProfile = { userId ->
+                                        safeNavigate(
+                                            controller = navControllers[screen],
+                                            route = AppDestinations.createProfileRoute(userId),
+                                            lockState = navLockTime
+                                        )
+                                    }
+                                )
                             }
+                            userProfileComposable(navControllers[screen])
                         }
 
                         Screen.Chats -> {
@@ -225,21 +248,56 @@ fun TabNavHost(
     visible: Boolean,
     content: NavGraphBuilder.() -> Unit
 ) {
-    // Если таб не активен, мы полностью убираем NavHost из дерева композиции.
-    // Это гарантирует, что системный BackHandler внутри NavHost не будет мешать.
+
     if (visible) {
-//        DisposableEffect(startRoute) {
-//            Log.d("NAV_DEBUG", "Таб $startRoute стал видимым")
-//            onDispose {
-//                Log.d("NAV_DEBUG", "Таб $startRoute скрыт")
-//            }
-//        }
+        val instantDuration = 400
+
         NavHost(
             navController = navController,
             startDestination = startRoute,
             modifier = Modifier.fillMaxSize(),
+            enterTransition = {
+                fadeIn(animationSpec = tween(instantDuration))
+            },
+            exitTransition = {
+                fadeOut(animationSpec = tween(instantDuration))
+            },
+            popEnterTransition = {
+                fadeIn(animationSpec = tween(instantDuration))
+            },
+            popExitTransition = {
+                fadeOut(animationSpec = tween(instantDuration))
+            },
             builder = content
         )
+    }
+}
+
+
+fun NavGraphBuilder.userProfileComposable(navController: NavHostController?) {
+    composable(
+        route = AppDestinations.USER_PROFILE_ROUTE,
+        arguments = listOf(navArgument("userId") { type = NavType.IntType })
+    ) { backStackEntry ->
+        val userId = backStackEntry.arguments?.getInt("userId") ?: return@composable
+        UserProfileScreen(
+            userId = userId,
+            onBackClick = { navController?.popBackStack() }
+        )
+    }
+}
+
+fun safeNavigate(
+    controller: NavHostController?,
+    route: String,
+    lockState: MutableLongState
+) {
+    val currentTime = System.currentTimeMillis()
+    if (currentTime - lockState.longValue > 600L) {
+        lockState.longValue = currentTime
+        controller?.navigate(route) {
+            launchSingleTop = true
+        }
     }
 }
 

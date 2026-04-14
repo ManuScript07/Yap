@@ -11,6 +11,7 @@ import com.example.yap.R
 import com.example.yap.data.model.UserItem
 import com.example.yap.service.GroqTranscriptionService
 import com.example.yap.ui.components.YapButtonState
+import com.example.yap.util.NetworkMonitor
 import com.example.yap.util.extension.countGraphemeClusters
 import com.example.yap.util.extension.isEmojiOnly
 import kotlinx.coroutines.Dispatchers
@@ -31,6 +32,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 //    private val transcriptionService = VoskTranscriptionService(application)
 //    private val transcriptionService = ServerTranscriptionService()
     private val transcriptionService = GroqTranscriptionService()
+
+    private val networkMonitor = NetworkMonitor(application)
 
     private val _state = MutableStateFlow(
         HomeUiState(
@@ -528,7 +531,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             val finalDuration = System.currentTimeMillis() - startTime
             voiceManager.stopRecording()
             if (finalDuration < 300) {
-                voiceManager.cancelRecording() // Метод, который просто удаляет файл и стопает рекордер
+                voiceManager.cancelRecording()
                 resetYapButton()
                 Log.d("API1", "Запись слишком короткая ($finalDuration мс), игнорируем")
                 return@launch
@@ -660,8 +663,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
 
-    // В ViewModel
-    fun getVoicePath(): String? = voiceManager.currentRecordPath
 
     fun isVoiceRecordValid(): Boolean {
         val state = _state.value
@@ -733,5 +734,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 }
         }
     }
+
+    fun isNetworkAvailable(): Boolean = networkMonitor.isOnline
+
 
 }
