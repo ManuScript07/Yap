@@ -214,7 +214,7 @@ fun NavigationApp() {
 
                             composable(AppDestinations.NOTIFICATIONS) {
                                 NotificationsScreen(
-                                    onBack = { navControllers[screen]?.popBackStack() }
+                                    onBack = { safePopBackStack(navControllers[screen]) }
                                 )
                             }
                             userProfileComposable(navControllers[screen])
@@ -295,7 +295,7 @@ fun NavGraphBuilder.userProfileComposable(navController: NavHostController?) {
         val userId = backStackEntry.arguments?.getInt("userId") ?: return@composable
         UserProfileScreen(
             userId = userId,
-            onBackClick = { navController?.popBackStack() }
+            onBackClick = { safePopBackStack(navController) }
         )
     }
 }
@@ -311,6 +311,12 @@ fun safeNavigate(
         controller?.navigate(route) {
             launchSingleTop = true
         }
+    }
+}
+
+fun safePopBackStack(controller: NavHostController?) {
+    if (controller?.previousBackStackEntry != null) {
+        controller.popBackStack()
     }
 }
 
