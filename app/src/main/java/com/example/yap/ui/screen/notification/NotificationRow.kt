@@ -67,7 +67,8 @@ fun NotificationRow(
     onMute: () -> Unit,
     onNavigateToProfile: (Int) -> Unit,
     onLocationClick: () -> Unit,
-    onYapClick: (Int) -> Unit
+    onYapClick: (Int) -> Unit,
+    onYapSend: (Int) -> Unit,
 ) {
     val baseScale = LocalBaseScale.current
     val currentOnMute by rememberUpdatedState(onMute)
@@ -120,6 +121,7 @@ fun NotificationRow(
                     baseScale = baseScale,
                     onLocationClick = onLocationClick,
                     onYapClick = onYapClick,
+                    onYapSend = onYapSend,
                     onNavigateToProfile = onNavigateToProfile
                 )
             }
@@ -133,6 +135,7 @@ private fun NotificationCardContent(
     baseScale: Float,
     onLocationClick: () -> Unit,
     onYapClick: (Int) -> Unit,
+    onYapSend: (Int) -> Unit,
     onNavigateToProfile: (Int) -> Unit
 ) {
     val messageLineHeight = if (item.hasLocation) (20 * baseScale).sp else (24 * baseScale).sp
@@ -229,7 +232,9 @@ private fun NotificationCardContent(
 
                 YapActionButton(
                     user = item.user,
-                    onYapClick = onYapClick
+                    onYapClick = onYapClick,
+                    onLongYapClick = onYapSend,
+                    baseScale = baseScale
                 )
             }
         }

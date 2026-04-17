@@ -83,48 +83,54 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun loadPersistedData() {
         viewModelScope.launch {
-            val (savedStars, savedTime) = energyPrefs.energyData.first()
-            val savedUsers = energyPrefs.usersData.first()
+            // Мы подписываемся на поток данных.
+            // Каждый раз, когда NotificationsViewModel вызовет saveUsers, этот блок сработает снова.
+            energyPrefs.usersData.collect { savedUsers ->
 
-            val currentTime = System.currentTimeMillis()
+                // 1. Сначала восстанавливаем данные об энергии (разово или при каждом обновлении)
+                // Мы берем текущие значения из DataStore
+                val (savedStars, savedTime) = energyPrefs.energyData.first()
+                val currentTime = System.currentTimeMillis()
 
-            var initialDelay = REGEN_DELAY_MS
+                _state.update { currentState ->
+                    val baseStars = savedStars ?: currentState.currentStars
+                    val max = currentState.maxStars
 
-            _state.update { currentState ->
+                    // Расчет восстановления звезд
+                    val (finalStars, initialDelay) = if (savedTime == null || savedTime == 0L) {
+                        lastAnchorTime = currentTime
+                        baseStars to REGEN_DELAY_MS
+                    } else {
+                        val timePassed = currentTime - savedTime
+                        val restoredStars = (timePassed / REGEN_DELAY_MS).toInt()
+                        val timeSpentInCurrentCycle = timePassed % REGEN_DELAY_MS
 
-                val baseStars = savedStars ?: currentState.currentStars
-                val max = currentState.maxStars
+                        lastAnchorTime = currentTime - timeSpentInCurrentCycle
+                        val calculatedStars = (baseStars + restoredStars).coerceAtMost(max)
+                        val remainingDelay = REGEN_DELAY_MS - timeSpentInCurrentCycle
 
-                if (savedTime == null || savedTime == 0L) {
-                    lastAnchorTime = currentTime
-                    return@update currentState.copy(
-                        currentStars = baseStars,
-                        progress = baseStars.toFloat() / max.toFloat()
+                        calculatedStars to remainingDelay
+                    }
+
+                    // 2. Обновляем список пользователей данными из DataStore
+                    // Именно это обеспечит синхронизацию с экраном уведомлений
+                    val finalUsers = savedUsers ?: getInitialUsers()
+
+                    currentState.copy(
+                        users = finalUsers,
+                        currentStars = finalStars,
+                        progress = finalStars.toFloat() / max.toFloat()
                     )
                 }
 
-                val timePassed = currentTime - savedTime
-                val restoredStars = (timePassed / REGEN_DELAY_MS).toInt()
-                val timeSpentInCurrentCycle = timePassed % REGEN_DELAY_MS
+                // 3. Пересчитываем стоимость Yap для нового состава пользователей
+                updateStateWithPrice { it }
 
-                initialDelay = REGEN_DELAY_MS - timeSpentInCurrentCycle
-                lastAnchorTime = currentTime - timeSpentInCurrentCycle
-
-                val finalStars = (baseStars + restoredStars).coerceAtMost(max)
-                val finalUsers = savedUsers ?: getInitialUsers()
-                currentState.copy(
-                    users = finalUsers,
-                    currentStars = finalStars,
-                    progress = finalStars.toFloat() / max.toFloat()
-                )
-
-
-            }
-
-            updateStateWithPrice { it }
-
-            if (_state.value.currentStars < _state.value.maxStars) {
-                startEnergyRegeneration(initialDelay)
+                // 4. Запускаем регенерацию, если звезд меньше максимума
+                if (_state.value.currentStars < _state.value.maxStars) {
+                    // startEnergyRegeneration должна внутри себя делать regenJob?.cancel()
+                    startEnergyRegeneration(REGEN_DELAY_MS)
+                }
             }
         }
     }
@@ -401,6 +407,25 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         Log.d("API1", "HandleSendRequest type: $finalType")
         updateStateWithPrice { it.copy(yapType = finalType) }
         sendYap(latitude, longitude)
+    }
+
+
+    fun handleDirectSend(userId: Int, latitude: Double?, longitude: Double?, type: YapType) {
+        Log.d("API1", "Вызов промежуточной функции")
+        viewModelScope.launch {
+            // 1. Временно активируем только этого пользователя для корректного расчета цены
+            _state.update { currentState ->
+                currentState.copy(
+                    users = currentState.users.map { it.copy(isYapActive = it.id == userId) },
+                    yapType = type
+                )
+            }
+            updateStateWithPrice { it }
+
+            // 2. Вызываем стандартную отправку
+            sendYap(latitude, longitude)
+            Log.d("API1", "Начало отправки")
+        }
     }
 
     private fun startEnergyRegeneration(initialDelay: Long = REGEN_DELAY_MS) {

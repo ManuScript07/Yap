@@ -1,10 +1,13 @@
 package com.example.yap.ui.components
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -22,25 +25,32 @@ import com.example.yap.R
 import com.example.yap.data.model.UserItem
 import com.example.yap.ui.theme.LocalAdditionColors
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun YapActionButton(
     user: UserItem,
-    onYapClick: (Int) -> Unit
+    onYapClick: (Int) -> Unit,
+    onLongYapClick: ((Int) -> Unit)? = null, // Опциональный лонг-пресс
+    modifier: Modifier = Modifier,
+    baseScale: Float = 1f
 ) {
-    val iconTint = if (user.isYapActive) Color.Black else LocalAdditionColors.current.secondTextColor
+    val iconTint = if (user.isYapActive) Color.Black
+    else LocalAdditionColors.current.secondTextColor
+
     Box(
-        modifier = Modifier
-            .height(32.dp)
-            .width(64.dp)
-            .clip(RoundedCornerShape(16.dp))
+        modifier = modifier
+            .height(32.dp * baseScale)
+            .width(64.dp * baseScale)
+            .clip(RoundedCornerShape(16.dp * baseScale))
             .background(
                 if (user.isYapActive) LocalAdditionColors.current.darkYapButtonBackgroundColor
                 else LocalAdditionColors.current.disabledYabBackgroundColor
             )
-            .clickable(
+            .combinedClickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = ripple(bounded = true),
-                onClick = { onYapClick(user.id) }
+                onClick = { onYapClick(user.id) },
+                onLongClick = onLongYapClick?.let { { it(user.id) } }
             ),
         contentAlignment = Alignment.Center
     ) {
@@ -48,7 +58,7 @@ fun YapActionButton(
             painter = painterResource(id = R.drawable.yap_button_text),
             contentDescription = "YAP Logo",
             tint = iconTint,
-//            modifier = Modifier.size(width = 44.dp, height = 20.dp) // Подбери размер под SVG
+            modifier = Modifier.padding(horizontal = 8.dp * baseScale)
         )
     }
 }

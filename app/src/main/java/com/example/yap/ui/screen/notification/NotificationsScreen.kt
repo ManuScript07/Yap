@@ -1,33 +1,21 @@
 package com.example.yap.ui.screen.notification
 
 
+import android.annotation.SuppressLint
+import android.content.Context
+import android.location.Location
+import android.util.Log
+import androidx.activity.ComponentActivity
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.minimumInteractiveComponentSize
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
-import androidx.compose.material3.rememberTopAppBarState
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -40,27 +28,35 @@ import com.example.yap.ui.theme.LocalAdditionColors
 import com.example.yap.ui.theme.LocalBaseScale
 import com.example.yap.util.compose.StatusBarIconsColor
 import com.example.yap.util.compose.rememberLambda
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.LoadingIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.ui.platform.LocalContext
+import com.example.yap.ui.screen.home.HomeViewModel
+import com.example.yap.ui.screen.home.YapType
+import com.example.yap.ui.screen.home.fetchLocationAndSendYap
+import com.google.android.gms.location.LocationServices
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+
+// Убедись, что нет импорта PullToRefreshBox, если он подчеркнут
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NotificationsScreen(
     onBack: () -> Unit,
     onNavigateToProfile: (Int) -> Unit,
-    viewModel: NotificationsViewModel = viewModel()
+    viewModel: NotificationsViewModel = viewModel(),
+    @SuppressLint("ContextCastToActivity") homeViewModel: HomeViewModel = viewModel(LocalContext.current as ComponentActivity)
 ) {
     StatusBarIconsColor(isLight = true)
 
     val state by viewModel.state.collectAsState()
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
     val baseScale = LocalBaseScale.current
+    val context = LocalContext.current
 
     val guardedNavigateToProfile = rememberLambda<Int> { userId ->
         onNavigateToProfile(userId)
     }
 
-    val pullToRefreshState = rememberPullToRefreshState()
+
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -101,58 +97,17 @@ fun NotificationsScreen(
             )
         }
     ) { innerPadding ->
-        PullToRefreshBox(
-            isRefreshing = state.isRefreshing,
-            onRefresh = { viewModel.refresh() },
-            state = pullToRefreshState,
+        // Используем Box для наложения индикатора поверх списка
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(top = innerPadding.calculateTopPadding()),
-            indicator = {
-                // Кастомный контейнер для твоего Expressive LoadingIndicator
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .graphicsLayer {
-                            // Читаем state здесь (0 рекомпозиций)
-                            val fraction = pullToRefreshState.distanceFraction.coerceIn(0f, 1f)
-
-                            // Максимальное пространство, которое откроется сверху (например, 80dp)
-                            val maxShiftPx = 80.dp.toPx()
-
-                            // Центрируем индикатор в открывающемся пространстве
-                            translationY = (fraction * maxShiftPx) / 2f
-
-                            // Плавное проявление
-                            alpha = fraction
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (state.isRefreshing) {
-                        // Индетерминантный режим (анимация загрузки)
-                        LoadingIndicator()
-                    } else {
-                        // Детерминантный режим (морфинг в зависимости от натяжения)
-                        // Передаем лямбду progress = { ... }, чтобы избежать рекомпозиций!
-                        LoadingIndicator(
-                            progress = { pullToRefreshState.distanceFraction.coerceIn(0f, 1f) }
-                        )
-                    }
-                }
-            }
+                .padding(top = innerPadding.calculateTopPadding())
         ) {
             LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer {
-                        // Физически оттягиваем сам список вниз вместе с пальцем.
-                        // Опять же: чтение distanceFraction внутри graphicsLayer не вызывает лагов.
-                        val maxShiftPx = 80.dp.toPx()
-                        translationY = pullToRefreshState.distanceFraction * maxShiftPx
-                    },
+                modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
                     top = 12.dp * baseScale,
-                    bottom = innerPadding.calculateBottomPadding() + (20.dp * baseScale)
+                    bottom = 20.dp * baseScale
                 )
             ) {
                 items(
@@ -163,12 +118,46 @@ fun NotificationsScreen(
                         item = notification,
                         onDelete = { viewModel.deleteNotification(notification.id) },
                         onMute = { viewModel.muteNotification(notification.id) },
-                        onYapClick = {},
+                        onYapClick = { userId ->
+                            viewModel.toggleUserQuickList(notification.user)
+                        },
+                        onYapSend = { userId ->
+                            fetchLocationAndSendDirectYap(
+                                context = context,
+                                viewModel = homeViewModel,
+                                userId = userId,
+                                messageType = YapType.YAP
+                            )
+                        },
                         onLocationClick = {},
                         onNavigateToProfile = guardedNavigateToProfile,
+
                     )
                 }
             }
+
         }
+    }
+}
+
+
+@SuppressLint("MissingPermission")
+fun fetchLocationAndSendDirectYap(
+    context: Context,
+    viewModel: HomeViewModel,
+    userId: Int,
+    messageType: YapType
+) {
+    Log.d("API1", "Нажатие")
+    val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
+
+    fusedLocationClient.lastLocation.addOnSuccessListener { location: Location? ->
+        // Вызываем новый метод handleDirectSend, который мы создали в пункте 1
+        viewModel.handleDirectSend(
+            userId = userId,
+            latitude = location?.latitude,
+            longitude = location?.longitude,
+            type = messageType
+        )
     }
 }

@@ -1,22 +1,27 @@
 package com.example.yap.ui.screen.notification
 
-import androidx.lifecycle.ViewModel
+import UserPreferences
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.yap.R
 import com.example.yap.data.model.UserItem
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-class NotificationsViewModel : ViewModel() {
+class NotificationsViewModel(application: Application) : AndroidViewModel(application) {
 
+    private val energyPrefs = UserPreferences(application)
     private val _state = MutableStateFlow(NotificationsUiState())
     val state: StateFlow<NotificationsUiState> = _state.asStateFlow()
 
     init {
         loadNotifications()
+        observeUsersAndNotifications()
     }
 
     private fun loadNotifications() {
@@ -123,12 +128,63 @@ class NotificationsViewModel : ViewModel() {
         }
     }
 
-    // В NotificationsViewModel добавить:
-    fun refresh() {
+    // В NotificationsViewModel
+
+
+
+    private fun observeUsersAndNotifications() {
         viewModelScope.launch {
-            _state.update { it.copy(isRefreshing = true) }
-            loadNotifications() // Твоя функция загрузки
-            _state.update { it.copy(isRefreshing = false) }
+            energyPrefs.usersData.collect { persistedUsers ->
+                val usersList = persistedUsers ?: emptyList()
+
+                _state.update { currentState ->
+                    val updatedNotifications = currentState.notifications.map { notif ->
+                        // Проверяем, есть ли этот пользователь в быстром списке на главном экране
+                        val userInQuickList = usersList.find { it.id == notif.user.id }
+
+                        notif.copy(
+                            user = notif.user.copy(
+                                // Если пользователь в списке — кнопка активна
+                                isYapActive = userInQuickList != null
+                            )
+                        )
+                    }
+                    currentState.copy(notifications = updatedNotifications)
+                }
+            }
+        }
+    }
+
+    private fun getInitialNotifications(realUsers: List<UserItem>) {
+        // Создаем заглушки, но проверяем их статус по реальному списку пользователей
+        val mocks = listOf(
+            NotificationItemModel(
+                id = 1,
+                user = realUsers.find { it.id == 1 } ?: UserItem(1, "ReadHotChilliLiza", false, R.drawable.avatar_1),
+                messageText = "Отправила Yap",
+                timestamp = "12:00",
+                timeAgo = "56 минут назад"
+            ),
+            // ... остальные заглушки
+        )
+        _state.update { it.copy(notifications = mocks) }
+    }
+
+    fun toggleUserQuickList(userFromNotification: UserItem) {
+        viewModelScope.launch {
+            val currentUsers = energyPrefs.usersData.first() ?: emptyList()
+            val isAlreadyInList = currentUsers.any { it.id == userFromNotification.id }
+
+            val updatedUsers = if (isAlreadyInList) {
+                // Если есть — удаляем (Remove)
+                currentUsers.filter { it.id != userFromNotification.id }
+            } else {
+                // Если нет — добавляем (Add) и сразу ставим активным
+                currentUsers + userFromNotification.copy(isYapActive = true)
+            }
+
+            energyPrefs.saveUsers(updatedUsers)
+            // Стейт обновится через observeUsersAndNotifications автоматически
         }
     }
 }
