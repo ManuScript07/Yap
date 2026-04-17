@@ -208,7 +208,7 @@ fun MainYapButton(
 
                 if (!viewModel.isNetworkAvailable()) {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    viewModel.showAlert("Нет интернета", durationMs = 1000)
+                    viewModel.showAlert(resId = R.string.no_internet, durationMs = 1000)
                     delay(200)
                     viewModel.resetYapButton()
                     return@LaunchedEffect
@@ -218,9 +218,9 @@ fun MainYapButton(
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
 
                     if (state.yapPrice == 0) {
-                        viewModel.showAlert("Выберите получателей", durationMs = 1000)
+                        viewModel.showAlert(resId = R.string.select_recipients, durationMs = 1000)
                     } else {
-                        viewModel.showAlert("Недостаточно звезд!", durationMs = 1000)
+                        viewModel.showAlert(resId = R.string.not_enough_stars, durationMs = 1000)
                     }
 
                     delay(200)
@@ -274,7 +274,7 @@ fun MainYapButton(
                 if (activity?.isChangingConfigurations == false) {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 }
-                viewModel.showAlert(message = "Нажмите YAP, чтобы отправить", canClose = false)
+                viewModel.showAlert(resId = R.string.press_yap, canClose = false)
             }
 
             YapButtonState.FIRING -> {

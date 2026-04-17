@@ -38,13 +38,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val _state = MutableStateFlow(
         HomeUiState(
             users = getInitialUsers(),
-//            currentAlertMessage = "Привет, познакомися?)",
         )
     )
     val state: StateFlow<HomeUiState> = _state.asStateFlow()
     private var alertJob: Job? = null
     private var regenJob: Job? = null
-    private var transcriptionJob: Job? = null
     private var isActivatingLocation = false
     private var lastAnchorTime: Long = 0L
 
@@ -54,7 +52,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         loadPersistedData()
 
         viewModelScope.launch {
-//            transcriptionService.initModel()
         }
     }
     companion object {
@@ -91,7 +88,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
             val currentTime = System.currentTimeMillis()
 
-            // Объявляем переменную ЗАРАНЕЕ с дефолтным значением
             var initialDelay = REGEN_DELAY_MS
 
             _state.update { currentState ->
@@ -107,7 +103,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 }
 
-                // Вычисляем задержку здесь, она запишется в переменную выше
                 val timePassed = currentTime - savedTime
                 val restoredStars = (timePassed / REGEN_DELAY_MS).toInt()
                 val timeSpentInCurrentCycle = timePassed % REGEN_DELAY_MS
@@ -128,14 +123,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
             updateStateWithPrice { it }
 
-            // Теперь initialDelay виден здесь
             if (_state.value.currentStars < _state.value.maxStars) {
                 startEnergyRegeneration(initialDelay)
             }
         }
     }
 
-    // 2. ОБНОВЛЯЕМ ВЫБОР И ПЕРЕСЧИТЫВАЕМ ЦЕНУ
     fun toggleUserYap(userId: Int) {
         updateStateWithPrice { currentState ->
             val updatedUsers = currentState.users.map {
@@ -156,7 +149,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             val newUser = UserItem(newId, "User $newId", false, randomAvatar)
 
             val updatedList = currentState.users + newUser
-            saveUsersToStore(updatedList) // Сохраняем
+            saveUsersToStore(updatedList)
 
             currentState.copy(users = updatedList)
         }
@@ -164,12 +157,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun removeUser(userId: Int) {
-        // Используем нашу защищенную функцию с пересчетом
         updateStateWithPrice { currentState ->
             val updatedUsers = currentState.users.filter { it.id != userId }
             saveUsersToStore(updatedUsers)
-            // Логика: если мы удаляем юзера, он автоматически перестает быть получателем.
-            // updateStateWithPrice сама вызовет calculatePrice для нового списка.
+
             currentState.copy(users = updatedUsers)
         }
     }
@@ -194,7 +185,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
         _state.update { it.copy(isLocationEnabled = isEnabled) }
 
-        // Сбрасываем флаг через секунду, когда GPS точно проснется
         if (isManualAction) {
             viewModelScope.launch {
                 delay(1000)
@@ -203,12 +193,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // Добавь проверку для защиты
-//    fun shouldDisableLocation(isAvailable: Boolean): Boolean {
-//        return !isAvailable && !isActivatingLocation
-//    }
 
-    // Функция для показа нового сообщения
+
     fun showAlert(
         message: String? = null,
         @StringRes resId: Int? = null,
@@ -217,20 +203,19 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     ) {
         alertJob?.cancel()
 
-        val newId = System.currentTimeMillis() // Генерируем уникальный ключ
+        val newId = System.currentTimeMillis()
 
         _state.update { it.copy(
             currentAlertMessage = message,
             currentAlertResource = resId,
             canCloseMessage = canClose,
             isEmojiOnly = false,
-            alertId = newId // Сохраняем его в стейт
+            alertId = newId
         ) }
 
         if (durationMs != null) {
             alertJob = viewModelScope.launch {
                 delay(durationMs)
-                // ПРОВЕРКА: удаляем только если ID совпадает
                 if (_state.value.alertId == newId) {
                     dismissMessage()
                 }
@@ -238,7 +223,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // Функция для скрытия (вызывается при клике на крестик)
     fun dismissMessage() {
         alertJob?.cancel()
         updateStateWithPrice { currentState ->
@@ -251,11 +235,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // Самый гибкий вариант
     fun toggleEmojiPicker(open: Boolean) {
         _state.update { it.copy(
             isEmojiPickerOpen = open,
-            // Если открываем эмодзи, чат ОБЯЗАН закрыться
             isChatPickerOpen = if (open) false else it.isChatPickerOpen
         ) }
     }
@@ -268,15 +250,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         updateStateWithPrice { currentState ->
             val currentContent = currentState.currentAlertMessage ?: ""
 
-            // Вспомогательные расчеты
-            val wasEmojiOnly = currentContent.isEmojiOnly() // твоя функция расширения
-            val currentCount = currentContent.countGraphemeClusters() // твоя функция счета
+            val wasEmojiOnly = currentContent.isEmojiOnly()
+            val currentCount = currentContent.countGraphemeClusters()
 
             when {
-                // Лимит 5 эмодзи — ничего не меняем
                 wasEmojiOnly && currentCount >= 5 -> currentState
 
-                // Был текст — заменяем его на первый эмодзи
                 !wasEmojiOnly && currentContent.isNotEmpty() -> {
                     currentState.copy(
                         currentAlertMessage = emoji,
@@ -287,7 +266,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 }
 
-                // Добавляем эмодзи к существующим или в пустую строку
                 else -> {
                     val newContent = currentContent + emoji
                     val newCount = currentCount + 1
@@ -296,7 +274,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         userGeneratedContent = newContent,
                         isEmojiOnly = true,
                         yapType = YapType.EMOJI,
-                        // Автоматически закрываем пикер, если набрали 5
                         isEmojiPickerOpen = newCount < 5,
                         canCloseMessage = true
                     )
@@ -337,7 +314,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         val pricePerUser = when (type) {
             YapType.EMOJI -> PRICE_EMOJI
             YapType.TEXT -> PRICE_TEXT
-            YapType.VOICE -> PRICE_VOICE // Добавь константу, например 5 или 10 звезд
+            YapType.VOICE -> PRICE_VOICE
             YapType.YAP -> PRICE_SIMPLE_YAP
         }
         return selectedCount * pricePerUser
@@ -345,8 +322,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
 
 
-    // 3. ОТПРАВКА YAP И СПИСАНИЕ ЗВЕЗД
-    // 3. ОТПРАВКА YAP И СПИСАНИЕ ЗВЕЗД
     fun sendYap(latitude: Double?, longitude: Double?) {
         viewModelScope.launch {
             Log.d("API1","Старт")
@@ -358,20 +333,16 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
 
-            // --- 1. СИНХРОНИЗАЦИЯ: ПРОВЕРКА И ОЖИДАНИЕ ФАЙЛА ---
             if (initialState.yapType == YapType.VOICE) {
-                // Если recordStartDate не null, значит stopVoiceRecording еще висит в delay(250)
                 if (_state.value.recordStartDate != null) {
                     Log.d("API1", "Ожидание формирования аудиофайла...")
                     var waitCount = 0
-                    // Ждем, пока stopVoiceRecording не закончит работу (максимум 1 секунду)
                     while (_state.value.recordStartDate != null && waitCount < 20) {
                         delay(50)
                         waitCount++
                     }
                 }
 
-                // Теперь берем СВЕЖИЙ стейт, в котором stopVoiceRecording уже прописал voiceAudioUri
                 val freshState = _state.value
                 val file = freshState.voiceAudioUri?.let { File(it) }
 
@@ -382,7 +353,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
 
-            // --- ОБНОВЛЯЕМ ПЕРЕМЕННЫЕ ИЗ АКТУАЛЬНОГО СТЕЙТА ---
             val state = _state.value
             val currentYapType = state.yapType
             val audioPath = state.voiceAudioUri
@@ -397,10 +367,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     startEnergyRegeneration(REGEN_DELAY_MS)
                 }
 
-                // --- 2. МГНОВЕННАЯ ОТПРАВКА ---
                 when (currentYapType) {
                     YapType.VOICE -> {
-                        // Файл гарантированно готов, а расшифровка УЖЕ запущена в фоне!
                         val currentText = _state.value.transcribedText ?: "[Голосовое сообщение...]"
                         Log.d("API1", "МГНОВЕННАЯ ОТПРАВКА ГОЛОСА: $audioPath")
                         Log.d("API1", "Текущий текст (может быть пустым): $currentText")
@@ -413,7 +381,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
 
-                // --- 3. МГНОВЕННЫЙ СБРОС UI ---
                 saveEnergyToStore(newStars, lastAnchorTime)
                 dismissMessage()
                 resetYapButton()
@@ -424,7 +391,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 ) }
 
             } else {
-                showAlert("Недостаточно звезд!", durationMs = 2000)
+                showAlert(resId = R.string.not_enough_stars, durationMs = 2000)
                 resetYapButton()
             }
         }
@@ -436,7 +403,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         sendYap(latitude, longitude)
     }
 
-    // 4. ТАЙМЕР РЕГЕНЕРАЦИИ ЗВЕЗД
     private fun startEnergyRegeneration(initialDelay: Long = REGEN_DELAY_MS) {
         regenJob?.cancel()
         regenJob = viewModelScope.launch {
@@ -454,7 +420,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
                     lastAnchorTime = System.currentTimeMillis()
 
-                    // Сохраняем новые данные в DataStore
                     saveEnergyToStore(newStars, lastAnchorTime)
 
                     _state.update { state ->
@@ -464,8 +429,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         )
                     }
 
-                    // ИСПРАВЛЕНИЕ 2: Если достигли 100 - убиваем таймер.
-                    // Он не должен работать в фоне!
                     if (newStars >= max) {
                         regenJob?.cancel()
                         break
@@ -495,7 +458,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         val isStillRecording = newState == YapButtonState.RECORDING || newState == YapButtonState.LOCKED
 
         if (wasRecording && !isStillRecording) {
-            // Обязательно вызываем стоп, куда бы мы ни ушли
             stopVoiceRecording()
         }
     }
@@ -537,7 +499,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
 
-//            voiceManager.stopRecording()
             delay(250)
 
             val path = voiceManager.currentRecordPath
@@ -567,8 +528,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun toggleVoicePlayback() {
-        // Мы не меняем стейт здесь вручную,
-        // доверяем это коллбэкам от com.example.yap.data.manager.VoiceManager
         viewModelScope.launch {
             voiceManager.playPausePlayback(
                 onStateChanged = { isPlaying ->
@@ -601,8 +560,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 totalDurationMs = 0L,
                 recordStartDate = null,
                 yapOffsetY = 0f,
-                // Если транскрибация идет — оставляем URI, чтобы runTranscription достучался до файла
-                // Если нет — чистим, чтобы не было "призраков" старых записей
                 voiceAudioUri = null,
                 didOverrideMessage = false,
                 isPlayingVoice = false,
@@ -616,6 +573,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(
             currentAlertMessage = if (it.yapType == YapType.TEXT || it.yapType == YapType.EMOJI)
                 it.userGeneratedContent else null,
+            currentAlertResource = null,
             canCloseMessage = it.yapType == YapType.TEXT || it.yapType == YapType.EMOJI
         ) }
     }
@@ -634,7 +592,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(isSystemAlertOverridden = overridden) }
     }
 
-    // В HomeViewModel.kt
     fun finishRecordingAndGoToReview() {
         val currentState = _state.value
 
@@ -642,23 +599,14 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         if (currentState.yapButtonState == YapButtonState.RECORDING ||
             currentState.yapButtonState == YapButtonState.LOCKED) {
 
-            // 1. Физически останавливаем запись через менеджер
-//            voiceManager.stopRecording()
-//            val finalPath = voiceManager.currentRecordPath
+
             updateYapButtonState(YapButtonState.REVIEW)
             updateYapOffsetY(0f)
-            // 2. Атомарно обновляем стейт через наш метод с пересчетом цены
             _state.update { it.copy(
-//                yapButtonState = YapButtonState.REVIEW,
-                yapType = YapType.VOICE, // Гарантируем тип VOICE для цены
-//                voiceAudioUri = finalPath,
-//                yapOffsetY = 0f,
+                yapType = YapType.VOICE,
                 currentAlertMessage = "Запись сохранена. Нажмите YAP для отправки",
                 canCloseMessage = false
             ) }
-
-            // Вибрируем, так как это важный переход
-            // (Если есть доступ к haptic во ViewModel, если нет — оставим в LaunchedEffect)
         }
     }
 
@@ -669,27 +617,18 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         val startTime = state.recordStartDate
 
         val duration = if (startTime != null) {
-            // Запись еще считается "активной" в памяти
             System.currentTimeMillis() - startTime
         } else {
-            // Запись уже завершена методом stopVoiceRecording
             state.totalDurationMs
         }
 
         Log.d("API1", "Проверка длительности: $duration мс (startTime был $startTime)")
-        return duration > 600 // Увеличим порог до 600мс для надежности
+        return duration > 600
     }
 
-    // В HomeViewModel
-    fun isVoiceRecordReady(): Boolean {
-        val state = _state.value
-        // Если recordStartDate еще не null, значит stopVoiceRecording еще в процессе выполнения
-        // Нам нужно дождаться, пока он станет null
-        return state.recordStartDate == null && state.voiceAudioUri != null
-    }
 
     fun cancelVoiceRecording() {
-        voiceManager.cancelRecording() // Удаляет файл физически
+        voiceManager.cancelRecording()
         resetYapButton()
     }
 
@@ -701,11 +640,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
 
     private fun runTranscription(file: File) {
-        // Отменяем старую расшифровку, если пользователь начал записывать новый "яп"
-//        transcriptionJob?.cancel()
 
         viewModelScope.launch(Dispatchers.IO) {
-            // Устанавливаем флаг загрузки, но это теперь не блокирует кнопку Send
             _state.update { it.copy(isTranscribing = true, transcribedText = null) }
 
             Log.d("STT1", "Начинаем расшифровку файла: ${file.name} (${file.length()} байт)")
@@ -714,8 +650,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 .onSuccess { text ->
                     Log.d("STT1", "Groq успешно вернул текст: $text")
 
-                    // Обновляем состояние. Если пользователь еще не нажал Send,
-                    // при нажатии он подтянет этот готовый текст.
+
                     _state.update { it.copy(
                         transcribedText = text,
                         isTranscribing = false
@@ -727,8 +662,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     // repository.updateMessageText(lastMessageId, text)
                 }
                 .onFailure { error ->
-                    // Если интернета нет, Groq упадет сюда.
-                    // Интерфейс при этом не зависнет, просто текст останется null.
                     Log.e("STT1", "Ошибка расшифровки (возможно, нет сети): ${error.message}")
                     _state.update { it.copy(isTranscribing = false) }
                 }

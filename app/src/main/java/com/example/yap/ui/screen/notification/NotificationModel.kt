@@ -1,19 +1,20 @@
 package com.example.yap.ui.screen.notification
 
 import androidx.compose.runtime.Immutable
+import com.example.yap.data.model.UserItem
 
 @Immutable
-data class NotificationModel(
-    val id: String,
-    val avatarRes: Int, // R.drawable...
-    val nickname: String,
-    val messageText: String, // "Отправила Yap", "Всё хорошо?", "Отправила ❤️"
+data class NotificationItemModel(
+    val id: Int,
+    val user: UserItem,
+    val messageText: String? = null,
     val hasLocation: Boolean = false,
     val timeAgo: String,
-    val isYapActive: Boolean = false // Желтая или серая кнопка
+    val timestamp: String,
 )
 
 data class NotificationsUiState(
-    val notifications: List<NotificationModel> = emptyList(),
-    val isLoading: Boolean = false
+    val notifications: List<NotificationItemModel> = emptyList(),
+    val isLoading: Boolean = false,
+    val isRefreshing: Boolean = false
 )

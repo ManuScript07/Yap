@@ -214,7 +214,14 @@ fun NavigationApp() {
 
                             composable(AppDestinations.NOTIFICATIONS) {
                                 NotificationsScreen(
-                                    onBack = { safePopBackStack(navControllers[screen]) }
+                                    onBack = { safePopBackStack(navControllers[screen]) },
+                                    onNavigateToProfile = { userId ->
+                                        safeNavigate(
+                                            controller = navControllers[screen],
+                                            route = AppDestinations.createProfileRoute(userId),
+                                            lockState = navLockTime
+                                        )
+                                    }
                                 )
                             }
                             userProfileComposable(navControllers[screen])

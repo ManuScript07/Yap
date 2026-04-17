@@ -130,6 +130,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.yap.R
 import com.example.yap.data.model.UserItem
 import com.example.yap.ui.components.MainYapButton
+import com.example.yap.ui.components.YapActionButton
 import com.example.yap.ui.theme.LocalAdditionColors
 import com.example.yap.ui.theme.LocalBaseScale
 import com.example.yap.util.LocationHelper
@@ -168,7 +169,7 @@ fun HomeScreen(
     ) { isGranted ->
         viewModel.resetYapButton()
         if (!isGranted) {
-            viewModel.showAlert("Нужно разрешение на микрофон", durationMs = 2000)
+            viewModel.showAlert(resId = R.string.mic_permission, durationMs = 2000)
         }
     }
 
@@ -190,7 +191,6 @@ fun HomeScreen(
         }
     }
 
-    // Следим за выключением GPS извне (шторка)
     DisposableEffect(context) {
         val filter = IntentFilter(LocationManager.PROVIDERS_CHANGED_ACTION)
         val receiver = object : BroadcastReceiver() {
@@ -209,7 +209,6 @@ fun HomeScreen(
     }
 
     // --- 2. ЖИЗНЕННЫЙ ЦИКЛ (На случай возврата из настроек) ---
-    // Добавляем state.isLocationEnabled в ключи (keys), чтобы эффект видел актуальное состояние
     DisposableEffect(lifecycleOwner, state.isLocationEnabled) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
@@ -257,17 +256,15 @@ fun HomeScreen(
             onAddUserClick = { viewModel.addUser() },
             onRemoveUserClick = { id -> viewModel.removeUser(id) },
             content = { innerPadding ->
-                // В контенте передаем логику тумблера и отправки
                 HomeContent(
                     innerPadding = innerPadding,
                     viewModel = viewModel,
                     onLocationToggle = { isChecked ->
                         if (isChecked) {
-                            // ВЫЗЫВАЕМ НОВУЮ ЛОГИКУ
                             handleLocationActivation(
                                 context = context,
                                 permissionLauncher = locationPermissionLauncher,
-                                gpsLauncher = gpsResolverLauncher, // Добавили новый лаунчер
+                                gpsLauncher = gpsResolverLauncher,
                                 viewModel = viewModel
                             )
                         } else {
@@ -291,22 +288,18 @@ private fun handleLocationActivation(
     gpsLauncher: ManagedActivityResultLauncher<IntentSenderRequest, ActivityResult>,
     viewModel: HomeViewModel
 ) {
-    // 1. Проверяем разрешения
     val hasFineLocation = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
     val hasCoarseLocation = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
 
     if (hasFineLocation || hasCoarseLocation) {
-        // 2. Разрешения есть, проверяем включен ли физический GPS
         checkLocationSettings(
             context = context,
             onEnabled = { viewModel.setLocationToggle(true) },
             onShowResolver = { exception ->
-                // Включаем системное окно "Хотите включить геолокацию?"
                 gpsLauncher.launch(IntentSenderRequest.Builder(exception.resolution).build())
             },
             onFailure = {
                 viewModel.setLocationToggle(false)
-//                viewModel.showAlert("Ошибка проверки GPS", durationMs = 2000)
             }
         )
     } else {
@@ -340,7 +333,6 @@ fun HomeUsersBottomSheet(
             topStart = 28.dp * baseScale,
             topEnd = 28.dp * baseScale
         ),
-// Включаем или выключаем свайп (по умолчанию true)
         sheetSwipeEnabled = true,
         sheetDragHandle = {
             Box(
@@ -454,22 +446,17 @@ fun UserListItem(
     var showMenu by rememberSaveable { mutableStateOf(false) }
     val baseScale = LocalBaseScale.current
 
-    // Основной контейнер
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            // Сначала вешаем клик, чтобы он занял ВПЕРЕДИ всю доступную ширину
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = ripple(bounded = true), // Эффект от края до края
                 onClick = { onUserClick(user.id) }
             )
-            // Теперь добавляем падинги. Горизонтальные — только внутри,
-            // чтобы ripple игнорировал их и рисовал до краев.
             .padding(horizontal = 16.dp, vertical = 6.dp * baseScale),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // --- АВАТАР ---
         Image(
             painter = painterResource(user.avatarRes),
             contentDescription = null,
@@ -481,7 +468,6 @@ fun UserListItem(
 
         Spacer(modifier = Modifier.width(14.dp))
 
-        // --- ИМЯ ---
         Text(
             text = user.name,
             modifier = Modifier.weight(1f),
@@ -492,35 +478,12 @@ fun UserListItem(
             overflow = TextOverflow.Ellipsis
         )
 
-        // --- КНОПКА YAP ---
-        val iconTint = if (user.isYapActive) Color.Black else LocalAdditionColors.current.secondTextColor
-        Box(
-            modifier = Modifier
-                .height(35.dp)
-                .width(64.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(
-                    if (user.isYapActive) LocalAdditionColors.current.darkYapButtonBackgroundColor
-                    else LocalAdditionColors.current.disabledYabBackgroundColor
-                )
-                // Отдельный clickable для кнопки, чтобы не срабатывал переход в профиль
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = ripple(bounded = true),
-                    onClick = { onYapClick(user.id) }
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                painter = painterResource(id = R.drawable.yap_button_text),
-                contentDescription = "YAP Logo",
-                tint = iconTint,
-            )
-        }
-
+        YapActionButton(
+            user = user,
+            onYapClick = onYapClick
+        )
         Spacer(modifier = Modifier.width(8.dp))
 
-        // --- МЕНЮ ---
         Box(contentAlignment = Alignment.Center) {
             IconButton(
                 onClick = { showMenu = true },
@@ -556,7 +519,6 @@ fun DeleteUserPopup(
         with(density) { ((-110).dp * baseScale).toPx().toInt() }
     }
 
-    // Состояние для анимации
     var isAnimatedVisible by remember { mutableStateOf(false) }
     LaunchedEffect(isVisible) { isAnimatedVisible = isVisible }
 
@@ -567,8 +529,6 @@ fun DeleteUserPopup(
             offset = IntOffset(x = offsetX, y = 0),
             properties = PopupProperties(focusable = true)
         ) {
-            // ФИКСИРУЕМ ОБЛАСТЬ: Popup больше не будет прыгать,
-            // так как его размер сразу 248x56
             Box(
                 modifier = Modifier.size(
                     width = 248.dp * baseScale,
@@ -585,12 +545,7 @@ fun DeleteUserPopup(
                 ) {
                     Surface(
                         modifier = Modifier
-                            .fillMaxSize() // Заполняем уже готовый Box
-//                            .graphicsLayer {
-//                                this.shadowElevation = 8.dp.toPx()
-//                                this.shape = RoundedCornerShape(18.dp * baseScale)
-//                                this.clip = true
-//                            }
+                            .fillMaxSize()
                             .clickable {
                                 onDeleteClick()
                                 onDismiss()
@@ -674,13 +629,7 @@ fun HomeContent(
     val state by viewModel.state.collectAsState()
     val baseScale = LocalBaseScale.current
     val context = LocalContext.current
-    // 🌟 ГЛАВНЫЙ BOX-ОВЕРЛЕЙ 🌟
-    // Он занимает весь экран. Ничто внутри него не может "раздвинуть" экран.
     Box(modifier = Modifier.fillMaxSize()) {
-
-        // ==========================================
-        // СЛОЙ 1: ОСНОВНОЙ ИНТЕРФЕЙС
-        // ==========================================
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -811,7 +760,6 @@ fun fetchLocationAndSendYap(
             viewModel.handleSendRequest(location.latitude, location.longitude, messageType)
         } else {
             Log.e("YAP_LOCATION", "⚠️ Локация равна null (GPS еще не поймал спутники)")
-            // Можно отправить без локации, либо показать Alert
             viewModel.handleSendRequest(null, null, messageType)
             viewModel.showAlert(resId = R.string.failed_location, durationMs = 3000, canClose = false)
         }
@@ -820,18 +768,15 @@ fun fetchLocationAndSendYap(
 
 @Composable
 fun InfoMessage(
-    message: String?,          // Прямая строка (из ввода или API)
-    messageResId: Int?,        // ID из ресурсов (R.string...)
+    message: String?,
+    messageResId: Int?,
     isEmojiOnly: Boolean,
     showCloseIcon: Boolean,
     onClose: () -> Unit,
     baseScale: Float
 ) {
-    // 1. Получаем итоговый текст.
-    // Если есть прямая строка — берем её, если нет — тянем из ресурсов.
     val finalMessage = message ?: messageResId?.let { stringResource(it) } ?: ""
 
-    // 2. Выбираем размеры на основе итогового текста
     val dynamicFontSize = if (isEmojiOnly) (32 * baseScale).sp else (18 * baseScale).sp
     val dynamicLetterSpacing = if (isEmojiOnly) (4 * baseScale).sp else TextUnit.Unspecified
 
@@ -863,7 +808,7 @@ fun InfoMessage(
                     onClick = onClose,
                     modifier = Modifier
                         .align(Alignment.CenterEnd)
-                        .padding(end = 8.dp * baseScale) // Небольшой отступ от края
+                        .padding(end = 8.dp * baseScale)
                         .size(32.dp * baseScale)
                 ) {
                     Icon(
@@ -889,11 +834,9 @@ fun ActionButtonsRow(
     AnimatedContent(
         targetState = state.isEmojiPickerOpen,
         transitionSpec = {
-            // Появление: мягкое увеличение с 85% и плавный Fade
             (fadeIn(animationSpec = tween(220, delayMillis = 90)) +
                     scaleIn(initialScale = 0.85f, animationSpec = tween(220, delayMillis = 90)))
                 .togetherWith(
-                    // Исчезновение: чуть быстрее, уменьшение до 92%
                     fadeOut(animationSpec = tween(150)) +
                             scaleOut(targetScale = 0.92f, animationSpec = tween(150))
                 )
@@ -917,14 +860,14 @@ fun ActionButtonsRow(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     ActionButton(
                         iconRes = R.drawable.baseline_favorite_24,
-                        onClick = { onTogglePicker(true) }, // ViewModel сама закроет чат внутри этой функции
+                        onClick = { onTogglePicker(true) },
                         baseScale = baseScale,
                         shape = RoundedCornerShape(48.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp * baseScale))
                     ActionButton(
                         iconRes = R.drawable.baseline_chat_bubble_24,
-                        onClick = { onToggleChat(!state.isChatPickerOpen) }, // ViewModel сама закроет эмодзи
+                        onClick = { onToggleChat(!state.isChatPickerOpen) },
                         baseScale = baseScale
                     )
                 }
@@ -973,7 +916,6 @@ fun EmojiPickerPanel(
             .height(56.dp * baseScale)
             .background(
                 color = MaterialTheme.colorScheme.primaryContainer,
-                // CircleShape делает края идеально круглыми (как капсула)
                 shape = CircleShape
             )
             .padding(horizontal = 12.dp * baseScale),
@@ -991,15 +933,13 @@ fun EmojiPickerPanel(
             )
         }
 
-        // Уменьшенный крестик
         IconButton(
             onClick = onClose,
-            modifier = Modifier.size(32.dp * baseScale) // Уменьшаем саму кнопку
+            modifier = Modifier.size(32.dp * baseScale)
         ) {
             Icon(
                 imageVector = Icons.Default.Close,
                 contentDescription = null,
-                // Уменьшаем размер самой иконки
                 modifier = Modifier.size(24.dp * baseScale),
                 tint = LocalAdditionColors.current.unselectedColor
             )
@@ -1015,21 +955,19 @@ fun QuickMessagesPanel(
 ) {
     val messages = stringArrayResource(R.array.quick_messages).toList()
 
-    // Используем Card для встроенной поддержки теней и формы
     Card(
         modifier = Modifier
             .width(220.dp * baseScale)
             .padding(bottom = 8.dp * baseScale),
-        shape = RoundedCornerShape(28.dp * baseScale), // Более "круглый" M3 стиль
+        shape = RoundedCornerShape(28.dp * baseScale),
         colors = CardDefaults.cardColors(
-            // Используем контейнер с небольшой прозрачностью для эффекта стекла
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.95f)
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
     ) {
         Column(
             modifier = Modifier
-                .padding(vertical = 8.dp * baseScale) // Внутренние отступы самой панели
+                .padding(vertical = 8.dp * baseScale)
         ) {
             messages.forEach { msg ->
                 Box(
@@ -1037,7 +975,7 @@ fun QuickMessagesPanel(
                         .fillMaxWidth()
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
-                            indication = ripple(), // Современный Material Ripple
+                            indication = ripple(),
                             onClick = { onMessageSelected(msg) }
                         )
                         .padding(vertical = 14.dp * baseScale, horizontal = 20.dp * baseScale)
@@ -1083,11 +1021,10 @@ fun ProgressIndicatorOnly(progress: Float) {
         label = "ProgressCanvas"
     )
 
-    // 1. Бесконечная анимация смещения
     val infiniteTransition = rememberInfiniteTransition(label = "PulseTransition")
     val pulseOffset by infiniteTransition.animateFloat(
-        initialValue = -0.5f, // Начинаем ЗА левым краем
-        targetValue = 1.5f,  // Заканчиваем ЗА правым краем
+        initialValue = -0.5f,
+        targetValue = 1.5f,
         animationSpec = infiniteRepeatable(
             animation = tween(2000, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
@@ -1097,7 +1034,7 @@ fun ProgressIndicatorOnly(progress: Float) {
 
     val trackColor = Color.White.copy(alpha = 0.4f)
     val progressColor = MaterialTheme.colorScheme.primary
-    val pulseColor = Color.White.copy(alpha = 0.6f) // Мягкий белый блик
+    val pulseColor = Color.White.copy(alpha = 0.6f)
 
     Canvas(
         modifier = Modifier
@@ -1109,7 +1046,6 @@ fun ProgressIndicatorOnly(progress: Float) {
         val radius = strokeWidth / 2
         val usableWidth = size.width - (radius * 2)
 
-        // Фон
         drawLine(
             color = trackColor,
             start = Offset(radius, radius),
@@ -1118,18 +1054,13 @@ fun ProgressIndicatorOnly(progress: Float) {
             strokeWidth = strokeWidth
         )
 
-        // Прогресс
         val startX = radius + (if (animatedProgress == 0f) 0.01f else 0f)
         val endX = radius + (usableWidth * animatedProgress)
 
         val progressBrush = if (progress >= 1f) {
-            // КЛЮЧ К ЦИКЛИЧНОСТИ:
-            // Мы создаем градиент, где по краям основной цвет, а в центре — блик.
-            // За счет того, что pulseOffset идет от -0.5 до 1.5,
-            // блик физически покидает видимую область линии до того, как сбросится анимация.
 
             val pulsePosition = radius + (usableWidth * pulseOffset)
-            val blurWidth = usableWidth * 0.3f // Ширина "размытия" блика
+            val blurWidth = usableWidth * 0.3f
 
             Brush.linearGradient(
                 0.0f to progressColor,
@@ -1219,10 +1150,9 @@ fun TopActionBar(
         }
 
 
-        // ОТСТУП 12.dp между уведомлениями и локацией
         Spacer(modifier = Modifier.width(12.dp))
 
-        // 2. ПЕРЕКЛЮЧАТЕЛЬ ЛОКАЦИИ (Теперь он не на весь экран)
+        // 2. ПЕРЕКЛЮЧАТЕЛЬ ЛОКАЦИИ
         Surface(
             modifier = Modifier.height(52.dp),
             shape = RoundedCornerShape(16.dp),
@@ -1240,7 +1170,6 @@ fun TopActionBar(
                     modifier = Modifier.size(38.dp),
                     tint = MaterialTheme.colorScheme.onPrimaryContainer
                 )
-//                Spacer(modifier = Modifier.width(8.dp))
                 Switch(
                     checked = state.isLocationEnabled,
                     onCheckedChange = onLocationToggle,
@@ -1256,10 +1185,8 @@ fun TopActionBar(
             }
         }
 
-        // РЕЗИНОВЫЙ РАЗДЕЛИТЕЛЬ (выталкивает NICE вправо)
         Spacer(modifier = Modifier.weight(1f))
 
-        // 3. КНОПКА NICE (SVG)
         Surface(
             modifier = Modifier
                 .width(112.dp)

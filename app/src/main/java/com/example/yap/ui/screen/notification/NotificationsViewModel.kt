@@ -1,11 +1,14 @@
 package com.example.yap.ui.screen.notification
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.example.yap.R
+import com.example.yap.data.model.UserItem
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 
 class NotificationsViewModel : ViewModel() {
 
@@ -21,33 +24,72 @@ class NotificationsViewModel : ViewModel() {
         _state.update {
             it.copy(
                 notifications = listOf(
-                    NotificationModel("1", R.drawable.avatar_1, "ReadHotChilliLiza", "Отправила Yap", timeAgo = "56 минут назад"),
-                    NotificationModel("2", R.drawable.avatar_2, "ReadHotChilliLiza", "Отправила Yap", timeAgo = "56 минут назад"),
-                    NotificationModel("3", R.drawable.avatar_3, "ReadHotChilliLiza", "Местоположение", hasLocation = true, timeAgo = "56 минут назад", isYapActive = true),
-                    NotificationModel("4", R.drawable.avatar_4, "ReadHotChilliLiza", "Отправила ❤️", timeAgo = "1 час назад"),
-                    NotificationModel("5", R.drawable.avatar_1, "ReadHotChilliLiza", "Всё хорошо?", timeAgo = "вчера"),
-                    NotificationModel("6", R.drawable.avatar_2, "ReadHotChilliLiza", "Отправила Yap", timeAgo = "56 минут назад"),
-                    NotificationModel("7", R.drawable.avatar_2, "ReadHotChilliLiza", "Отправила Yap", timeAgo = "56 минут назад"),
-                    NotificationModel("8", R.drawable.avatar_1, "ReadHotChilliLiza", "Отправила Yap", timeAgo = "56 минут назад"),
-                    NotificationModel("9", R.drawable.avatar_2, "ReadHotChilliLiza", "Отправила Yap", timeAgo = "56 минут назад"),
-                    NotificationModel("10", R.drawable.avatar_3, "ReadHotChilliLiza", "Местоположение", hasLocation = true, timeAgo = "56 минут назад", isYapActive = true),
-                    NotificationModel("11", R.drawable.avatar_4, "ReadHotChilliLiza", "Отправила ❤️", timeAgo = "1 час назад"),
-                    NotificationModel("12", R.drawable.avatar_1, "ReadHotChilliLiza", "Всё хорошо?", timeAgo = "вчера"),
-                    NotificationModel("13", R.drawable.avatar_2, "ReadHotChilliLiza", "Отправила Yap", timeAgo = "56 минут назад"),
-                    NotificationModel("14", R.drawable.avatar_2, "ReadHotChilliLiza", "Отправила Yap", timeAgo = "56 минут назад"),
-                    NotificationModel("15", R.drawable.avatar_1, "ReadHotChilliLiza", "Отправила Yap", timeAgo = "56 минут назад"),
-                    NotificationModel("16", R.drawable.avatar_2, "ReadHotChilliLiza", "Отправила Yap", timeAgo = "56 минут назад"),
-                    NotificationModel("17", R.drawable.avatar_3, "ReadHotChilliLiza", "Местоположение", hasLocation = true, timeAgo = "56 минут назад", isYapActive = true),
-                    NotificationModel("18", R.drawable.avatar_4, "ReadHotChilliLiza", "Отправила ❤️", timeAgo = "1 час назад"),
-                    NotificationModel("19", R.drawable.avatar_1, "ReadHotChilliLiza", "Всё хорошо?", timeAgo = "вчера"),
-                    NotificationModel("20", R.drawable.avatar_2, "ReadHotChilliLiza", "Отправила Yap", timeAgo = "56 минут назад"),
-                    NotificationModel("21", R.drawable.avatar_2, "ReadHotChilliLiza", "Отправила Yap", timeAgo = "56 минут назад")
+                    NotificationItemModel(
+                        id = 1,
+                        user = UserItem(1, "ReadHotChilliLiza", false, R.drawable.avatar_1),
+                        messageText = "Отправила Yap",
+                        timestamp = "12:00",
+                        timeAgo = "56 минут назад"
+                    ),
+                    NotificationItemModel(
+                        id = 2,
+                        user = UserItem(2, "ReadHotChilliLiza", true, R.drawable.avatar_1),
+                        messageText = "Всё хорошо?",
+                        hasLocation = true, // И текст, и локация
+                        timestamp = "11:30",
+                        timeAgo = "вчера"
+                    ),
+                    NotificationItemModel(
+                        id = 3,
+                        user = UserItem(1, "ReadHotChilliLiza", false, R.drawable.avatar_1),
+                        messageText = "Отправила Yap",
+                        timestamp = "12:00",
+                        timeAgo = "56 минут назад"
+                    ),
+                    NotificationItemModel(
+                        id = 4,
+                        user = UserItem(2, "ReadHotChilliLiza", true, R.drawable.avatar_1),
+                        messageText = "Всё хорошо?",
+                        hasLocation = true, // И текст, и локация
+                        timestamp = "11:30",
+                        timeAgo = "вчера"
+                    ),
+                    NotificationItemModel(
+                        id = 5,
+                        user = UserItem(1, "ReadHotChilliLiza", false, R.drawable.avatar_1),
+                        messageText = "Отправила Yap",
+                        timestamp = "12:00",
+                        timeAgo = "56 минут назад"
+                    ),
+                    NotificationItemModel(
+                        id = 6,
+                        user = UserItem(2, "ReadHotChilliLiza", true, R.drawable.avatar_1),
+                        messageText = "Всё хорошо?",
+                        hasLocation = true, // И текст, и локация
+                        timestamp = "11:30",
+                        timeAgo = "вчера"
+                    ),
+                    NotificationItemModel(
+                        id = 7,
+                        user = UserItem(1, "ReadHotChilliLiza", false, R.drawable.avatar_1),
+                        messageText = "Отправила Yap",
+                        timestamp = "12:00",
+                        timeAgo = "56 минут назад"
+                    ),
+                    NotificationItemModel(
+                        id = 8,
+                        user = UserItem(2, "ReadHotChilliLiza", true, R.drawable.avatar_1),
+                        messageText = "Всё хорошо?",
+                        hasLocation = true, // И текст, и локация
+                        timestamp = "11:30",
+                        timeAgo = "вчера"
+                    )
                 )
             )
         }
     }
 
-    fun deleteNotification(id: String) {
+    fun deleteNotification(id: Int) {
         _state.update { currentState ->
             currentState.copy(
                 notifications = currentState.notifications.filter { it.id != id }
@@ -55,7 +97,38 @@ class NotificationsViewModel : ViewModel() {
         }
     }
 
-    fun muteNotification(id: String) {
-        // Логика отключения уведомлений
+    fun muteNotification(notificationId: Int) {
+        _state.update { currentState ->
+            // 1. Находим уведомление, по которому кликнули, чтобы узнать ID пользователя
+            val targetNotification = currentState.notifications.find { it.id == notificationId }
+            val targetUserId = targetNotification?.user?.id
+
+            if (targetUserId != null) {
+                // Новое состояние (инвертируем текущее)
+                val newMuteState = !targetNotification.user.isMuted
+
+                // 2. Обновляем ВСЕ уведомления этого пользователя в списке
+                currentState.copy(
+                    notifications = currentState.notifications.map { notif ->
+                        if (notif.user.id == targetUserId) {
+                            notif.copy(user = notif.user.copy(isMuted = newMuteState))
+                        } else {
+                            notif
+                        }
+                    }
+                )
+            } else {
+                currentState
+            }
+        }
+    }
+
+    // В NotificationsViewModel добавить:
+    fun refresh() {
+        viewModelScope.launch {
+            _state.update { it.copy(isRefreshing = true) }
+            loadNotifications() // Твоя функция загрузки
+            _state.update { it.copy(isRefreshing = false) }
+        }
     }
 }

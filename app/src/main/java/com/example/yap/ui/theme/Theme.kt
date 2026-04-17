@@ -56,7 +56,10 @@ val LightAdditionColors = AdditionalColors(
     popupColor = Color(0xFFA6A6F2),
     darkYapButtonBackgroundColor = Color(0xFFB9D800),
     disabledYabBackgroundColor = Color(0xFFD9D9D9),
-    secondTextColor = Color(0xFF414141)
+    secondTextColor = Color(0xFF414141),
+    headerColor = Color(0xFFE5E9F1),
+    notifText = Color(0xFF74777F),
+    deleteColor = Color(0xFFE57373)
 )
 
 val LocalAdditionColors = staticCompositionLocalOf {

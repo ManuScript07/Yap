@@ -6,5 +6,18 @@
     <string name="not_enough_stars">Недостаточно звёзд</string>
     <string name="failed_location">Не удалось определить локацию</string>
     <string name="hold_to_record">Удерживайте для начала записи</string>
+    <string name="mic_permission">Нужно разрешение на микрофон</string>
+    <string name="no_internet">Нет интернета</string>
+    <string name="select_recipients">Выберите получателе</string>
+    <string name="press_yap">Нажмите YAP, чтобы отправить</string>
+    <string name="connection_lost">Связь потеряна!</string>
+    <string name="short_recording">Запись слишком короткая</string>
+    <string name="pinned">Запись закреплена</string>
+    <string name="up_pinned">Вверх — закрепить</string>
+    <string name="down_cancel">Вниз — отмена</string>
+    <string name="recording">Идёт запись...</string>
+    <string name="file_is_damaged">Файл поврежден</string>
+    <string name="notification">Уведомления</string>
+    <string name="location">местоположение</string>
 </resources>
 

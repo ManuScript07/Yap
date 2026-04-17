@@ -4,5 +4,7 @@ data class UserItem(
     val id: Int,
     val name: String,
     val isYapActive: Boolean,
-    val avatarRes: Int
+    val avatarRes: Int,
+    val isMuted: Boolean = false
+
 )
