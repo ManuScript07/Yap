@@ -85,7 +85,7 @@ class NotificationsViewModel(application: Application) : AndroidViewModel(applic
                         id = 8,
                         user = UserItem(2, "ReadHotChilliLiza", true, R.drawable.avatar_1),
                         messageText = "Всё хорошо?",
-                        hasLocation = true, // И текст, и локация
+                        hasLocation = true,
                         timestamp = "11:30",
                         timeAgo = "вчера"
                     )

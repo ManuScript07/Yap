@@ -462,17 +462,17 @@ fun UserListItem(
             painter = painterResource(user.avatarRes),
             contentDescription = null,
             modifier = Modifier
-                .size(48.dp)
+                .size(48.dp * baseScale)
                 .clip(CircleShape),
             contentScale = ContentScale.Crop
         )
 
-        Spacer(modifier = Modifier.width(14.dp))
+        Spacer(modifier = Modifier.width(14.dp*baseScale))
 
         Text(
             text = user.name,
             modifier = Modifier.weight(1f),
-            fontSize = 19.sp,
+            fontSize = 18.sp * baseScale,
             fontWeight = FontWeight.Medium,
             color = MaterialTheme.colorScheme.onPrimaryContainer,
             maxLines = 1,
@@ -483,18 +483,18 @@ fun UserListItem(
             user = user,
             onYapClick = onYapClick
         )
-        Spacer(modifier = Modifier.width(8.dp))
+        Spacer(modifier = Modifier.width(8.dp * baseScale))
 
         Box(contentAlignment = Alignment.Center) {
             IconButton(
                 onClick = { showMenu = true },
-                modifier = Modifier.size(32.dp)
+                modifier = Modifier.size(32.dp * baseScale)
             ) {
                 Icon(
                     painter = painterResource(R.drawable.more_vert),
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier.size(24.dp * baseScale)
                 )
             }
 

@@ -234,7 +234,7 @@ private fun NotificationCardContent(
                     user = item.user,
                     onYapClick = onYapClick,
                     onLongYapClick = onYapSend,
-                    baseScale = baseScale
+//                    baseScale = baseScale
                 )
             }
         }
