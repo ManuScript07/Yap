@@ -7,6 +7,8 @@ import android.util.Log
 import androidx.annotation.StringRes
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.yap.ChatRepository
+import com.example.yap.MessageEntity
 import com.example.yap.R
 import com.example.yap.data.model.UserItem
 import com.example.yap.service.GroqTranscriptionService
@@ -25,7 +27,12 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.io.File
 
-class HomeViewModel(application: Application) : AndroidViewModel(application) {
+class HomeViewModel @JvmOverloads constructor(
+    application: Application,
+    private val chatRepository: ChatRepository = ChatRepository()
+) : AndroidViewModel(application) {
+
+    private val CURRENT_USER_ID = 1
 
     private val energyPrefs = UserPreferences(application)
     private val voiceManager = VoiceManager(application)
@@ -365,7 +372,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
 
-            if (initialState.yapType == YapType.VOICE) {
+            // ВЫНОСИМ ПЕРЕМЕННЫЕ НА УРОВЕНЬ ВЫШЕ, ЧТОБЫ ИХ ВИДЕЛ ВЕСЬ МЕТОД
+            val currentYapType = initialState.yapType
+            val audioPath = initialState.voiceAudioUri
+            val fileToSend = audioPath?.let { File(it) } // Теперь fileToSend доступен везде
+
+            if (currentYapType == YapType.VOICE) {
                 if (_state.value.recordStartDate != null) {
                     Log.d("API1", "Ожидание формирования аудиофайла...")
                     var waitCount = 0
@@ -375,19 +387,16 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
 
-                val freshState = _state.value
-                val file = freshState.voiceAudioUri?.let { File(it) }
-
-                if (file == null || !file.exists() || file.length() < 500) {
+                // Проверяем наш вынесенный fileToSend
+                if (fileToSend == null || !fileToSend.exists() || fileToSend.length() < 500) {
                     Log.e("API1", "Ошибка: Файл не готов даже после ожидания")
                     resetYapButton()
                     return@launch
                 }
             }
 
+            // Берем свежий стейт после возможных задержек
             val state = _state.value
-            val currentYapType = state.yapType
-            val audioPath = state.voiceAudioUri
 
             if (state.currentStars >= state.yapPrice) {
                 // Расчет энергии
@@ -399,20 +408,40 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     startEnergyRegeneration(REGEN_DELAY_MS)
                 }
 
-                val actualLat = if (state.isLocationEnabled) latitude else null
-                val actualLon = if (state.isLocationEnabled) longitude else null
+                val receiverId = state.users.find { it.isYapActive }?.id ?: return@launch
+
+                var messageToSend = MessageEntity(
+                    senderId = CURRENT_USER_ID,
+                    receiverId = receiverId,
+                    type = currentYapType.name,
+                    latitude = if (state.isLocationEnabled) latitude else null,
+                    longitude = if (state.isLocationEnabled) longitude else null
+                )
+
                 when (currentYapType) {
                     YapType.VOICE -> {
-                        val currentText = _state.value.transcribedText ?: "[Голосовое сообщение...]"
                         Log.d("API1", "МГНОВЕННАЯ ОТПРАВКА ГОЛОСА: $audioPath")
-                        Log.d("API1", "Текущий текст (может быть пустым): $currentText")
+                        // Текст пока пустой, мы обновим его в Firebase позже
+                        messageToSend = messageToSend.copy(audioUrl = audioPath)
                     }
                     YapType.TEXT, YapType.EMOJI -> {
                         Log.d("API1", "Отправляем ТЕКСТ: ${state.userGeneratedContent}")
+                        messageToSend = messageToSend.copy(text = state.userGeneratedContent)
                     }
                     YapType.YAP -> {
-                        Log.d("API1", "Отправляем простой YAP $actualLat $actualLon")
+                        Log.d("API1", "Отправляем простой YAP")
+                        messageToSend = messageToSend.copy(text = "Отправил(а) Yap")
+                    }
+                }
 
+                // 1. Отправляем сообщение в базу
+                val result = chatRepository.sendMessage(messageToSend)
+
+                // 2. Если успешно отправлено и это голос — запускаем расшифровку
+                result.onSuccess { messageId ->
+                    if (currentYapType == YapType.VOICE && fileToSend != null) {
+                        // Теперь мы передаем правильный файл и ID сообщения!
+                        runTranscription(fileToSend, messageId)
                     }
                 }
 
@@ -455,8 +484,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
         val isLocEnabled = _state.value.isLocationEnabled
 
-        val finalLat = if (isLocEnabled) latitude else null
-        val finalLon = if (isLocEnabled) longitude else null
+
 
 
         if (_state.value.currentStars < PRICE_SIMPLE_YAP) {
@@ -474,7 +502,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
         updateStateWithPrice { it }
 
-        sendYap(finalLat, finalLon)
+        sendYap(latitude, longitude)
 
     }
 
@@ -591,12 +619,13 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         yapRecordTimeMs = 0L,
                         transcribedText = null,
                         recordStartDate = null,
-                        isTranscribing = shouldTranscribe
+                        isTranscribing = false
+//                        isTranscribing = shouldTranscribe
                     ) }
-                    if (shouldTranscribe)
-                        runTranscription(file)
-                    else
-                        Log.d("STT1", "Расшифровка пропущена: цена сообщения 0 (нет получателей)")
+//                    if (shouldTranscribe)
+//                        runTranscription(file)
+//                    else
+//                        Log.d("STT1", "Расшифровка пропущена: цена сообщения 0 (нет получателей)")
                 }
             }
         }
@@ -714,7 +743,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
 
 
-    private fun runTranscription(file: File) {
+    private fun runTranscription(file: File, messageId: String) {
 
         viewModelScope.launch(Dispatchers.IO) {
             _state.update { it.copy(isTranscribing = true, transcribedText = null) }
@@ -730,6 +759,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         transcribedText = text,
                         isTranscribing = false
                     ) }
+                    chatRepository.updateMessageText(messageId, text)
 
                     // --- ЛОГИКА ДЛЯ БУДУЩЕГО (Firebase) ---
                     // Если ты уже отправил сообщение (например, сохранил ID последнего сообщения),

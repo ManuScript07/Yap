@@ -6,8 +6,6 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -44,9 +42,9 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.yap.ui.screen.ChatsScreen
 import com.example.yap.ui.screen.FriendsScreen
-import com.example.yap.ui.screen.home.HomeScreen
 import com.example.yap.ui.screen.MapScreen
 import com.example.yap.ui.screen.ProfileScreen
+import com.example.yap.ui.screen.home.HomeScreen
 import com.example.yap.ui.screen.home.HomeViewModel
 import com.example.yap.ui.screen.notification.NotificationsScreen
 import com.example.yap.ui.screen.user_profile.UserProfileScreen
@@ -56,14 +54,26 @@ import com.example.yap.ui.theme.LocalAdditionColors
 @SuppressLint("RestrictedApi")
 @Composable
 fun NavigationApp() {
+
+//    val context = LocalContext.current
+
     val bottomItems = listOf(Screen.Chats, Screen.Map, Screen.Home, Screen.Friends, Screen.Profile) // Порядок
 
     // NavController для каждой вкладки
     val navControllers: Map<Screen, NavHostController> = bottomItems.associateWith { rememberNavController() }
 
     val navLockTime = remember { mutableLongStateOf(0L) }
-
     val sharedViewModel: HomeViewModel = viewModel()
+//    val sharedViewModel: HomeViewModel = viewModel(
+//        factory = object : ViewModelProvider.Factory {
+//            override fun <T : ViewModel> create(modelClass: Class<T>): T {
+//                return HomeViewModel(
+//                    application = context.applicationContext as Application,
+//                    chatRepository = ChatRepository()
+//                ) as T
+//            }
+//        }
+//    )
 
     // Saver для сохранения текущей вкладки при пересоздании Activity
     val screenSaver = Saver<Screen, String>(

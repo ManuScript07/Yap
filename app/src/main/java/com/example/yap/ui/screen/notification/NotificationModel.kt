@@ -5,7 +5,7 @@ import com.example.yap.data.model.UserItem
 
 @Immutable
 data class NotificationItemModel(
-    val id: Int,
+    val id: String,
     val user: UserItem,
     val messageText: String? = null,
     val hasLocation: Boolean = false,

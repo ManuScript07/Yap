@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     id("kotlin-parcelize")
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -49,6 +50,22 @@ android {
 }
 
 dependencies {
+    implementation(platform("com.google.firebase:firebase-bom:34.12.0"))
+
+    // Библиотека для работы с Firestore (база данных)
+    implementation("com.google.firebase:firebase-firestore")
+
+    // Библиотека для Google Auth (если планируешь вход через Google)
+    implementation("com.google.firebase:firebase-auth")
+
+    // Библиотека для Cloud Storage (если будем загружать аудиофайлы)
+    implementation("com.google.firebase:firebase-storage")
+    implementation("com.google.firebase:firebase-analytics")
+
+    // ОЧЕНЬ ВАЖНО: Поддержка Coroutines для Firebase
+    // Позволяет писать val result = query.get().await() вместо колбэков
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3")
+
     // 1. Принудительно ставим 1.3.0 ПЕРЕД остальными для LoadingIndicator
     implementation("androidx.compose.material3:material3:1.3.0")
     implementation("androidx.compose.material3:material3-android:1.3.0")
@@ -78,6 +95,8 @@ dependencies {
     implementation("androidx.datastore:datastore-preferences:1.1.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
     implementation("com.google.android.gms:play-services-location:21.2.0")
+    implementation(libs.androidx.compose.foundation)
+
 
     // Тесты и дебаг
     testImplementation(libs.junit)
