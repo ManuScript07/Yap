@@ -59,7 +59,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         const val PRICE_TEXT = 4
         const val PRICE_EMOJI = 2
         const val PRICE_VOICE = 12
-        const val PRICE_SIMPLE_YAP = 20
+        const val PRICE_SIMPLE_YAP = 1
         const val REGEN_DELAY_MS = 1000L
     }
 
@@ -233,10 +233,24 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun showStatus(@StringRes resId: Int? = null, message: String? = null, durationMs: Long = 2000) {
         statusJob?.cancel()
-        _state.update { it.copy(systemStatusResource = resId, systemStatusMessage = message) }
-
         statusJob = viewModelScope.launch {
+            // 1. Сначала принудительно обнуляем
+            _state.update { it.copy(systemStatusResource = null, systemStatusMessage = null) }
+
+            // 2. Даем Compose время понять, что надо начать анимацию выхода (exit)
+            // 50-100мс достаточно, чтобы AnimatedVisibility начал закрываться
+            delay(50)
+
+            // 3. Ставим новые данные
+            _state.update { it.copy(
+                systemStatusResource = resId,
+                systemStatusMessage = message,
+                statusId = System.currentTimeMillis()
+            ) }
+
             delay(durationMs)
+
+            // 4. Убираем
             _state.update { it.copy(systemStatusResource = null, systemStatusMessage = null) }
         }
     }

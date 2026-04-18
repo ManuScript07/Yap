@@ -1,6 +1,5 @@
 package com.example.yap.ui.screen.home
 
-import androidx.annotation.StringRes
 import com.example.yap.data.model.UserItem
 import com.example.yap.ui.components.YapButtonState
 
@@ -18,10 +17,13 @@ data class HomeUiState(
     val notificationsCount: Int = 8,
 
     val currentAlertMessage: String? = null,
-    @StringRes val currentAlertResource: Int? = null,
-    val systemStatusResource: Int? = null, // Только для кратковременных плашек (успех/ошибка)
+    val currentAlertResource: Int? = null,
+
+    val systemStatusResource: Int? = null,
     val systemStatusMessage: String? = null,
     val showSuccessAlert: Boolean = false,
+    val statusId: Long = 0L,
+
     val userGeneratedContent: String? = null,
     val voiceAudioUri: String? = null,
     val alertId: Long = 0L,
@@ -50,7 +52,7 @@ data class HomeUiState(
 )
 
 enum class MessageType {
-    INFO, WARNING, ERROR
+    INFO,
 }
 
 enum class YapType {
