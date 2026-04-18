@@ -50,6 +50,13 @@ android {
 }
 
 dependencies {
+
+    implementation("androidx.credentials:credentials:1.2.2")
+    // Дополнение для работы с Google ID
+    implementation("androidx.credentials:credentials-play-services-auth:1.2.2")
+    // Google ID библиотечка для упрощенного парсинга
+    implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
+
     implementation(platform("com.google.firebase:firebase-bom:34.12.0"))
 
     // Библиотека для работы с Firestore (база данных)
@@ -96,6 +103,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
     implementation("com.google.android.gms:play-services-location:21.2.0")
     implementation(libs.androidx.compose.foundation)
+    implementation(libs.googleid)
 
 
     // Тесты и дебаг

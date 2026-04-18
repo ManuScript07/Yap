@@ -38,7 +38,7 @@ class ChatRepository(private val firestore: FirebaseFirestore = FirebaseFirestor
 
     // 3. Подписка на сообщения в реальном времени (для страницы уведомлений)
     // Слушаем сообщения, где текущий юзер является получателем ИЛИ отправителем
-    fun observeUserMessages(currentUserId: Int): Flow<List<MessageEntity>> = callbackFlow {
+    fun observeUserMessages(currentUserId: String): Flow<List<MessageEntity>> = callbackFlow {
         // Примечание: Для сложного OR-запроса в Firestore может потребоваться индекс.
         // Пока сделаем подписку на входящие (уведомления)
         val subscription = messagesCollection

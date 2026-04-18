@@ -70,7 +70,7 @@ import com.google.android.gms.location.LocationServices
 @Composable
 fun NotificationsScreen(
     onBack: () -> Unit,
-    onNavigateToProfile: (Int) -> Unit,
+    onNavigateToProfile: (String) -> Unit,
     viewModel: NotificationsViewModel = viewModel(),
     homeViewModel: HomeViewModel
 //    @SuppressLint("ContextCastToActivity") homeViewModel: HomeViewModel = viewModel(LocalContext.current as ComponentActivity)
@@ -83,7 +83,7 @@ fun NotificationsScreen(
     val baseScale = LocalBaseScale.current
     val context = LocalContext.current
 
-    val guardedNavigateToProfile = rememberLambda<Int> { userId ->
+    val guardedNavigateToProfile = rememberLambda<String> { userId ->
         onNavigateToProfile(userId)
     }
 
@@ -147,7 +147,7 @@ fun NotificationsScreen(
 fun fetchLocationAndSendDirectYap(
     context: Context,
     viewModel: HomeViewModel,
-    userId: Int,
+    userId: String,
     isLocationEnabled: Boolean,
     messageType: YapType
 ) {

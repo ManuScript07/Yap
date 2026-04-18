@@ -20,5 +20,6 @@
     <string name="notification">Уведомления</string>
     <string name="location">местоположение</string>
     <string name="yap_sent_success">Yap отправлен</string>
+    <string name="default_web_client_id">590396163030-vhbut7nnhjrig2pd09j3baq0ro1ganlo.apps.googleusercontent.com</string>
 </resources>
 

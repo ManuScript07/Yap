@@ -20,23 +20,35 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.yap.R
 import com.example.yap.ui.navigation.NavigationApp
+import com.example.yap.ui.screen.auth.AuthScreen
+import com.example.yap.ui.screen.auth.AuthViewModel
 import com.example.yap.util.compose.StatusBarIconsColor
 
 @Composable
 fun AppEntryWithSplash(
-    viewModel: SplashViewModel = viewModel()
+    splashViewModel: SplashViewModel = viewModel()
 ) {
-    val splashVisible by viewModel.isSplashVisible.collectAsState()
+    val splashVisible by splashViewModel.isSplashVisible.collectAsState()
+    val isReady by splashViewModel.isReady.collectAsState()
 
     Box(modifier = Modifier.fillMaxSize()) {
 
-        NavigationApp()
+        // КЛЮЧЕВОЕ ИЗМЕНЕНИЕ:
+        // Мы рендерим основное приложение ТОЛЬКО если авторизация пройдена.
+        // Это предотвратит лишние запросы к Firebase и наслоение UI.
+        if (isReady) {
+            NavigationApp()
+        } else if (!splashVisible) {
+            // Если сплэш уже ушел, а мы всё еще не готовы (нет юзера)
+            AuthScreen(
+                onAuthSuccess = { /* Реактивность всё сделает за нас */ }
+            )
+        }
 
+        // Сплэш всегда рисуем поверх всего, пока он активен
         AnimatedVisibility(
             visible = splashVisible,
-            exit = slideOutVertically (
-                targetOffsetY = { 0 }
-            ) + fadeOut(tween())
+            exit = slideOutVertically(targetOffsetY = { 0 }) + fadeOut()
         ) {
             SplashContent()
         }

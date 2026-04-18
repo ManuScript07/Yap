@@ -10,12 +10,14 @@ import androidx.lifecycle.viewModelScope
 import com.example.yap.ChatRepository
 import com.example.yap.MessageEntity
 import com.example.yap.R
+import com.example.yap.UserRepository
 import com.example.yap.data.model.UserItem
 import com.example.yap.service.GroqTranscriptionService
 import com.example.yap.ui.components.YapButtonState
 import com.example.yap.util.NetworkMonitor
 import com.example.yap.util.extension.countGraphemeClusters
 import com.example.yap.util.extension.isEmojiOnly
+import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -25,14 +27,18 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
 import java.io.File
 
 class HomeViewModel @JvmOverloads constructor(
     application: Application,
-    private val chatRepository: ChatRepository = ChatRepository()
+    private val chatRepository: ChatRepository = ChatRepository(),
+    private val userRepository: UserRepository = UserRepository()
 ) : AndroidViewModel(application) {
 
-    private val CURRENT_USER_ID = 1
+//    private val CURRENT_USER_ID = "1"
+//    val currentUserUid = FirebaseAuth.getInstance().currentUser?.uid
 
     private val energyPrefs = UserPreferences(application)
     private val voiceManager = VoiceManager(application)
@@ -44,7 +50,7 @@ class HomeViewModel @JvmOverloads constructor(
 
     private val _state = MutableStateFlow(
         HomeUiState(
-            users = getInitialUsers(),
+//            users = getInitialUsers(),
         )
     )
     val state: StateFlow<HomeUiState> = _state.asStateFlow()
@@ -56,11 +62,9 @@ class HomeViewModel @JvmOverloads constructor(
 
     init {
         updateStateWithPrice { it }
-
-        loadPersistedData()
-
-        viewModelScope.launch {
-        }
+//        loadPersistedData()
+        observeQuickList()
+        observeEnergy()
     }
     companion object {
         const val PRICE_TEXT = 4
@@ -88,63 +92,69 @@ class HomeViewModel @JvmOverloads constructor(
     }
 
 
-
-
-    private fun loadPersistedData() {
+    private fun observeQuickList() {
         viewModelScope.launch {
-            // Мы подписываемся на поток данных.
-            // Каждый раз, когда NotificationsViewModel вызовет saveUsers, этот блок сработает снова.
-            energyPrefs.usersData.collect { savedUsers ->
+            userRepository.observeMyProfile().collect { snapshot ->
+                Log.d("NAV_DEBUG", "Snapshot received: ${snapshot?.id}, exists: ${snapshot?.exists()}")
 
-                // 1. Сначала восстанавливаем данные об энергии (разово или при каждом обновлении)
-                // Мы берем текущие значения из DataStore
-                val (savedStars, savedTime) = energyPrefs.energyData.first()
+                if (snapshot != null && snapshot.exists()) {
+                    val quickListIds = snapshot.get("quickList") as? List<String> ?: emptyList()
+                    Log.d("NAV_DEBUG", "IDs in quickList: $quickListIds")
+
+                    val realUsers = withContext(Dispatchers.IO) {
+                        quickListIds.mapNotNull { id ->
+                            val profile = userRepository.getUserProfile(id)
+                            Log.d("NAV_DEBUG", "Loaded profile for $id: ${profile?.name}")
+                            profile?.copy(isYapActive = true)
+                        }
+                    }
+
+                    _state.update { it.copy(users = realUsers) }
+                    updateStateWithPrice { it }
+                } else {
+                    Log.d("NAV_DEBUG", "Snapshot is null or doesn't exist")
+                }
+            }
+        }
+    }
+
+
+    private fun observeEnergy() {
+        viewModelScope.launch {
+            energyPrefs.energyData.collect { (savedStars, savedTime) ->
                 val currentTime = System.currentTimeMillis()
 
                 _state.update { currentState ->
-                    val baseStars = savedStars ?: currentState.currentStars
                     val max = currentState.maxStars
+                    val baseStars = savedStars ?: currentState.currentStars
 
-                    // Расчет восстановления звезд
-                    val (finalStars, initialDelay) = if (savedTime == null || savedTime == 0L) {
+                    val (finalStars, _) = if (savedTime == null || savedTime == 0L) {
                         lastAnchorTime = currentTime
                         baseStars to REGEN_DELAY_MS
                     } else {
                         val timePassed = currentTime - savedTime
                         val restoredStars = (timePassed / REGEN_DELAY_MS).toInt()
                         val timeSpentInCurrentCycle = timePassed % REGEN_DELAY_MS
-
                         lastAnchorTime = currentTime - timeSpentInCurrentCycle
-                        val calculatedStars = (baseStars + restoredStars).coerceAtMost(max)
-                        val remainingDelay = REGEN_DELAY_MS - timeSpentInCurrentCycle
-
-                        calculatedStars to remainingDelay
+                        (baseStars + restoredStars).coerceAtMost(max) to (REGEN_DELAY_MS - timeSpentInCurrentCycle)
                     }
 
-                    // 2. Обновляем список пользователей данными из DataStore
-                    // Именно это обеспечит синхронизацию с экраном уведомлений
-                    val finalUsers = savedUsers ?: getInitialUsers()
-
                     currentState.copy(
-                        users = finalUsers,
                         currentStars = finalStars,
                         progress = finalStars.toFloat() / max.toFloat()
                     )
                 }
 
-                // 3. Пересчитываем стоимость Yap для нового состава пользователей
-                updateStateWithPrice { it }
-
-                // 4. Запускаем регенерацию, если звезд меньше максимума
+                // Запуск регенерации
                 if (_state.value.currentStars < _state.value.maxStars) {
-                    // startEnergyRegeneration должна внутри себя делать regenJob?.cancel()
                     startEnergyRegeneration(REGEN_DELAY_MS)
                 }
             }
         }
     }
 
-    fun toggleUserYap(userId: Int) {
+
+    fun toggleUserYap(userId: String) {
         updateStateWithPrice { currentState ->
             val updatedUsers = currentState.users.map {
                 if (it.id == userId) it.copy(isYapActive = !it.isYapActive) else it
@@ -155,28 +165,56 @@ class HomeViewModel @JvmOverloads constructor(
     }
 
 
+//    fun addUser() {
+//        _state.update { currentState ->
+//            if (currentState.users.size >= 20) return@update currentState
+//
+//            val newId = (currentState.users.maxOfOrNull { it.id } ?: 0).toString() + 1
+//            val randomAvatar = listOf(R.drawable.avatar_1, R.drawable.avatar_2, R.drawable.avatar_3, R.drawable.avatar_4).random()
+//            val newUser = UserItem(newId, "User $newId", false, randomAvatar)
+//
+//            val updatedList = currentState.users + newUser
+//            saveUsersToStore(updatedList)
+//
+//            currentState.copy(users = updatedList)
+//        }
+//        updateStateWithPrice { it }
+//    }
+
     fun addUser() {
-        _state.update { currentState ->
-            if (currentState.users.size >= 20) return@update currentState
+        viewModelScope.launch {
+            val currentState = _state.value
+            if (currentState.users.size >= 20) return@launch
 
-            val newId = (currentState.users.maxOfOrNull { it.id } ?: 0) + 1
-            val randomAvatar = listOf(R.drawable.avatar_1, R.drawable.avatar_2, R.drawable.avatar_3, R.drawable.avatar_4).random()
-            val newUser = UserItem(newId, "User $newId", false, randomAvatar)
+            // 1. Генерируем ID и данные для нового "фиктивного" юзера
+            val newId = "user_" + System.currentTimeMillis()
+            val randomNames = listOf("Алексей", "Мария", "Иван", "София")
+            val newUserMap = mapOf(
+                "name" to randomNames.random(),
+                "quickList" to emptyList<String>(),
+                "mutedUsers" to emptyList<String>()
+            )
 
-            val updatedList = currentState.users + newUser
-            saveUsersToStore(updatedList)
+            try {
+                // 2. Создаем этого юзера в глобальной коллекции users
+                userRepository.usersCollection.document(newId).set(newUserMap).await()
 
-            currentState.copy(users = updatedList)
+                // 3. Добавляем его ID в наш собственный Quick List
+                userRepository.toggleQuickList(newId, add = true)
+
+                // ПРИМЕЧАНИЕ: Нам не нужно вручную обновлять _state.update { ... }
+                // Наш Flow в observeQuickList() сам увидит обновление документа в Firebase
+                // и перерисует экран. Это и есть "Single Source of Truth".
+            } catch (e: Exception) {
+                Log.e("HomeViewModel", "Failed to add fake user", e)
+            }
         }
-        updateStateWithPrice { it }
     }
 
-    fun removeUser(userId: Int) {
-        updateStateWithPrice { currentState ->
-            val updatedUsers = currentState.users.filter { it.id != userId }
-            saveUsersToStore(updatedUsers)
-
-            currentState.copy(users = updatedUsers)
+    fun removeUser(userId: String) {
+        viewModelScope.launch {
+            // Удаляем из Firebase. observeMyProfile сам поймает изменение и обновит список!
+            userRepository.toggleQuickList(userId, add = false)
         }
     }
 
@@ -185,14 +223,6 @@ class HomeViewModel @JvmOverloads constructor(
             energyPrefs.saveUsers(users)
         }
     }
-
-    private fun getInitialUsers() = listOf(
-        UserItem(1, "User1", false, R.drawable.avatar_1),
-        UserItem(2, "User2", true, R.drawable.avatar_2),
-        UserItem(3, "User3", false, R.drawable.avatar_3),
-        UserItem(4, "User4", true, R.drawable.avatar_4)
-    )
-
 
 
     fun setLocationToggle(isEnabled: Boolean, isManualAction: Boolean = false) {
@@ -410,12 +440,15 @@ class HomeViewModel @JvmOverloads constructor(
 
                 val receiverId = state.users.find { it.isYapActive }?.id ?: return@launch
 
+                val senderId = FirebaseAuth.getInstance().currentUser?.uid ?: return@launch
+                Log.d("API1", "Receiver ID: $receiverId")
                 var messageToSend = MessageEntity(
-                    senderId = CURRENT_USER_ID,
+                    senderId = senderId,
                     receiverId = receiverId,
                     type = currentYapType.name,
                     latitude = if (state.isLocationEnabled) latitude else null,
-                    longitude = if (state.isLocationEnabled) longitude else null
+                    longitude = if (state.isLocationEnabled) longitude else null,
+                    timestamp = com.google.firebase.Timestamp.now()
                 )
 
                 when (currentYapType) {
@@ -476,7 +509,7 @@ class HomeViewModel @JvmOverloads constructor(
     }
 
 
-    fun handleDirectSend(userId: Int, latitude: Double?, longitude: Double?, type: YapType) {
+    fun handleDirectSend(userId: String, latitude: Double?, longitude: Double?, type: YapType) {
         if (!networkMonitor.isOnline) {
             showStatus(resId = R.string.no_internet, durationMs = 3000)
             return

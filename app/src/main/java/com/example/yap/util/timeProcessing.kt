@@ -9,19 +9,18 @@ import java.text.SimpleDateFormat
 
 
 fun formatTime(timestamp: Timestamp?): String {
-    // Извлекаем Date из Timestamp, если он null — берем текущее время
-    val date = timestamp?.toDate() ?: Date()
+    // Если времени нет, возвращаем пустую строку, чтобы не вводить в заблуждение
+    val date = timestamp?.toDate() ?: return ""
     val sdf = SimpleDateFormat("HH:mm", Locale.getDefault())
     return sdf.format(date)
 }
 
 fun getTimeAgo(timestamp: Timestamp?): String {
-    val timeMillis = timestamp?.toDate()?.time ?: System.currentTimeMillis()
-    val now = System.currentTimeMillis()
+    val date = timestamp?.toDate() ?: return "отправляется..."
 
     return DateUtils.getRelativeTimeSpanString(
-        timeMillis,
-        now,
+        date.time,
+        System.currentTimeMillis(),
         DateUtils.MINUTE_IN_MILLIS,
         DateUtils.FORMAT_ABBREV_RELATIVE
     ).toString()

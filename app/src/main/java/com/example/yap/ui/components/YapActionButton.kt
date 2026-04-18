@@ -28,8 +28,8 @@ import com.example.yap.ui.theme.LocalAdditionColors
 @Composable
 fun YapActionButton(
     user: UserItem,
-    onYapClick: (Int) -> Unit,
-    onLongYapClick: ((Int) -> Unit)? = null,
+    onYapClick: (String) -> Unit,
+    onLongYapClick: ((String) -> Unit)? = null,
     @SuppressLint("ModifierParameter") modifier: Modifier = Modifier,
     baseScale: Float = 1f
 ) {

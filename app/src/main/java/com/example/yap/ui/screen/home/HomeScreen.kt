@@ -126,7 +126,6 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.yap.R
 import com.example.yap.data.model.UserItem
 import com.example.yap.ui.components.MainYapButton
@@ -138,7 +137,6 @@ import com.example.yap.util.LocationHelper.checkLocationSettings
 import com.example.yap.util.compose.StatusBarIconsColor
 import com.example.yap.util.compose.rememberLambda
 import com.google.android.gms.location.LocationServices
-import kotlin.hashCode
 
 
 @SuppressLint("ConfigurationScreenWidthHeight")
@@ -147,7 +145,7 @@ import kotlin.hashCode
 fun HomeScreen(
 //    viewModel: HomeViewModel = viewModel(),
     viewModel: HomeViewModel,
-    onNavigateToProfile: (Int) -> Unit,
+    onNavigateToProfile: (String) -> Unit,
     onNavigateToNotifications: () -> Unit,
 ) {
     StatusBarIconsColor(isLight = true)
@@ -231,7 +229,7 @@ fun HomeScreen(
     )
     val scaffoldState = rememberBottomSheetScaffoldState(sheetState)
 
-    val guardedNavigateToProfile = rememberLambda<Int> { userId ->
+    val guardedNavigateToProfile = rememberLambda<String> { userId ->
         onNavigateToProfile(userId)
     }
 
@@ -255,7 +253,7 @@ fun HomeScreen(
             screenHeight = LocalConfiguration.current.screenHeightDp.dp,
             onUserClick = guardedNavigateToProfile,
             onYapClick = { userId -> viewModel.toggleUserYap(userId) },
-            onAddUserClick = { viewModel.addUser() },
+            onAddUserClick = { viewModel.addUser()},
             onRemoveUserClick = { id -> viewModel.removeUser(id) },
             content = { innerPadding ->
                 HomeContent(
@@ -318,10 +316,10 @@ fun HomeUsersBottomSheet(
     scaffoldState: BottomSheetScaffoldState,
     state: HomeUiState,
     screenHeight: Dp,
-    onYapClick: (Int) -> Unit,
-    onUserClick: (Int) -> Unit,
+    onYapClick: (String) -> Unit,
+    onUserClick: (String) -> Unit,
     onAddUserClick: () -> Unit,
-    onRemoveUserClick: (Int) -> Unit,
+    onRemoveUserClick: (String) -> Unit,
     content: @Composable (PaddingValues) -> Unit
 ) {
     val adaptivePeekHeight = screenHeight * 0.28f
@@ -372,10 +370,10 @@ fun HomeUsersBottomSheet(
 @Composable
 fun UsersBottomSheet(
     users: List<UserItem>,
-    onYapClick: (Int) -> Unit,
-    onUserClick: (Int) -> Unit,
+    onYapClick: (String) -> Unit,
+    onUserClick: (String) -> Unit,
     onAddUser: () -> Unit,
-    onRemoveUser: (Int) -> Unit,
+    onRemoveUser: (String) -> Unit,
     maxUsers: Int
 ) {
     val baseScale = LocalBaseScale.current
@@ -441,9 +439,9 @@ fun UsersBottomSheet(
 @Composable
 fun UserListItem(
     user: UserItem,
-    onYapClick: (Int) -> Unit,
-    onUserClick: (Int) -> Unit,
-    onRemoveClick: (Int) -> Unit
+    onYapClick: (String) -> Unit,
+    onUserClick: (String) -> Unit,
+    onRemoveClick: (String) -> Unit
 ) {
     var showMenu by rememberSaveable { mutableStateOf(false) }
     val baseScale = LocalBaseScale.current

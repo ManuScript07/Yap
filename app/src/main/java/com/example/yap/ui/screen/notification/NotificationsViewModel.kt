@@ -7,6 +7,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.yap.ChatRepository
 import com.example.yap.R
+import com.example.yap.UserRepository
 import com.example.yap.data.model.UserItem
 import com.example.yap.util.formatTime
 import com.example.yap.util.getTimeAgo
@@ -15,24 +16,24 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class NotificationsViewModel @JvmOverloads constructor(
     application: Application,
-    private val chatRepository: ChatRepository = ChatRepository()
+    private val chatRepository: ChatRepository = ChatRepository(),
+    private val userRepository: UserRepository = UserRepository()
 ) : AndroidViewModel(application) {
 
 
     private val CURRENT_USER_ID = 1
-    private val cachedUsers = listOf(
-        UserItem(1, "User1", false, R.drawable.avatar_1),
-        UserItem(2, "User2", true, R.drawable.avatar_2),
-        UserItem(3, "User3", false, R.drawable.avatar_3),
-        UserItem(4, "User4", true, R.drawable.avatar_4)
-    )
+//    private val cachedUsers = listOf(
+//        UserItem(1, "User1", false, R.drawable.avatar_1),
+//        UserItem(2, "User2", true, R.drawable.avatar_2),
+//        UserItem(3, "User3", false, R.drawable.avatar_3),
+//        UserItem(4, "User4", true, R.drawable.avatar_4)
+//    )
     private val energyPrefs = UserPreferences(application)
     private val _state = MutableStateFlow(NotificationsUiState())
     val state: StateFlow<NotificationsUiState> = _state.asStateFlow()
@@ -43,11 +44,12 @@ class NotificationsViewModel @JvmOverloads constructor(
         observeUsersAndNotifications()
     }
     private fun observeMessages() {
+        val currentUserId = userRepository.currentUserId ?: return
         viewModelScope.launch {
             // 1. Устанавливаем загрузку
             _state.update { it.copy(isLoading = true) }
 
-            chatRepository.observeUserMessages(CURRENT_USER_ID)
+            chatRepository.observeUserMessages(currentUserId)
                 // 2. Обработка ошибок (теперь при ошибке индекса приложение просто выведет лог, а не упадет)
                 .catch { exception ->
                     Log.e("NotificationsVM", "Ошибка при получении сообщений", exception)
@@ -59,7 +61,7 @@ class NotificationsViewModel @JvmOverloads constructor(
                     // чтобы UI не подлагивал, если сообщений станет очень много
                     val notificationsList = withContext(Dispatchers.Default) {
                         messagesEntities.map { entity ->
-                            val sender = cachedUsers.find { it.id == entity.senderId }
+                            val sender = userRepository.getUserProfile(entity.senderId)
                                 ?: UserItem(entity.senderId, "Unknown", false, R.drawable.avatar_1)
 
                             NotificationItemModel(
@@ -95,27 +97,24 @@ class NotificationsViewModel @JvmOverloads constructor(
     }
 
     fun muteNotification(notificationId: String) {
-        _state.update { currentState ->
-            // 1. Находим уведомление, по которому кликнули, чтобы узнать ID пользователя
-            val targetNotification = currentState.notifications.find { it.id == notificationId }
-            val targetUserId = targetNotification?.user?.id
+        viewModelScope.launch {
+            val targetNotification = _state.value.notifications.find { it.id == notificationId }
+            val targetUserId = targetNotification?.user?.id ?: return@launch
 
-            if (targetUserId != null) {
-                // Новое состояние (инвертируем текущее)
-                val newMuteState = !targetNotification.user.isMuted
+            val currentlyMuted = targetNotification.user.isMuted
 
-                // 2. Обновляем ВСЕ уведомления этого пользователя в списке
+            // 1. Отправляем в Firebase (надежный источник правды)
+            userRepository.toggleMute(targetUserId, !currentlyMuted)
+
+            // 2. Оптимистично обновляем UI, чтобы не ждать ответа базы
+            _state.update { currentState ->
                 currentState.copy(
                     notifications = currentState.notifications.map { notif ->
                         if (notif.user.id == targetUserId) {
-                            notif.copy(user = notif.user.copy(isMuted = newMuteState))
-                        } else {
-                            notif
-                        }
+                            notif.copy(user = notif.user.copy(isMuted = !currentlyMuted))
+                        } else notif
                     }
                 )
-            } else {
-                currentState
             }
         }
     }
@@ -147,16 +146,8 @@ class NotificationsViewModel @JvmOverloads constructor(
 
     fun toggleUserQuickList(userFromNotification: UserItem) {
         viewModelScope.launch {
-            val currentUsers = energyPrefs.usersData.first() ?: emptyList()
-            val isAlreadyInList = currentUsers.any { it.id == userFromNotification.id }
-
-            val updatedUsers = if (isAlreadyInList) {
-                currentUsers.filter { it.id != userFromNotification.id }
-            } else {
-                currentUsers + userFromNotification.copy(isYapActive = true)
-            }
-
-            energyPrefs.saveUsers(updatedUsers)
+            // Теперь добавляем в Firestore вместо DataStore
+            userRepository.toggleQuickList(userFromNotification.id, add = true)
         }
     }
 }
