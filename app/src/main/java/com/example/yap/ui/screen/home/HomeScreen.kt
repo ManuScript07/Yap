@@ -138,14 +138,15 @@ import com.example.yap.util.LocationHelper.checkLocationSettings
 import com.example.yap.util.compose.StatusBarIconsColor
 import com.example.yap.util.compose.rememberLambda
 import com.google.android.gms.location.LocationServices
-
+import kotlin.hashCode
 
 
 @SuppressLint("ConfigurationScreenWidthHeight")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
-    viewModel: HomeViewModel = viewModel(),
+//    viewModel: HomeViewModel = viewModel(),
+    viewModel: HomeViewModel,
     onNavigateToProfile: (Int) -> Unit,
     onNavigateToNotifications: () -> Unit,
 ) {
@@ -757,6 +758,8 @@ fun fetchLocationAndSendYap(
 
     fusedLocationClient.lastLocation.addOnSuccessListener { location: Location? ->
         if (location != null) {
+            Log.d("API1", "ViewModel Hash: ${viewModel.hashCode()}, Тумблер: ${viewModel.state.value.isLocationEnabled}")
+
             Log.d("YAP_LOCATION", "🌍 Успешно: Lat=${location.latitude}, Lon=${location.longitude}")
             viewModel.handleSendRequest(location.latitude, location.longitude, messageType)
         } else {

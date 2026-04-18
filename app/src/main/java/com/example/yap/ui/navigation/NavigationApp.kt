@@ -34,6 +34,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -46,6 +47,7 @@ import com.example.yap.ui.screen.FriendsScreen
 import com.example.yap.ui.screen.home.HomeScreen
 import com.example.yap.ui.screen.MapScreen
 import com.example.yap.ui.screen.ProfileScreen
+import com.example.yap.ui.screen.home.HomeViewModel
 import com.example.yap.ui.screen.notification.NotificationsScreen
 import com.example.yap.ui.screen.user_profile.UserProfileScreen
 import com.example.yap.ui.theme.LocalAdditionColors
@@ -60,6 +62,8 @@ fun NavigationApp() {
     val navControllers: Map<Screen, NavHostController> = bottomItems.associateWith { rememberNavController() }
 
     val navLockTime = remember { mutableLongStateOf(0L) }
+
+    val sharedViewModel: HomeViewModel = viewModel()
 
     // Saver для сохранения текущей вкладки при пересоздании Activity
     val screenSaver = Saver<Screen, String>(
@@ -208,7 +212,8 @@ fun NavigationApp() {
                                             route = AppDestinations.NOTIFICATIONS,
                                             lockState = navLockTime
                                         )
-                                    }
+                                    },
+                                    viewModel = sharedViewModel
                                 )
                             }
 
@@ -221,7 +226,8 @@ fun NavigationApp() {
                                             route = AppDestinations.createProfileRoute(userId),
                                             lockState = navLockTime
                                         )
-                                    }
+                                    },
+                                    homeViewModel = sharedViewModel
                                 )
                             }
                             userProfileComposable(navControllers[screen])

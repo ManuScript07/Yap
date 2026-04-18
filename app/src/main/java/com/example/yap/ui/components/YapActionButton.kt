@@ -1,14 +1,13 @@
 package com.example.yap.ui.components
 
+import android.annotation.SuppressLint
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -30,8 +29,8 @@ import com.example.yap.ui.theme.LocalAdditionColors
 fun YapActionButton(
     user: UserItem,
     onYapClick: (Int) -> Unit,
-    onLongYapClick: ((Int) -> Unit)? = null, // Опциональный лонг-пресс
-    modifier: Modifier = Modifier,
+    onLongYapClick: ((Int) -> Unit)? = null,
+    @SuppressLint("ModifierParameter") modifier: Modifier = Modifier,
     baseScale: Float = 1f
 ) {
     val iconTint = if (user.isYapActive) Color.Black

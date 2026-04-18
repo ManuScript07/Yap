@@ -45,6 +45,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private var regenJob: Job? = null
     private var isActivatingLocation = false
     private var lastAnchorTime: Long = 0L
+    private var statusJob: Job? = null
 
     init {
         updateStateWithPrice { it }
@@ -58,7 +59,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         const val PRICE_TEXT = 4
         const val PRICE_EMOJI = 2
         const val PRICE_VOICE = 12
-        const val PRICE_SIMPLE_YAP = 1
+        const val PRICE_SIMPLE_YAP = 20
         const val REGEN_DELAY_MS = 1000L
     }
 
@@ -78,6 +79,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             newState.copy(yapPrice = calculatedPrice)
         }
     }
+
 
 
 
@@ -229,6 +231,16 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun showStatus(@StringRes resId: Int? = null, message: String? = null, durationMs: Long = 2000) {
+        statusJob?.cancel()
+        _state.update { it.copy(systemStatusResource = resId, systemStatusMessage = message) }
+
+        statusJob = viewModelScope.launch {
+            delay(durationMs)
+            _state.update { it.copy(systemStatusResource = null, systemStatusMessage = null) }
+        }
+    }
+
     fun dismissMessage() {
         alertJob?.cancel()
         updateStateWithPrice { currentState ->
@@ -373,6 +385,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     startEnergyRegeneration(REGEN_DELAY_MS)
                 }
 
+                val actualLat = if (state.isLocationEnabled) latitude else null
+                val actualLon = if (state.isLocationEnabled) longitude else null
                 when (currentYapType) {
                     YapType.VOICE -> {
                         val currentText = _state.value.transcribedText ?: "[Голосовое сообщение...]"
@@ -383,17 +397,26 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         Log.d("API1", "Отправляем ТЕКСТ: ${state.userGeneratedContent}")
                     }
                     YapType.YAP -> {
-                        Log.d("API1", "Отправляем простой YAP $longitude $latitude")
+                        Log.d("API1", "Отправляем простой YAP $actualLat $actualLon")
+
                     }
                 }
 
                 saveEnergyToStore(newStars, lastAnchorTime)
+
+                val shouldShowSuccess = _state.value.showSuccessAlert
+
                 dismissMessage()
                 resetYapButton()
 
+                if (shouldShowSuccess) {
+                    showStatus(resId = R.string.yap_sent_success, durationMs = 3000)
+                }
+
                 _state.update { it.copy(
                     currentStars = newStars,
-                    progress = newProgress
+                    progress = newProgress,
+                    showSuccessAlert = false
                 ) }
 
             } else {
@@ -411,21 +434,34 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
 
     fun handleDirectSend(userId: Int, latitude: Double?, longitude: Double?, type: YapType) {
-        Log.d("API1", "Вызов промежуточной функции")
-        viewModelScope.launch {
-            // 1. Временно активируем только этого пользователя для корректного расчета цены
-            _state.update { currentState ->
-                currentState.copy(
-                    users = currentState.users.map { it.copy(isYapActive = it.id == userId) },
-                    yapType = type
-                )
-            }
-            updateStateWithPrice { it }
-
-            // 2. Вызываем стандартную отправку
-            sendYap(latitude, longitude)
-            Log.d("API1", "Начало отправки")
+        if (!networkMonitor.isOnline) {
+            showStatus(resId = R.string.no_internet, durationMs = 3000)
+            return
         }
+
+        val isLocEnabled = _state.value.isLocationEnabled
+
+        val finalLat = if (isLocEnabled) latitude else null
+        val finalLon = if (isLocEnabled) longitude else null
+
+
+        if (_state.value.currentStars < PRICE_SIMPLE_YAP) {
+            showStatus(resId = R.string.not_enough_stars, durationMs = 2000)
+            return
+        }
+
+        _state.update { currentState ->
+            currentState.copy(
+                users = currentState.users.map { it.copy(isYapActive = it.id == userId) },
+                yapType = type,
+                showSuccessAlert = true
+            )
+        }
+
+        updateStateWithPrice { it }
+
+        sendYap(finalLat, finalLon)
+
     }
 
     private fun startEnergyRegeneration(initialDelay: Long = REGEN_DELAY_MS) {
