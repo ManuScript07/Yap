@@ -7,15 +7,33 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import com.google.firebase.firestore.Query
+import io.github.jan.supabase.SupabaseClient
+import io.github.jan.supabase.createSupabaseClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.tasks.await
+import java.io.File
+import java.util.UUID
+import io.github.jan.supabase.storage.Storage
+import io.github.jan.supabase.storage.storage
 
-
-class ChatRepository(private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()) {
+object SupabaseConfig {
+    const val BUCKET_NAME = "yaps"
+    const val PROJECT_URL = "https://fnouaplmxqztiruyusuu.supabase.co"
+    const val ANON_KEY = "sb_publishable_MjHvC7svZQsVEcvQTOIk5A_WmOMDt-O"
+}
+class ChatRepository(
+    private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance(),
+    private val supabase: SupabaseClient = createSupabaseClient(
+        supabaseUrl = SupabaseConfig.PROJECT_URL,
+        supabaseKey = SupabaseConfig.ANON_KEY
+    ) {
+        install(Storage)
+    }
+) {
 
     private val messagesCollection = firestore.collection("messages")
     // при выходе из аккаунта очистить
@@ -32,6 +50,43 @@ class ChatRepository(private val firestore: FirebaseFirestore = FirebaseFirestor
             documentRef.set(messageWithId).await()
             Result.success(documentRef.id)
         } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun sendVoiceMessage(file: File, message: MessageEntity): Result<String> {
+        return try {
+            // Проверка: а есть ли файл вообще?
+            if (!file.exists()) return Result.failure(Exception("Файл не найден"))
+
+            // 1. Формируем пути (voice_messages/userId/uuid.m4a)
+            val fileName = "${UUID.randomUUID()}.m4a"
+            val fullPath = "${message.senderId}/$fileName"
+
+            // 2. Загружаем файл в Supabase
+            // Используем .storage.from("yaps"), убедись что бакет называется именно так
+            supabase.storage.from("yaps").upload(
+                path = fullPath,
+                data = file.readBytes()
+            ) {
+                upsert = false
+            }
+
+
+            val downloadUrl = "${SupabaseConfig.PROJECT_URL}/storage/v1/object/public/${SupabaseConfig.BUCKET_NAME}/$fullPath"
+
+            // 4. Подготавливаем объект сообщения для Firestore
+            // audioUrl — ссылка на Supabase, text — null (ждем расшифровку)
+            val messageWithAudio = message.copy(
+                audioUrl = downloadUrl,
+                text = null
+            )
+
+            // 5. Сохраняем в Firestore и возвращаем результат (ID документа)
+            sendMessage(messageWithAudio)
+
+        } catch (e: Exception) {
+            Log.e("ChatRepository", "Ошибка отправки голоса: ${e.localizedMessage}")
             Result.failure(e)
         }
     }

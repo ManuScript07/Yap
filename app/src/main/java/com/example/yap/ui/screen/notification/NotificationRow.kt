@@ -68,6 +68,7 @@ fun NotificationRow(
     onLocationClick: () -> Unit,
     onYapClick: () -> Unit,
     onYapSend: () -> Unit,
+    onListenClick: () -> Unit
 ) {
     val baseScale = LocalBaseScale.current
     val currentOnMute by rememberUpdatedState(onMute)
@@ -79,6 +80,7 @@ fun NotificationRow(
     val memoizedYapSend = remember(item) { { _: String -> onYapSend() } }
     val memoizedLocationClick = remember(item) { { onLocationClick() } }
     val memoizedNavigate = remember(item) { onNavigateToProfile }
+    val memoizedListenClick = remember(item) { { onListenClick() } }
 
     val dismissState = rememberSwipeToDismissBoxState(
         confirmValueChange = { direction ->
@@ -125,7 +127,8 @@ fun NotificationRow(
                 onLocationClick = memoizedLocationClick,
                 onYapClick = memoizedYapClick, // Теперь типы совпадают (String) -> Unit
                 onYapSend = memoizedYapSend,   // Теперь типы совпадают (String) -> Unit
-                onNavigateToProfile = memoizedNavigate
+                onNavigateToProfile = memoizedNavigate,
+                onListenClick = memoizedListenClick
             )
         }
     }
@@ -138,7 +141,8 @@ private fun NotificationCardContent(
     onLocationClick: () -> Unit,
     onYapClick: (String) -> Unit,
     onYapSend: (String) -> Unit,
-    onNavigateToProfile: (String) -> Unit
+    onNavigateToProfile: (String) -> Unit,
+    onListenClick: () -> Unit
 ) {
     val messageLineHeight = if (item.hasLocation) (20 * baseScale).sp else (24 * baseScale).sp
 
@@ -197,22 +201,20 @@ private fun NotificationCardContent(
                     )
                 }
 
+                item.audioUrl?.let { url ->
+                    NotificationActionText(
+                        text = stringResource(R.string.listen_voice),
+                        baseScale = baseScale,
+                        onClick = onListenClick
+                    )
+                }
+
                 if (item.hasLocation) {
-                    Column(
-                        modifier = Modifier
-                            .clickable { onLocationClick() }
-                    ) {
-                        Text(
-                            text = stringResource(R.string.location),
-                            fontSize = (16 * baseScale).sp,
-                            color = LocalAdditionColors.current.notifText,
-                            textDecoration = TextDecoration.Underline,
-                            lineHeight = (20 * baseScale).sp,
-                            style = LocalTextStyle.current.copy(
-                                platformStyle = PlatformTextStyle(includeFontPadding = false)
-                            )
-                        )
-                    }
+                    NotificationActionText(
+                        text = stringResource(R.string.location),
+                        baseScale = baseScale,
+                        onClick = onLocationClick
+                    )
                 }
             }
 
@@ -241,6 +243,26 @@ private fun NotificationCardContent(
             }
         }
     }
+}
+
+@Composable
+fun NotificationActionText(
+    text: String,
+    baseScale: Float,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Text(
+        text = text,
+        modifier = modifier.clickable { onClick() },
+        fontSize = (16 * baseScale).sp,
+        color = LocalAdditionColors.current.notifText,
+        textDecoration = TextDecoration.Underline,
+        lineHeight = (20 * baseScale).sp,
+        style = LocalTextStyle.current.copy(
+            platformStyle = PlatformTextStyle(includeFontPadding = false)
+        )
+    )
 }
 
 @Composable

@@ -16,14 +16,18 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -31,9 +35,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -41,6 +49,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.material3.minimumInteractiveComponentSize
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -191,6 +200,9 @@ fun NotificationsScreen(
                             }
                         },
                         onNavigateToProfile = guardedNavigateToProfile,
+                        onListenClick = {
+                            viewModel.selectNotification(notification)
+                        }
                     )
                 }
             }
@@ -199,6 +211,13 @@ fun NotificationsScreen(
             statusResource = homeState.systemStatusResource,
             statusMessage = homeState.systemStatusMessage,
             statusId = homeState.statusId
+        )
+    }
+    if (state.selectedNotification != null) {
+        VoiceDetailsSheet(
+            state = state,
+            onDismiss = { viewModel.selectNotification(null) },
+            onTogglePlay = { url -> viewModel.togglePlayback(url) }
         )
     }
 }
@@ -342,6 +361,77 @@ fun BoxScope.SystemStatusPill(
                     maxLines = 1
                 )
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun VoiceDetailsSheet(
+    state: NotificationsUiState,
+    onDismiss: () -> Unit,
+    onTogglePlay: (String) -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState()
+    val notification = state.selectedNotification ?: return
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        dragHandle = { BottomSheetDefaults.DragHandle() },
+        containerColor = Color(0xFFB9B9E5) // Цвет из твоего скрина
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "Расшифровка",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
+
+            Spacer(Modifier.height(16.dp))
+
+            // Текст расшифровки (если его нет — показываем "Расшифровывается...")
+            Text(
+                text = notification.messageText ?: "Идет расшифровка сообщения...",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.DarkGray
+            )
+
+            Spacer(Modifier.height(32.dp))
+
+            // Плеер
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                IconButton(onClick = { notification.audioUrl?.let { onTogglePlay(it) } }) {
+                    Icon(
+                        painter = painterResource(
+                            if (state.isPlaying) R.drawable.baseline_pause_32 else R.drawable.baseline_play_arrow_32
+                        ),
+                        contentDescription = null,
+                        modifier = Modifier.size(48.dp)
+                    )
+                }
+
+                // Здесь можно добавить индикатор прогресса (LinearProgressIndicator)
+                Spacer(Modifier.width(8.dp))
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .height(40.dp)
+                        .background(Color.White.copy(alpha = 0.3f), RoundedCornerShape(20.dp))
+                )
+
+                Spacer(Modifier.width(8.dp))
+                Text("0:12") // Время можно брать из MediaPlayer
+            }
+            Spacer(Modifier.height(40.dp))
         }
     }
 }

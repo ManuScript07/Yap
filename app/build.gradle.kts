@@ -4,6 +4,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     id("kotlin-parcelize")
     id("com.google.gms.google-services")
+    kotlin("plugin.serialization") version "2.2.0"
 }
 
 android {
@@ -50,6 +51,16 @@ android {
 }
 
 dependencies {
+
+    // BOM позволяет не указывать версию для каждого отдельного модуля
+    implementation(platform("io.github.jan-tennert.supabase:bom:3.5.0"))
+
+    // Модуль для работы с хранилищем
+    implementation("io.github.jan-tennert.supabase:storage-kt")
+
+    // Ktor Client (обязателен, так как Supabase-kt работает на нем)
+    // Версия Ktor должна быть 3.0.0 или выше для Supabase 3.x
+    implementation("io.ktor:ktor-client-android:3.0.0")
 
     implementation("androidx.credentials:credentials:1.2.2")
     // Дополнение для работы с Google ID

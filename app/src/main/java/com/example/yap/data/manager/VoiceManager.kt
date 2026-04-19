@@ -1,6 +1,7 @@
 package com.example.yap.data.manager
 
 import android.content.Context
+import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.os.Build
@@ -135,7 +136,7 @@ class VoiceManager(private val context: Context) {
             player = null
         }
     }
-    // В VoiceManager
+
     fun pausePlaybackOnly() {
         try {
             if (player?.isPlaying == true) {
@@ -146,11 +147,61 @@ class VoiceManager(private val context: Context) {
         }
     }
 
-    // Убедись, что этот метод у тебя точно есть:
-    fun isActuallyPlaying(): Boolean = player?.isPlaying ?: false
 
+    fun isActuallyPlaying(): Boolean = player?.isPlaying ?: false
 
     fun getCurrentPosition(): Int = player?.currentPosition ?: 0
 
+
+    // Внутри твоего VoiceManager
+    fun playUrl(
+        url: String,
+        onStateChanged: (Boolean) -> Unit,
+        onCompletion: () -> Unit
+    ) {
+        if (player != null) {
+            stopPlayback()
+        }
+
+        try {
+            val isNetwork = url.startsWith("http") // Проверяем: сеть или локальный файл
+
+            player = MediaPlayer().apply {
+                setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .build()
+                )
+                setDataSource(url)
+
+                if (isNetwork) {
+                    prepareAsync() // Для Supabase
+                    setOnPreparedListener {
+                        start()
+                        onStateChanged(true)
+                    }
+                } else {
+                    prepare() // СТАНДАРТНЫЙ МЕТОД для кэшированного файла
+                    start()
+                    onStateChanged(true)
+                }
+
+                setOnCompletionListener {
+                    stopPlayback()
+                    onCompletion()
+                    onStateChanged(false)
+                }
+                setOnErrorListener { _, _, _ ->
+                    stopPlayback()
+                    onCompletion()
+                    false
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("VoiceManager", "Ошибка проигрывания: ${e.message}")
+            onCompletion()
+        }
+    }
 
 }

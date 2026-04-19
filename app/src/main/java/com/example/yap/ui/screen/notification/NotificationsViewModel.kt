@@ -6,6 +6,7 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.yap.R
+import com.example.yap.data.manager.VoiceManager
 import com.example.yap.data.model.UserItem
 import com.example.yap.ui.main.YapApp
 import com.example.yap.util.formatTime
@@ -18,9 +19,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
+import java.net.URL
 
 class NotificationsViewModel(
     application: Application,
@@ -34,6 +38,7 @@ class NotificationsViewModel(
     private val _state = MutableStateFlow(NotificationsUiState())
     private var lastProcessedIds = emptySet<String>()
     private val processedIds = mutableSetOf<String>()
+    private val voiceManager = VoiceManager(application)
     val state: StateFlow<NotificationsUiState> = _state.asStateFlow()
 
     init {
@@ -58,7 +63,6 @@ class NotificationsViewModel(
 
                 val cloudQuickListIds = myProfileSnapshot?.get("quickList") as? List<String> ?: emptyList()
                 val mutedIds = myProfileSnapshot?.get("mutedUsers") as? List<String> ?: emptyList()
-                val localQuickList = persistedUsers ?: emptyList()
 
                 // 3. Маппим сообщения, используя уже загруженные данные
                 messages.map { entity ->
@@ -81,7 +85,8 @@ class NotificationsViewModel(
                         timestamp = formatTime(entity.timestamp),
                         timeAgo = getTimeAgo(entity.timestamp),
                         isUserInQuickList = isInCloudList,
-                        isMuted = isMuted
+                        isMuted = isMuted,
+                        audioUrl = entity.audioUrl,
                     )
                 }
             }
@@ -150,6 +155,71 @@ class NotificationsViewModel(
             delay(2000)
             energyPrefs.addReadIds(newlyVisible)
         }
+    }
+
+    fun selectNotification(notification: NotificationItemModel?) {
+        _state.update { it.copy(selectedNotification = notification) }
+        // Если закрываем диалог — стопаем звук
+        if (notification == null) {
+            voiceManager.stopPlayback()
+            _state.update { it.copy(isPlaying = false) }
+        }
+    }
+
+    fun togglePlayback(url: String) {
+        viewModelScope.launch {
+            // Если уже играет — ставим на паузу (твоя стандартная логика)
+            if (voiceManager.isActuallyPlaying()) {
+                voiceManager.pausePlaybackOnly()
+                _state.update { it.copy(isPlaying = false) }
+                return@launch
+            }
+
+            // Проверяем кэш в DataStore
+            val cacheMap = energyPrefs.voiceCacheMap.first()
+            val localPath = cacheMap[url]
+
+            if (localPath != null && File(localPath).exists()) {
+                Log.d("API1", "Играем из кэша (локально): $localPath")
+                voiceManager.playUrl(localPath,
+                    onStateChanged = { playing -> _state.update { it.copy(isPlaying = playing) } },
+                    onCompletion = { _state.update { it.copy(isPlaying = false) } }
+                )
+            } else {
+                Log.d("API1", "Кэша нет, стримим из Supabase...")
+                voiceManager.playUrl(url,
+                    onStateChanged = { playing -> _state.update { it.copy(isPlaying = playing) } },
+                    onCompletion = { _state.update { it.copy(isPlaying = false) } }
+                )
+
+                // Фоновое кэширование, чтобы в следующий раз не дергать сервер
+                downloadToCache(url)
+            }
+        }
+    }
+
+    private fun downloadToCache(url: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // Используем hashCode для уникального имени файла
+                val file = File(getApplication<Application>().cacheDir, "voice_${url.hashCode()}.m4a")
+                if (!file.exists()) {
+                    URL(url).openStream().use { input ->
+                        file.outputStream().use { output -> input.copyTo(output) }
+                    }
+                    // Сохраняем маппинг URL -> Path в DataStore
+                    energyPrefs.saveFileToCacheMap(url, file.absolutePath)
+                    Log.d("API1", "Файл успешно закеширован: ${file.absolutePath}")
+                }
+            } catch (e: Exception) {
+                Log.e("API1", "Ошибка загрузки в кэш: ${e.message}")
+            }
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        voiceManager.stopPlayback()
     }
 
 

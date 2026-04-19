@@ -465,29 +465,40 @@ class HomeViewModel(
                 when (currentYapType) {
                     YapType.VOICE -> {
                         Log.d("API1", "МГНОВЕННАЯ ОТПРАВКА ГОЛОСА: $audioPath")
-                        // Текст пока пустой, мы обновим его в Firebase позже
-                        messageToSend = messageToSend.copy(audioUrl = audioPath)
+
+                        // ШАГ 1: Загружаем в Supabase и создаем запись в Firestore
+                        if (fileToSend != null) {
+                            viewModelScope.launch {
+                                val result = chatRepository.sendVoiceMessage(fileToSend, messageToSend)
+                                result.onSuccess { messageId ->
+                                    Log.d("API1", "Голос загружен, ID: $messageId")
+                                    runTranscription(fileToSend, messageId)
+                                }
+                            }
+                        }
                     }
-                    YapType.TEXT, YapType.EMOJI -> {
-                        Log.d("API1", "Отправляем ТЕКСТ: ${state.userGeneratedContent}")
-                        messageToSend = messageToSend.copy(text = state.userGeneratedContent)
-                    }
-                    YapType.YAP -> {
-                        Log.d("API1", "Отправляем простой YAP")
-                        messageToSend = messageToSend.copy(text = "Отправил(а) Yap")
+                    else -> {
+                        // ШАГ 2: Обычная логика для текста
+                        val finalMessage = messageToSend.copy(
+                            text = if (currentYapType == YapType.YAP) "Отправил(а) Yap" else state.userGeneratedContent
+                        )
+
+                        viewModelScope.launch {
+                            chatRepository.sendMessage(finalMessage)
+                        }
                     }
                 }
 
                 // 1. Отправляем сообщение в базу
-                val result = chatRepository.sendMessage(messageToSend)
-
-                // 2. Если успешно отправлено и это голос — запускаем расшифровку
-                result.onSuccess { messageId ->
-                    if (currentYapType == YapType.VOICE && fileToSend != null) {
-                        // Теперь мы передаем правильный файл и ID сообщения!
-                        runTranscription(fileToSend, messageId)
-                    }
-                }
+//                val result = chatRepository.sendMessage(messageToSend)
+//
+//                // 2. Если успешно отправлено и это голос — запускаем расшифровку
+//                result.onSuccess { messageId ->
+//                    if (currentYapType == YapType.VOICE && fileToSend != null) {
+//                        // Теперь мы передаем правильный файл и ID сообщения!
+//                        runTranscription(fileToSend, messageId)
+//                    }
+//                }
 
                 saveEnergyToStore(newStars, lastAnchorTime)
 
