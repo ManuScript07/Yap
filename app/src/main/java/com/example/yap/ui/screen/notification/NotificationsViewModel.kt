@@ -5,14 +5,14 @@ import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.yap.ChatRepository
 import com.example.yap.R
-import com.example.yap.UserRepository
 import com.example.yap.data.model.UserItem
 import com.example.yap.ui.main.YapApp
 import com.example.yap.util.formatTime
 import com.example.yap.util.getTimeAgo
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -32,6 +32,8 @@ class NotificationsViewModel(
     private val chatRepository = app.chatRepository
     private val energyPrefs = UserPreferences(application)
     private val _state = MutableStateFlow(NotificationsUiState())
+    private var lastProcessedIds = emptySet<String>()
+    private val processedIds = mutableSetOf<String>()
     val state: StateFlow<NotificationsUiState> = _state.asStateFlow()
 
     init {
@@ -125,26 +127,6 @@ class NotificationsViewModel(
 
 
 
-//    private fun observeUsersAndNotifications() {
-//        viewModelScope.launch {
-//            energyPrefs.usersData.collect { persistedUsers ->
-//                val usersList = persistedUsers ?: emptyList()
-//
-//                _state.update { currentState ->
-//                    val updatedNotifications = currentState.notifications.map { notif ->
-//                        val userInQuickList = usersList.find { it.id == notif.user.id }
-//
-//                        notif.copy(
-//                            user = notif.user.copy(
-//                                isYapActive = userInQuickList != null
-//                            )
-//                        )
-//                    }
-//                    currentState.copy(notifications = updatedNotifications)
-//                }
-//            }
-//        }
-//    }
 
 
     fun toggleUserQuickList(userFromNotification: UserItem, isCurrentlyInList: Boolean) {
@@ -153,4 +135,21 @@ class NotificationsViewModel(
             userRepository.toggleQuickList(userFromNotification.id, add = !isCurrentlyInList)
         }
     }
+
+    // В NotificationsViewModel
+    fun markAsRead(ids: List<String>) {
+        // Оставляем только те, которые мы еще не пытались сохранить в этой сессии
+        val newlyVisible = ids.filter { it !in processedIds }
+        if (newlyVisible.isEmpty()) return
+
+        processedIds.addAll(newlyVisible)
+
+        viewModelScope.launch(NonCancellable + Dispatchers.IO) {
+            // Увеличиваем задержку. Пусть копит ID, пока юзер скроллит
+            delay(2000)
+            energyPrefs.addReadIds(newlyVisible)
+        }
+    }
+
+
 }

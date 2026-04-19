@@ -19,6 +19,7 @@ import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
@@ -35,7 +36,10 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -111,6 +115,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
@@ -1116,39 +1121,58 @@ fun TopActionBar(
                         tint = MaterialTheme.colorScheme.onBackground,
                         modifier = Modifier.size(40.dp)
                     )
-
                 }
             }
-            if (state.notificationsCount > 0) {
+
+            this@Row.AnimatedVisibility(
+                visible = state.notificationsCount > 0,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    // Немного смещаем, чтобы такой крупный индикатор гармонично сидел на углу
+                    .offset(x = 2.dp, y = (-2).dp),
+                enter = scaleIn(animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)) + fadeIn(),
+                exit = scaleOut() + fadeOut()
+            ) {
                 Surface(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .size(20.dp)
-                        .offset(x = (2).dp, y = (-2).dp),
+                    // Увеличили размер с 20.dp до 24.dp
+                    modifier = Modifier.size(20.dp),
                     shape = CircleShape,
                     color = Color.Red,
+                    border = null // Убрали обводку совсем
                 ) {
-                    Box(contentAlignment = Alignment.Center,
-                        modifier = Modifier.fillMaxSize()) {
-                        Text(
-                            modifier = Modifier.offset(y = (-0.5).dp),
-                            text = if (state.notificationsCount > 9) "9+" else state.notificationsCount.toString(),
-                            color = Color.White,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            textAlign = TextAlign.Center,
-                            style = LocalTextStyle.current.copy(
-                                lineHeight = 10.sp,
-                                lineHeightStyle = LineHeightStyle(
-                                    alignment = LineHeightStyle.Alignment.Center,
-                                    trim = LineHeightStyle.Trim.Both
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        AnimatedContent(
+                            targetState = state.notificationsCount,
+                            transitionSpec = {
+                                if (targetState > initialState) {
+                                    (slideInVertically { it } + fadeIn()) togetherWith
+                                            (slideOutVertically { -it } + fadeOut())
+                                } else {
+                                    (slideInVertically { -it } + fadeIn()) togetherWith
+                                            (slideOutVertically { it } + fadeOut())
+                                }.using(SizeTransform(clip = false))
+                            },
+                            label = "countAnimation"
+                        ) { count ->
+                            Text(
+                                text = if (count > 9) "9+" else count.toString(),
+                                color = Color.White,
+                                // Увеличили шрифт, так как места теперь больше
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                textAlign = TextAlign.Center,
+                                style = LocalTextStyle.current.copy(
+                                    lineHeight = 12.sp,
+                                    platformStyle = PlatformTextStyle(includeFontPadding = false)
                                 )
-                            ),
-                        )
+                            )
+                        }
                     }
                 }
             }
-
         }
 
 

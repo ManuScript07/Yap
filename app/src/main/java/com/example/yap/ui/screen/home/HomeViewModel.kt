@@ -1,16 +1,14 @@
 package com.example.yap.ui.screen.home
 
 import UserPreferences
-import com.example.yap.data.manager.VoiceManager
 import android.app.Application
 import android.util.Log
 import androidx.annotation.StringRes
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.yap.ChatRepository
 import com.example.yap.MessageEntity
 import com.example.yap.R
-import com.example.yap.UserRepository
+import com.example.yap.data.manager.VoiceManager
 import com.example.yap.data.model.UserItem
 import com.example.yap.service.GroqTranscriptionService
 import com.example.yap.ui.components.YapButtonState
@@ -25,11 +23,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
-import kotlinx.coroutines.withContext
 import java.io.File
 
 class HomeViewModel(
@@ -65,9 +64,9 @@ class HomeViewModel(
 
     init {
         updateStateWithPrice { it }
-//        loadPersistedData()
         observeQuickList()
         observeEnergy()
+        observeNotificationsCount()
     }
     companion object {
         const val PRICE_TEXT = 4
@@ -95,31 +94,6 @@ class HomeViewModel(
     }
 
 
-//    private fun observeQuickList() {
-//        viewModelScope.launch {
-//            userRepository.observeMyProfile().collect { snapshot ->
-//                Log.d("NAV_DEBUG", "Snapshot received: ${snapshot?.id}, exists: ${snapshot?.exists()}")
-//
-//                if (snapshot != null && snapshot.exists()) {
-//                    val quickListIds = snapshot.get("quickList") as? List<String> ?: emptyList()
-//                    Log.d("NAV_DEBUG", "IDs in quickList: $quickListIds")
-//
-//                    val realUsers = withContext(Dispatchers.IO) {
-//                        quickListIds.mapNotNull { id ->
-//                            val profile = userRepository.getUserProfile(id)
-//                            Log.d("NAV_DEBUG", "Loaded profile for $id: ${profile?.name}")
-//                            profile?.copy(isYapActive = true)
-//                        }
-//                    }
-//
-//                    _state.update { it.copy(users = realUsers) }
-//                    updateStateWithPrice { it }
-//                } else {
-//                    Log.d("NAV_DEBUG", "Snapshot is null or doesn't exist")
-//                }
-//            }
-//        }
-//    }
     private fun observeQuickList() {
         viewModelScope.launch {
             // Слушаем профиль из Firebase
@@ -845,5 +819,31 @@ class HomeViewModel(
 
     fun isNetworkAvailable(): Boolean = networkMonitor.isOnline
 
+
+    private fun observeNotificationsCount() {
+        Log.d("NOTIF_DEBUG", "Функция вызвана")
+        val currentUserId = userRepository.currentUserId
+        Log.d("NOTIF_DEBUG", "Current User ID: $currentUserId")
+        if (currentUserId == null) return
+
+        viewModelScope.launch {
+            // Вызываем один раз и держим collect активным
+            chatRepository.observeUserMessages(currentUserId)
+                .combine(energyPrefs.readMessageIds) { messages, readIds ->
+                    val firstUnread = messages.firstOrNull { !readIds.contains(it.id) }
+                    Log.d("NOTIF_DEBUG", "Total: ${messages.size}, Read: ${readIds.size}")
+                    if (firstUnread != null) {
+                        Log.d("NOTIF_DEBUG", "Example Unread ID: ${firstUnread.id}")
+                        Log.d("NOTIF_DEBUG", "Available ReadIds: $readIds")
+                    }
+                    // Логика подсчета: исключаем те ID, что сохранены локально в DataStore
+                    messages.count { !readIds.contains(it.id) }
+                }
+                .distinctUntilChanged() // Пропускаем только если цифра РЕАЛЬНО изменилась
+                .collect { unreadCount ->
+                    _state.update { it.copy(notificationsCount = unreadCount) }
+                }
+        }
+    }
 
 }

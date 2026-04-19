@@ -10,20 +10,30 @@ import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Source
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.tasks.await
 
 class UserRepository(private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()) {
     val usersCollection = firestore.collection("users")
     private val profileCache = MutableStateFlow<Map<String, UserItem>>(emptyMap())
+
+    private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    // Кэш для потока профиля
+    private var myProfileSharedFlow: Flow<DocumentSnapshot?>? = null
 
     val currentUserFlow: Flow<FirebaseUser?> = callbackFlow {
         val auth = FirebaseAuth.getInstance()
@@ -45,22 +55,22 @@ class UserRepository(private val firestore: FirebaseFirestore = FirebaseFirestor
         get() = FirebaseAuth.getInstance().currentUser?.uid
 
     // 1. Получить данные пользователя по ID (замена cachedUsers)
-    suspend fun getUserProfile(userId: String): UserItem? {
-        return try {
-            val snapshot = usersCollection.document(userId).get().await()
-            if (!snapshot.exists()) {
-                Log.e("NAV_DEBUG", "Document for $userId does not exist!")
-                return null
-            }
-            // Маппим документ в UserItem
-            val name = snapshot.getString("name") ?: "Unknown"
-            UserItem(id = userId, name = name, isYapActive = false, avatarRes = R.drawable.avatar_1)
-            // Позже заменишь avatarRes на загрузку картинки по URL
-        } catch (e: Exception) {
-            Log.e("NAV_DEBUG", "Error loading profile for $userId: ${e.message}")
-            null
-        }
-    }
+//    suspend fun getUserProfile(userId: String): UserItem? {
+//        return try {
+//            val snapshot = usersCollection.document(userId).get().await()
+//            if (!snapshot.exists()) {
+//                Log.e("NAV_DEBUG", "Document for $userId does not exist!")
+//                return null
+//            }
+//            // Маппим документ в UserItem
+//            val name = snapshot.getString("name") ?: "Unknown"
+//            UserItem(id = userId, name = name, isYapActive = false, avatarRes = R.drawable.avatar_1)
+//            // Позже заменишь avatarRes на загрузку картинки по URL
+//        } catch (e: Exception) {
+//            Log.e("NAV_DEBUG", "Error loading profile for $userId: ${e.message}")
+//            null
+//        }
+//    }
 
     suspend fun getUsersByIds(ids: List<String>): List<UserItem> {
         if (ids.isEmpty()) return emptyList()
@@ -130,30 +140,43 @@ class UserRepository(private val firestore: FirebaseFirestore = FirebaseFirestor
 
     // 4. Слушать свой профиль (чтобы реактивно обновлять списки мутов и контактов)
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun observeMyProfile(): Flow<DocumentSnapshot?> = currentUserFlow.flatMapLatest { user ->
-        val uid = user?.uid
-        if (uid == null) {
-            // Явно говорим: это поток для DocumentSnapshot, просто он пустой
-            flowOf<DocumentSnapshot?>(null)
-        } else {
-            callbackFlow<DocumentSnapshot?> { // Тоже указываем тип здесь
-                val listener = usersCollection.document(uid).addSnapshotListener { snapshot, error ->
-                    if (error != null) {
-                        Log.e("UserRepository", "Snapshot error", error)
-                    } else {
+    fun observeMyProfile(): Flow<DocumentSnapshot?> {
+        return myProfileSharedFlow ?: currentUserFlow.flatMapLatest { user ->
+            val uid = user?.uid
+            if (uid == null) {
+                flowOf(null)
+            } else {
+                // Явно указываем тип данных в callbackFlow
+                callbackFlow<DocumentSnapshot?> {
+                    Log.d("FIREBASE_TEST", "!!! СЛУШАТЕЛЬ ПРОФИЛЯ СОЗДАН !!!")
+                    val listener = usersCollection.document(uid).addSnapshotListener { snapshot, _ ->
+                        // Теперь ошибки "Nothing?" не будет
                         trySend(snapshot)
                     }
+                    awaitClose {
+                        Log.e("FIREBASE_TEST", "--- СЛУШАТЕЛЬ ПРОФИЛЯ ЗАКРЫТ ---")
+                        listener.remove()
+                    }
                 }
-                awaitClose { listener.remove() }
             }
-        }
-    }.distinctUntilChanged { old, new ->
-        val oldQuick = old?.get("quickList") as? List<*>
-        val newQuick = new?.get("quickList") as? List<*>
-        val oldMuted = old?.get("mutedUsers") as? List<*>
-        val newMuted = new?.get("mutedUsers") as? List<*>
+        }.distinctUntilChanged { old, new ->
+            if (old == null || new == null) return@distinctUntilChanged old == new
 
-        oldQuick == newQuick && oldMuted == newMuted
+            // Используем getStringList или просто заменяем [] на .get("field")
+            // чтобы избежать ложной ошибки API 26 (конфликт с Regex Matcher)
+            val oldQuick = old.get("quickList") as? List<*>
+            val newQuick = new.get("quickList") as? List<*>
+            val oldMuted = old.get("mutedUsers") as? List<*>
+            val newMuted = new.get("mutedUsers") as? List<*>
+
+            oldQuick == newQuick && oldMuted == newMuted
+        }.shareIn(
+            scope = repositoryScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            replay = 1
+        ).also {
+            myProfileSharedFlow = it
+        }
     }
 
     suspend fun signInAnonymously(): Boolean {

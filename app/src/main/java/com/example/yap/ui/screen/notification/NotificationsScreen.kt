@@ -6,6 +6,9 @@ import android.content.Context
 import android.location.Location
 import android.util.Log
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -23,6 +26,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -38,11 +42,12 @@ import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -51,12 +56,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.yap.R
+import com.example.yap.data.model.UserItem
 import com.example.yap.ui.screen.home.HomeViewModel
 import com.example.yap.ui.screen.home.YapType
 import com.example.yap.ui.theme.LocalAdditionColors
@@ -64,9 +69,15 @@ import com.example.yap.ui.theme.LocalBaseScale
 import com.example.yap.util.compose.StatusBarIconsColor
 import com.example.yap.util.compose.rememberLambda
 import com.google.android.gms.location.LocationServices
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.sample
 
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, FlowPreview::class)
 @Composable
 fun NotificationsScreen(
     onBack: () -> Unit,
@@ -87,6 +98,28 @@ fun NotificationsScreen(
         onNavigateToProfile(userId)
     }
 
+    val onDelete = remember(viewModel) { { id: String -> viewModel.deleteNotification(id) } }
+    val onMute = remember(viewModel) { { id: String -> viewModel.muteNotification(id) } }
+    val onYapClick = remember(viewModel) {
+        { user: UserItem, isInList: Boolean -> viewModel.toggleUserQuickList(user, isInList) }
+    }
+    val isLocationEnabled by remember { derivedStateOf { homeState.isLocationEnabled } }
+    val listState = rememberLazyListState()
+
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.layoutInfo.visibleItemsInfo }
+            .map { info -> info.mapNotNull { it.key as? String } }
+            .sample(200)
+            .distinctUntilChanged()
+            .collectLatest { visibleIds ->
+                if (visibleIds.isNotEmpty()) {
+                    delay(200)
+                    viewModel.markAsRead(visibleIds)
+                }
+            }
+    }
+
+
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
@@ -100,6 +133,7 @@ fun NotificationsScreen(
             }
         ) { innerPadding ->
             LazyColumn(
+                state = listState,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(top = innerPadding.calculateTopPadding()),
@@ -110,22 +144,37 @@ fun NotificationsScreen(
             ) {
                 items(
                     items = state.notifications,
-                    key = { it.id }
+                    key = { it.id },
+                    contentType = { "notification" }
                 ) { notification ->
+
                     NotificationRow(
+                        modifier = Modifier.animateItem(
+                            fadeInSpec = tween(500),
+                            placementSpec = spring(stiffness = Spring.StiffnessLow),
+                            fadeOutSpec = tween(300)
+                        ),
                         item = notification,
-                        onDelete = { viewModel.deleteNotification(notification.id) },
-                        onMute = { viewModel.muteNotification(notification.id) },
-                        onYapClick = { userId ->
-                            viewModel.toggleUserQuickList(notification.user, notification.isUserInQuickList)
-                        },
-                        onYapSend = { userId ->
+                        onDelete = { onDelete(notification.id) },
+                        onMute = { onMute(notification.id) },
+                        onYapClick = {
+                            viewModel
+                                .toggleUserQuickList(
+                                    notification.user,
+                                    notification.isUserInQuickList) },
+
+                        onYapSend = {
                             fetchLocationAndSendDirectYap(
                                 context = context,
-                                viewModel = homeViewModel,
-                                userId = userId,
-                                messageType = YapType.YAP,
-                                isLocationEnabled = homeState.isLocationEnabled,
+                                onLocationReady = { lat, lon ->
+                                    homeViewModel.handleDirectSend(
+                                        userId = notification.user.id,
+                                        latitude = lat,
+                                        longitude = lon,
+                                        type = YapType.YAP
+                                    )
+                                },
+                                isLocationEnabled = isLocationEnabled,
                             )
                         },
                         onLocationClick = {},
@@ -146,15 +195,12 @@ fun NotificationsScreen(
 @SuppressLint("MissingPermission")
 fun fetchLocationAndSendDirectYap(
     context: Context,
-    viewModel: HomeViewModel,
-    userId: String,
     isLocationEnabled: Boolean,
-    messageType: YapType
+    onLocationReady: (Double?, Double?) -> Unit
 ) {
-    Log.d("API1", "Получатель $userId")
     if (!isLocationEnabled) {
         Log.d("API1", "Тумблер ВЫКЛЮЧЕН. Координаты: null")
-        viewModel.handleDirectSend(userId, null, null, messageType)
+        onLocationReady(null, null)
         return
     }
 
@@ -162,14 +208,13 @@ fun fetchLocationAndSendDirectYap(
 
     fusedLocationClient.lastLocation.addOnSuccessListener { location: Location? ->
         if (location != null) {
-            Log.d("API1", "ViewModel Hash: ${viewModel.hashCode()}, Тумблер: ${viewModel.state.value.isLocationEnabled}")
             Log.d("API1", "Тумблер ВКЛЮЧЕН. Координаты: ${location.latitude}")
-            viewModel.handleDirectSend(userId, location.latitude, location.longitude, messageType)
+            onLocationReady(location.latitude, location.longitude)
         } else {
-            viewModel.handleDirectSend(userId, null, null, messageType)
+            onLocationReady(null, null)
         }
     }.addOnFailureListener {
-        viewModel.handleDirectSend(userId, null, null, messageType)
+        onLocationReady(null, null)
     }
 }
 
@@ -177,7 +222,7 @@ fun fetchLocationAndSendDirectYap(
 @Composable
 fun BaseTopAppBar(
     title: String,
-    onBack: (() -> Unit)? = null, // Если null, кнопки назад не будет
+    onBack: (() -> Unit)? = null,
     scrollBehavior: TopAppBarScrollBehavior? = null
 ) {
     val baseScale = LocalBaseScale.current

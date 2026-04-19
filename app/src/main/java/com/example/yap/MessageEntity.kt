@@ -1,5 +1,7 @@
 package com.example.yap
 
+import com.google.firebase.firestore.DocumentId
+
 data class MessageEntity(
     val id: String = "",
     val senderId: String = "",

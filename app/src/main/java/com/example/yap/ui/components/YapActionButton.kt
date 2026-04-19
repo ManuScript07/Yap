@@ -33,23 +33,37 @@ fun YapActionButton(
     @SuppressLint("ModifierParameter") modifier: Modifier = Modifier,
     baseScale: Float = 1f
 ) {
-    val iconTint = if (user.isYapActive) Color.Black
-    else LocalAdditionColors.current.secondTextColor
+    // 1. Изолируем цвета, чтобы кнопка не перерисовывалась целиком, если меняется что-то другое в теме
+    val additionColors = LocalAdditionColors.current
+
+    val iconTint = remember(user.isYapActive, additionColors) {
+        if (user.isYapActive) Color.Black
+        else additionColors.secondTextColor
+    }
+
+    val backgroundColor = remember(user.isYapActive, additionColors) {
+        if (user.isYapActive) additionColors.darkYapButtonBackgroundColor
+        else additionColors.disabledYabBackgroundColor
+    }
+
+    // 2. Индикацию нажатия (ripple) лучше вынести в remember, чтобы не пересоздавать объект
+    val interactionSource = remember { MutableInteractionSource() }
+    val rippleIndication = ripple(bounded = true)
 
     Box(
         modifier = modifier
             .height(32.dp * baseScale)
             .width(64.dp * baseScale)
             .clip(RoundedCornerShape(16.dp * baseScale))
-            .background(
-                if (user.isYapActive) LocalAdditionColors.current.darkYapButtonBackgroundColor
-                else LocalAdditionColors.current.disabledYabBackgroundColor
-            )
+            .background(backgroundColor)
             .combinedClickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = ripple(bounded = true),
+                interactionSource = interactionSource,
+                indication = rippleIndication,
                 onClick = { onYapClick(user.id) },
-                onLongClick = onLongYapClick?.let { { it(user.id) } }
+                // 3. Используем remember для лямбды длинного нажатия, чтобы избежать аллокаций
+                onLongClick = remember(user.id, onLongYapClick) {
+                    onLongYapClick?.let { { it(user.id) } }
+                }
             ),
         contentAlignment = Alignment.Center
     ) {

@@ -7,12 +7,21 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import com.google.firebase.firestore.Query
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.tasks.await
 
 
 class ChatRepository(private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()) {
 
     private val messagesCollection = firestore.collection("messages")
+    // при выходе из аккаунта очистить
+    private val messagesCache = java.util.concurrent.ConcurrentHashMap<String, Flow<List<MessageEntity>>>()
+
+    private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     // 1. Отправка сообщения (возвращает сгенерированный ID документа)
     suspend fun sendMessage(message: MessageEntity): Result<String> {
@@ -38,33 +47,50 @@ class ChatRepository(private val firestore: FirebaseFirestore = FirebaseFirestor
 
     // 3. Подписка на сообщения в реальном времени (для страницы уведомлений)
     // Слушаем сообщения, где текущий юзер является получателем ИЛИ отправителем
-    fun observeUserMessages(currentUserId: String): Flow<List<MessageEntity>> = callbackFlow {
-        // Примечание: Для сложного OR-запроса в Firestore может потребоваться индекс.
-        // Пока сделаем подписку на входящие (уведомления)
-        val subscription = messagesCollection
+    // 1. Приватный низкоуровневый источник (Холодный поток)
+    private fun createMessagesFlow(currentUserId: String): Flow<List<MessageEntity>> = callbackFlow {
+        Log.d("FIREBASE_TEST", "!!! РЕАЛЬНЫЙ ЗАПРОС К FIREBASE СОЗДАН !!!")
+        val query = messagesCollection
             .whereEqualTo("receiverId", currentUserId)
             .whereEqualTo("visibleForReceiver", true)
             .orderBy("timestamp", Query.Direction.DESCENDING)
             .limit(50)
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    close(error)
-                    return@addSnapshotListener
-                }
 
-                if (snapshot != null) {
-                    val messages = snapshot.documents.mapNotNull { doc ->
-                        // 1. Превращаем данные в объект
-                        val message = doc.toObject(MessageEntity::class.java)
+        val subscription = query.addSnapshotListener { snapshot, error ->
 
-                        // 2. ВРУЧНУЮ устанавливаем ID из документа, чтобы он не был ""
-                        message?.copy(id = doc.id)
-                    }
-                    trySend(messages).isSuccess
-                }
+            if (error != null) {
+                Log.e("ChatRepository", "Firestore Error: ${error.message}. Check if index is created.")
+                return@addSnapshotListener
             }
 
-        awaitClose { subscription.remove() } // Отписываемся, когда ViewModel умирает
+            snapshot?.let { querySnapshot ->
+                Log.d("FIREBASE_TEST", "Пришли свежие данные из облака")
+                val messages = querySnapshot.documents.mapNotNull { doc ->
+                    val message = doc.toObject(MessageEntity::class.java)
+                    // Вручную присваиваем ID документа
+                    message?.copy(id = doc.id)
+                }
+                trySend(messages)
+            }
+        }
+
+        awaitClose {
+            Log.e("FIREBASE_TEST", "--- СОЕДИНЕНИЕ ЗАКРЫТО ---")
+            subscription.remove()
+            messagesCache.remove(currentUserId)
+        }
+    }
+
+    // 2. Публичный "Горячий" поток (Экономит запросы)
+    fun observeUserMessages(currentUserId: String): Flow<List<MessageEntity>> {
+        return messagesCache.getOrPut(currentUserId) {
+            createMessagesFlow(currentUserId)
+                .shareIn(
+                    scope = repositoryScope,
+                    started = SharingStarted.WhileSubscribed(5000),
+                    replay = 1
+                )
+        }
     }
 
     suspend fun hideMessageForReceiver(messageId: String) {

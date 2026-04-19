@@ -12,7 +12,8 @@ data class NotificationItemModel(
     val timeAgo: String,
     val timestamp: String,
     val isUserInQuickList: Boolean,
-    val isMuted: Boolean
+    val isMuted: Boolean,
+
 )
 
 data class NotificationsUiState(

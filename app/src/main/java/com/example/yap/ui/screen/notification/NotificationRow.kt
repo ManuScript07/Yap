@@ -2,7 +2,6 @@ package com.example.yap.ui.screen.notification
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Image
@@ -34,7 +33,6 @@ import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
@@ -63,68 +61,72 @@ import kotlinx.coroutines.delay
 @Composable
 fun NotificationRow(
     item: NotificationItemModel,
+    modifier: Modifier = Modifier,
     onDelete: () -> Unit,
     onMute: () -> Unit,
     onNavigateToProfile: (String) -> Unit,
     onLocationClick: () -> Unit,
-    onYapClick: (String) -> Unit,
-    onYapSend: (String) -> Unit,
+    onYapClick: () -> Unit,
+    onYapSend: () -> Unit,
 ) {
     val baseScale = LocalBaseScale.current
     val currentOnMute by rememberUpdatedState(onMute)
     val currentOnDelete by rememberUpdatedState(onDelete)
 
-    key(item.id) {
-        val dismissState = rememberSwipeToDismissBoxState(
-            confirmValueChange = { direction ->
-                when (direction) {
-                    SwipeToDismissBoxValue.StartToEnd -> {
-                        currentOnMute()
-                        false // Пружина
-                    }
-                    SwipeToDismissBoxValue.EndToStart -> true // Разрешаем зафиксировать удаление
-                    else -> false
-                }
-            },
-            positionalThreshold = { it * 0.5f } // Порог 50% ширины для уверенности
-        )
+    // Правильная стабилизация лямбд, которые принимают String (ID)
+    // Мы просто запоминаем саму функцию, которую нам передали сверху.
+    val memoizedYapClick = remember(item) { { _: String -> onYapClick() } }
+    val memoizedYapSend = remember(item) { { _: String -> onYapSend() } }
+    val memoizedLocationClick = remember(item) { { onLocationClick() } }
+    val memoizedNavigate = remember(item) { onNavigateToProfile }
 
-        // ИСПРАВЛЕНИЕ 1: Скрываем контент только когда жест ЗАВЕРШЕН (currentValue)
-        val isSettledAsDeleted = dismissState.currentValue == SwipeToDismissBoxValue.EndToStart
-
-        AnimatedVisibility(
-            visible = !isSettledAsDeleted,
-            enter = expandVertically(),
-            exit = shrinkVertically(animationSpec = tween(400)) + fadeOut(tween(200))
-        ) {
-            // ИСПРАВЛЕНИЕ 2: Удаляем из данных только после фиксации состояния
-            LaunchedEffect(isSettledAsDeleted) {
-                if (isSettledAsDeleted) {
-                    delay(400) // Ждем завершения shrinkVertically
-                    currentOnDelete()
+    val dismissState = rememberSwipeToDismissBoxState(
+        confirmValueChange = { direction ->
+            when (direction) {
+                SwipeToDismissBoxValue.StartToEnd -> {
+                    currentOnMute()
+                    false
                 }
+                SwipeToDismissBoxValue.EndToStart -> true
+                else -> false
             }
+        },
+        positionalThreshold = { it * 0.5f }
+    )
 
-            SwipeToDismissBox(
-                state = dismissState,
-                modifier = Modifier.fillMaxWidth(),
-                backgroundContent = {
-                    SwipeBackground(
-                        dismissState = dismissState,
-                        isMuted = item.user.isMuted,
-                        baseScale = baseScale
-                    )
-                }
-            ) {
-                NotificationCardContent(
-                    item = item,
-                    baseScale = baseScale,
-                    onLocationClick = onLocationClick,
-                    onYapClick = onYapClick,
-                    onYapSend = onYapSend,
-                    onNavigateToProfile = onNavigateToProfile
+    val isSettledAsDeleted = dismissState.currentValue == SwipeToDismissBoxValue.EndToStart
+
+    AnimatedVisibility(
+        visible = !isSettledAsDeleted,
+        exit = shrinkVertically(animationSpec = tween(400)) + fadeOut(tween(200)),
+        modifier = modifier
+    ) {
+        LaunchedEffect(isSettledAsDeleted) {
+            if (isSettledAsDeleted) {
+                delay(400)
+                currentOnDelete()
+            }
+        }
+
+        SwipeToDismissBox(
+            state = dismissState,
+            modifier = Modifier.fillMaxWidth(),
+            backgroundContent = {
+                SwipeBackground(
+                    dismissState = dismissState,
+                    isMuted = item.user.isMuted,
+                    baseScale = baseScale
                 )
             }
+        ) {
+            NotificationCardContent(
+                item = item,
+                baseScale = baseScale,
+                onLocationClick = memoizedLocationClick,
+                onYapClick = memoizedYapClick, // Теперь типы совпадают (String) -> Unit
+                onYapSend = memoizedYapSend,   // Теперь типы совпадают (String) -> Unit
+                onNavigateToProfile = memoizedNavigate
+            )
         }
     }
 }
@@ -249,32 +251,37 @@ private fun SwipeBackground(
 ) {
     val direction = dismissState.dismissDirection
     val target = dismissState.targetValue
-    val progress = dismissState.progress
 
-    // Подключаем вибрацию
+
     val haptic = LocalHapticFeedback.current
 
-    // Вибрируем (щелчок), когда targetValue меняется (пересечение порога)
+    val secondaryColor = MaterialTheme.colorScheme.secondary
+    val deleteColor = LocalAdditionColors.current.deleteColor
+
     LaunchedEffect(target) {
         if (target != SwipeToDismissBoxValue.Settled) {
             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-            // Используем LongPress или TextHandleMove для отчетливого "тика"
         }
     }
 
-    val backgroundColor = when (direction) {
-        SwipeToDismissBoxValue.StartToEnd -> MaterialTheme.colorScheme.secondary
-        SwipeToDismissBoxValue.EndToStart -> LocalAdditionColors.current.deleteColor
-        else -> Color.Transparent
+    // 2. Оборачиваем вычисления в remember, чтобы они не дергались лишний раз
+    val backgroundColor = remember(direction) {
+        when (direction) {
+            SwipeToDismissBoxValue.StartToEnd -> secondaryColor
+            SwipeToDismissBoxValue.EndToStart -> deleteColor
+            else -> Color.Transparent
+        }
     }
 
-    val iconRes = when (direction) {
-        SwipeToDismissBoxValue.StartToEnd -> {
-            val willBeMuted = if (target == SwipeToDismissBoxValue.StartToEnd) !isMuted else isMuted
-            if (willBeMuted) R.drawable.outline_notifications_off_24 else R.drawable.outline_notifications_24
+    val iconRes = remember(direction, target, isMuted) {
+        when (direction) {
+            SwipeToDismissBoxValue.StartToEnd -> {
+                val willBeMuted = if (target == SwipeToDismissBoxValue.StartToEnd) !isMuted else isMuted
+                if (willBeMuted) R.drawable.outline_notifications_off_24 else R.drawable.outline_notifications_24
+            }
+            SwipeToDismissBoxValue.EndToStart -> R.drawable.outline_delete_24
+            else -> null
         }
-        SwipeToDismissBoxValue.EndToStart -> R.drawable.outline_delete_24
-        else -> null
     }
 
     Box(
@@ -286,13 +293,6 @@ private fun SwipeBackground(
             Alignment.CenterStart else Alignment.CenterEnd
     ) {
         iconRes?.let { resId ->
-            // ОПТИМИЗАЦИЯ ВИДИМОСТИ:
-            // 1. Alpha стартует не с 0, а с 0.2, и достигает 1.0 быстрее (на 70% свайпа)
-            val animatedAlpha = (progress * 1.4f + 0.4f).coerceIn(0f, 1f)
-
-            // 2. Scale теперь стартует с 0.8 (вместо 0.5), чтобы иконку было сразу видно
-            val animatedScale = 0.9f + (progress.coerceIn(0f, 1f) * 0.2f)
-
             Icon(
                 painter = painterResource(id = resId),
                 contentDescription = null,
@@ -300,9 +300,14 @@ private fun SwipeBackground(
                 modifier = Modifier
                     .size(28.dp * baseScale)
                     .graphicsLayer {
-                        alpha = animatedAlpha
-                        scaleX = animatedScale
-                        scaleY = animatedScale
+                        // 3. Читаем progress ТОЛЬКО ЗДЕСЬ.
+                        // Теперь изменения прогресса меняют свойства слоя, не вызывая рекомпозицию.
+                        val progress = dismissState.progress
+
+                        alpha = (progress * 1.4f + 0.4f).coerceIn(0f, 1f)
+                        val scale = 0.9f + (progress.coerceIn(0f, 1f) * 0.2f)
+                        scaleX = scale
+                        scaleY = scale
                     }
             )
         }
