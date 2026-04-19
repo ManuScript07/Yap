@@ -117,7 +117,7 @@ fun NotificationsScreen(
                         onDelete = { viewModel.deleteNotification(notification.id) },
                         onMute = { viewModel.muteNotification(notification.id) },
                         onYapClick = { userId ->
-                            viewModel.toggleUserQuickList(notification.user)
+                            viewModel.toggleUserQuickList(notification.user, notification.isUserInQuickList)
                         },
                         onYapSend = { userId ->
                             fetchLocationAndSendDirectYap(

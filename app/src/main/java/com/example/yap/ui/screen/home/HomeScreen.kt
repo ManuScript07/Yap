@@ -253,7 +253,7 @@ fun HomeScreen(
             screenHeight = LocalConfiguration.current.screenHeightDp.dp,
             onUserClick = guardedNavigateToProfile,
             onYapClick = { userId -> viewModel.toggleUserYap(userId) },
-            onAddUserClick = { viewModel.addUser()},
+            onAddUserClick = { /*viewModel.addUser()*/},
             onRemoveUserClick = { id -> viewModel.removeUser(id) },
             content = { innerPadding ->
                 HomeContent(

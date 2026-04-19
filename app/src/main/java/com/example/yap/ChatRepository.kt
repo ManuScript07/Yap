@@ -43,7 +43,9 @@ class ChatRepository(private val firestore: FirebaseFirestore = FirebaseFirestor
         // Пока сделаем подписку на входящие (уведомления)
         val subscription = messagesCollection
             .whereEqualTo("receiverId", currentUserId)
+            .whereEqualTo("visibleForReceiver", true)
             .orderBy("timestamp", Query.Direction.DESCENDING)
+            .limit(50)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     close(error)
@@ -63,5 +65,13 @@ class ChatRepository(private val firestore: FirebaseFirestore = FirebaseFirestor
             }
 
         awaitClose { subscription.remove() } // Отписываемся, когда ViewModel умирает
+    }
+
+    suspend fun hideMessageForReceiver(messageId: String) {
+        try {
+            messagesCollection.document(messageId).update("visibleForReceiver", false).await()
+        } catch (e: Exception) {
+            Log.e("ChatRepository", "Error hiding message", e)
+        }
     }
 }

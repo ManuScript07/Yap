@@ -9,6 +9,7 @@ import com.example.yap.ChatRepository
 import com.example.yap.R
 import com.example.yap.UserRepository
 import com.example.yap.data.model.UserItem
+import com.example.yap.ui.main.YapApp
 import com.example.yap.util.formatTime
 import com.example.yap.util.getTimeAgo
 import kotlinx.coroutines.Dispatchers
@@ -16,24 +17,19 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class NotificationsViewModel @JvmOverloads constructor(
+class NotificationsViewModel(
     application: Application,
-    private val chatRepository: ChatRepository = ChatRepository(),
-    private val userRepository: UserRepository = UserRepository()
 ) : AndroidViewModel(application) {
 
 
-    private val CURRENT_USER_ID = 1
-//    private val cachedUsers = listOf(
-//        UserItem(1, "User1", false, R.drawable.avatar_1),
-//        UserItem(2, "User2", true, R.drawable.avatar_2),
-//        UserItem(3, "User3", false, R.drawable.avatar_3),
-//        UserItem(4, "User4", true, R.drawable.avatar_4)
-//    )
+    private val app = application as YapApp
+    private val userRepository = app.userRepository
+    private val chatRepository = app.chatRepository
     private val energyPrefs = UserPreferences(application)
     private val _state = MutableStateFlow(NotificationsUiState())
     val state: StateFlow<NotificationsUiState> = _state.asStateFlow()
@@ -41,47 +37,54 @@ class NotificationsViewModel @JvmOverloads constructor(
     init {
 //        loadNotifications()
         observeMessages()
-        observeUsersAndNotifications()
     }
     private fun observeMessages() {
         val currentUserId = userRepository.currentUserId ?: return
+
         viewModelScope.launch {
-            // 1. Устанавливаем загрузку
-            _state.update { it.copy(isLoading = true) }
+            combine(
+                chatRepository.observeUserMessages(currentUserId),
+                userRepository.observeMyProfile(),
+                energyPrefs.usersData
+            ) { messages, myProfileSnapshot, persistedUsers ->
 
-            chatRepository.observeUserMessages(currentUserId)
-                // 2. Обработка ошибок (теперь при ошибке индекса приложение просто выведет лог, а не упадет)
-                .catch { exception ->
-                    Log.e("NotificationsVM", "Ошибка при получении сообщений", exception)
-                    _state.update { it.copy(isLoading = false) }
-                    // Здесь можно добавить в стейт поле error: String? и показать Snackbar
+                // 1. Собираем все уникальные ID отправителей из списка сообщений
+                val senderIds = messages.map { it.senderId }.distinct()
+
+                // 2. Подгружаем их профили одним пакетом (UserRepository теперь кэширует их)
+                val loadedProfiles = userRepository.getUsersByIds(senderIds)
+
+                val cloudQuickListIds = myProfileSnapshot?.get("quickList") as? List<String> ?: emptyList()
+                val mutedIds = myProfileSnapshot?.get("mutedUsers") as? List<String> ?: emptyList()
+                val localQuickList = persistedUsers ?: emptyList()
+
+                // 3. Маппим сообщения, используя уже загруженные данные
+                messages.map { entity ->
+                    val senderProfile = loadedProfiles.find { it.id == entity.senderId }
+                        ?: UserItem(entity.senderId, "Unknown", false, R.drawable.avatar_1)
+
+                    val isInLocalList = localQuickList.any { it.id == entity.senderId }
+                    val isInCloudList = cloudQuickListIds.contains(entity.senderId)
+                    val isMuted = mutedIds.contains(entity.senderId)
+
+                    NotificationItemModel(
+                        id = entity.id,
+                        user = senderProfile.copy(
+                            isYapActive = isInCloudList,
+                            isMuted = isMuted
+                        ),
+                        messageText = entity.text,
+                        hasLocation = entity.latitude != null,
+                        timestamp = formatTime(entity.timestamp),
+                        timeAgo = getTimeAgo(entity.timestamp),
+                        isUserInQuickList = isInCloudList,
+                        isMuted = isMuted
+                    )
                 }
-                .collect { messagesEntities ->
-                    // 3. Выносим тяжелый маппинг в фоновый поток (Default),
-                    // чтобы UI не подлагивал, если сообщений станет очень много
-                    val notificationsList = withContext(Dispatchers.Default) {
-                        messagesEntities.map { entity ->
-                            val sender = userRepository.getUserProfile(entity.senderId)
-                                ?: UserItem(entity.senderId, "Unknown", false, R.drawable.avatar_1)
-
-                            NotificationItemModel(
-                                id = entity.id,
-                                user = sender,
-                                messageText = entity.text,
-                                hasLocation = entity.latitude != null && entity.longitude != null,
-                                timestamp = formatTime(entity.timestamp),
-                                timeAgo = getTimeAgo(entity.timestamp)
-                            )
-                        }
-                    }
-
-                    // 4. Обновляем состояние
-                    _state.update {
-                        it.copy(
-                            notifications = notificationsList,
-                            isLoading = false
-                        )
-                    }
+            }
+                .catch { e -> /* ... */ }
+                .collect { updatedNotifications ->
+                    _state.update { it.copy(notifications = updatedNotifications, isLoading = false) }
                 }
         }
     }
@@ -89,32 +92,32 @@ class NotificationsViewModel @JvmOverloads constructor(
 
 
     fun deleteNotification(id: String) {
-        _state.update { currentState ->
-            currentState.copy(
-                notifications = currentState.notifications.filter { it.id != id }
-            )
+        viewModelScope.launch {
+            try {
+                // "Мягкое" удаление в базе.
+                // SnapshotListener сам исключит это сообщение из списка, когда придет обновление.
+                chatRepository.hideMessageForReceiver(id)
+            } catch (e: Exception) {
+                Log.e("NotificationsVM", "Ошибка при удалении: ${e.message}")
+            }
         }
     }
 
     fun muteNotification(notificationId: String) {
         viewModelScope.launch {
+            // Находим уведомление в текущем стейте, чтобы понять, какой юзер отправил его
             val targetNotification = _state.value.notifications.find { it.id == notificationId }
             val targetUserId = targetNotification?.user?.id ?: return@launch
 
-            val currentlyMuted = targetNotification.user.isMuted
+            // Берем текущий статус мута из модели уведомления
+            val currentlyMuted = targetNotification.isMuted
 
-            // 1. Отправляем в Firebase (надежный источник правды)
-            userRepository.toggleMute(targetUserId, !currentlyMuted)
-
-            // 2. Оптимистично обновляем UI, чтобы не ждать ответа базы
-            _state.update { currentState ->
-                currentState.copy(
-                    notifications = currentState.notifications.map { notif ->
-                        if (notif.user.id == targetUserId) {
-                            notif.copy(user = notif.user.copy(isMuted = !currentlyMuted))
-                        } else notif
-                    }
-                )
+            try {
+                // Отправляем в Firebase.
+                // Наш observeMessages подхватит изменение профиля и обновит список автоматически!
+                userRepository.toggleMute(targetUserId, !currentlyMuted)
+            } catch (e: Exception) {
+                Log.e("NotificationsVM", "Ошибка при муте: ${e.message}")
             }
         }
     }
@@ -122,32 +125,32 @@ class NotificationsViewModel @JvmOverloads constructor(
 
 
 
-    private fun observeUsersAndNotifications() {
+//    private fun observeUsersAndNotifications() {
+//        viewModelScope.launch {
+//            energyPrefs.usersData.collect { persistedUsers ->
+//                val usersList = persistedUsers ?: emptyList()
+//
+//                _state.update { currentState ->
+//                    val updatedNotifications = currentState.notifications.map { notif ->
+//                        val userInQuickList = usersList.find { it.id == notif.user.id }
+//
+//                        notif.copy(
+//                            user = notif.user.copy(
+//                                isYapActive = userInQuickList != null
+//                            )
+//                        )
+//                    }
+//                    currentState.copy(notifications = updatedNotifications)
+//                }
+//            }
+//        }
+//    }
+
+
+    fun toggleUserQuickList(userFromNotification: UserItem, isCurrentlyInList: Boolean) {
         viewModelScope.launch {
-            energyPrefs.usersData.collect { persistedUsers ->
-                val usersList = persistedUsers ?: emptyList()
-
-                _state.update { currentState ->
-                    val updatedNotifications = currentState.notifications.map { notif ->
-                        val userInQuickList = usersList.find { it.id == notif.user.id }
-
-                        notif.copy(
-                            user = notif.user.copy(
-                                isYapActive = userInQuickList != null
-                            )
-                        )
-                    }
-                    currentState.copy(notifications = updatedNotifications)
-                }
-            }
-        }
-    }
-
-
-    fun toggleUserQuickList(userFromNotification: UserItem) {
-        viewModelScope.launch {
-            // Теперь добавляем в Firestore вместо DataStore
-            userRepository.toggleQuickList(userFromNotification.id, add = true)
+            // Если уже в списке — удаляем (false), если нет — добавляем (true)
+            userRepository.toggleQuickList(userFromNotification.id, add = !isCurrentlyInList)
         }
     }
 }

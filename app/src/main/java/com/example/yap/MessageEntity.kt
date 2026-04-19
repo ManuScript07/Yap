@@ -10,5 +10,6 @@ data class MessageEntity(
     val latitude: Double? = null,
     val longitude: Double? = null,
     @get:com.google.firebase.firestore.ServerTimestamp
-    val timestamp: com.google.firebase.Timestamp? = null
+    val timestamp: com.google.firebase.Timestamp? = null,
+    val visibleForReceiver: Boolean = true
 )

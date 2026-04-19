@@ -14,6 +14,7 @@ import com.example.yap.UserRepository
 import com.example.yap.data.model.UserItem
 import com.example.yap.service.GroqTranscriptionService
 import com.example.yap.ui.components.YapButtonState
+import com.example.yap.ui.main.YapApp
 import com.example.yap.util.NetworkMonitor
 import com.example.yap.util.extension.countGraphemeClusters
 import com.example.yap.util.extension.isEmojiOnly
@@ -31,11 +32,13 @@ import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import java.io.File
 
-class HomeViewModel @JvmOverloads constructor(
+class HomeViewModel(
     application: Application,
-    private val chatRepository: ChatRepository = ChatRepository(),
-    private val userRepository: UserRepository = UserRepository()
 ) : AndroidViewModel(application) {
+
+    private val app = application as YapApp
+    private val userRepository = app.userRepository
+    private val chatRepository = app.chatRepository
 
 //    private val CURRENT_USER_ID = "1"
 //    val currentUserUid = FirebaseAuth.getInstance().currentUser?.uid
@@ -92,32 +95,66 @@ class HomeViewModel @JvmOverloads constructor(
     }
 
 
+//    private fun observeQuickList() {
+//        viewModelScope.launch {
+//            userRepository.observeMyProfile().collect { snapshot ->
+//                Log.d("NAV_DEBUG", "Snapshot received: ${snapshot?.id}, exists: ${snapshot?.exists()}")
+//
+//                if (snapshot != null && snapshot.exists()) {
+//                    val quickListIds = snapshot.get("quickList") as? List<String> ?: emptyList()
+//                    Log.d("NAV_DEBUG", "IDs in quickList: $quickListIds")
+//
+//                    val realUsers = withContext(Dispatchers.IO) {
+//                        quickListIds.mapNotNull { id ->
+//                            val profile = userRepository.getUserProfile(id)
+//                            Log.d("NAV_DEBUG", "Loaded profile for $id: ${profile?.name}")
+//                            profile?.copy(isYapActive = true)
+//                        }
+//                    }
+//
+//                    _state.update { it.copy(users = realUsers) }
+//                    updateStateWithPrice { it }
+//                } else {
+//                    Log.d("NAV_DEBUG", "Snapshot is null or doesn't exist")
+//                }
+//            }
+//        }
+//    }
     private fun observeQuickList() {
         viewModelScope.launch {
+            // Слушаем профиль из Firebase
             userRepository.observeMyProfile().collect { snapshot ->
-                Log.d("NAV_DEBUG", "Snapshot received: ${snapshot?.id}, exists: ${snapshot?.exists()}")
+                val quickListIds = snapshot?.get("quickList") as? List<String> ?: emptyList()
 
-                if (snapshot != null && snapshot.exists()) {
-                    val quickListIds = snapshot.get("quickList") as? List<String> ?: emptyList()
-                    Log.d("NAV_DEBUG", "IDs in quickList: $quickListIds")
+                if (quickListIds.isNotEmpty()) {
+                    val usersFromDb = userRepository.getUsersByIds(quickListIds)
 
-                    val realUsers = withContext(Dispatchers.IO) {
-                        quickListIds.mapNotNull { id ->
-                            val profile = userRepository.getUserProfile(id)
-                            Log.d("NAV_DEBUG", "Loaded profile for $id: ${profile?.name}")
-                            profile?.copy(isYapActive = true)
+                    // Достаем один раз то, что сохранено в DataStore
+                    val persistedUsers = energyPrefs.usersData.first() ?: emptyList()
+
+                    updateStateWithPrice { currentState ->
+                        val sortedUsers = quickListIds.mapNotNull { id ->
+                            val dbUser = usersFromDb.find { it.id == id }
+
+                            // ПРИОРИТЕТЫ для isYapActive:
+                            // 1. Сначала смотрим в текущем стейте (если юзер уже на экране)
+                            // 2. Если в стейте нет, смотрим в DataStore (после перезагрузки)
+                            // 3. Если нигде нет — по умолчанию false
+
+                            val isCurrentlyActive = currentState.users.find { it.id == id }?.isYapActive
+                                ?: persistedUsers.find { it.id == id }?.isYapActive
+                                ?: false
+
+                            dbUser?.copy(isYapActive = isCurrentlyActive)
                         }
+                        currentState.copy(users = sortedUsers)
                     }
-
-                    _state.update { it.copy(users = realUsers) }
-                    updateStateWithPrice { it }
                 } else {
-                    Log.d("NAV_DEBUG", "Snapshot is null or doesn't exist")
+                    updateStateWithPrice { it.copy(users = emptyList()) }
                 }
             }
         }
     }
-
 
     private fun observeEnergy() {
         viewModelScope.launch {
