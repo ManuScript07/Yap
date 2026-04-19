@@ -9,6 +9,8 @@ data class NotificationItemModel(
     val user: UserItem,
     val messageText: String? = null,
     val hasLocation: Boolean = false,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
     val timeAgo: String,
     val timestamp: String,
     val isUserInQuickList: Boolean,

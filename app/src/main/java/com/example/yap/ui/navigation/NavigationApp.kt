@@ -313,9 +313,9 @@ fun TabNavHost(
 fun NavGraphBuilder.userProfileComposable(navController: NavHostController?) {
     composable(
         route = AppDestinations.USER_PROFILE_ROUTE,
-        arguments = listOf(navArgument("userId") { type = NavType.IntType })
+        arguments = listOf(navArgument("userId") { type = NavType.StringType })
     ) { backStackEntry ->
-        val userId = backStackEntry.arguments?.getInt("userId") ?: return@composable
+        val userId = backStackEntry.arguments?.getString("userId") ?: return@composable
         UserProfileScreen(
             userId = userId,
             onBackClick = { safePopBackStack(navController) }

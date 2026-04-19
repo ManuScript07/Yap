@@ -3,8 +3,11 @@ package com.example.yap.ui.screen.notification
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.Intent
 import android.location.Location
+import android.net.Uri
 import android.util.Log
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -68,6 +71,7 @@ import com.example.yap.ui.theme.LocalAdditionColors
 import com.example.yap.ui.theme.LocalBaseScale
 import com.example.yap.util.compose.StatusBarIconsColor
 import com.example.yap.util.compose.rememberLambda
+import com.example.yap.util.openMap
 import com.google.android.gms.location.LocationServices
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.delay
@@ -100,8 +104,10 @@ fun NotificationsScreen(
 
     val onDelete = remember(viewModel) { { id: String -> viewModel.deleteNotification(id) } }
     val onMute = remember(viewModel) { { id: String -> viewModel.muteNotification(id) } }
-    val onYapClick = remember(viewModel) {
-        { user: UserItem, isInList: Boolean -> viewModel.toggleUserQuickList(user, isInList) }
+    val onLocationClick = remember {
+        { lat: Double, lon: Double, userName: String ->
+            openMap(context, lat, lon, "Локация от $userName")
+        }
     }
     val isLocationEnabled by remember { derivedStateOf { homeState.isLocationEnabled } }
     val listState = rememberLazyListState()
@@ -177,7 +183,13 @@ fun NotificationsScreen(
                                 isLocationEnabled = isLocationEnabled,
                             )
                         },
-                        onLocationClick = {},
+                        onLocationClick = {
+                            notification.latitude?.let { lat ->
+                                notification.longitude?.let { lon ->
+                                    onLocationClick(lat, lon, notification.user.name)
+                                }
+                            }
+                        },
                         onNavigateToProfile = guardedNavigateToProfile,
                     )
                 }
@@ -323,7 +335,6 @@ fun BoxScope.SystemStatusPill(
                 Spacer(Modifier.width(10.dp))
 
                 Text(
-                    // Самое важное: берем lastValidMessage, оно не зануляется!
                     text = lastValidMessage,
                     color = Color.White,
                     fontSize = 14.sp,
@@ -334,3 +345,4 @@ fun BoxScope.SystemStatusPill(
         }
     }
 }
+

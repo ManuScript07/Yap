@@ -22,7 +22,7 @@ import com.example.yap.R
 
 @Composable
 fun UserProfileScreen(
-    userId: Int,
+    userId: String,
     onBackClick: () -> Unit
 ) {
     Scaffold(

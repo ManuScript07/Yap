@@ -65,7 +65,6 @@ class NotificationsViewModel(
                     val senderProfile = loadedProfiles.find { it.id == entity.senderId }
                         ?: UserItem(entity.senderId, "Unknown", false, R.drawable.avatar_1)
 
-                    val isInLocalList = localQuickList.any { it.id == entity.senderId }
                     val isInCloudList = cloudQuickListIds.contains(entity.senderId)
                     val isMuted = mutedIds.contains(entity.senderId)
 
@@ -77,6 +76,8 @@ class NotificationsViewModel(
                         ),
                         messageText = entity.text,
                         hasLocation = entity.latitude != null,
+                        latitude = entity.latitude,
+                        longitude = entity.longitude,
                         timestamp = formatTime(entity.timestamp),
                         timeAgo = getTimeAgo(entity.timestamp),
                         isUserInQuickList = isInCloudList,
