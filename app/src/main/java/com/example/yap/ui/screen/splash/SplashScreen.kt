@@ -1,7 +1,6 @@
 package com.example.yap.ui.screen.splash
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
@@ -21,7 +20,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.yap.R
 import com.example.yap.ui.navigation.NavigationApp
 import com.example.yap.ui.screen.auth.AuthScreen
-import com.example.yap.ui.screen.auth.AuthViewModel
 import com.example.yap.util.compose.StatusBarIconsColor
 
 @Composable

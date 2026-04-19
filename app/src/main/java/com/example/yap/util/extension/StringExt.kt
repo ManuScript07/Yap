@@ -1,9 +1,7 @@
 package com.example.yap.util.extension
 
-// Точная проверка: только эмодзи и спец-символы, никаких букв/цифр
 import java.text.BreakIterator
 
-// Считаем "визуальные" символы (Grapheme Clusters)
 fun String.countGraphemeClusters(): Int {
     val it = BreakIterator.getCharacterInstance()
     it.setText(this)

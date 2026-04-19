@@ -2,12 +2,12 @@ package com.example.yap.util
 
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.widget.Toast
+import androidx.core.net.toUri
 
 fun openMap(context: Context, lat: Double, lon: Double, label: String = "Location") {
     // Формируем URI. 'q' позволяет поставить маркер в точку
-    val uri = Uri.parse("geo:$lat,$lon?q=$lat,$lon($label)")
+    val uri = "geo:$lat,$lon?q=$lat,$lon($label)".toUri()
     val mapIntent = Intent(Intent.ACTION_VIEW, uri)
 
     // Пытаемся запустить

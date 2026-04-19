@@ -22,7 +22,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.io.File
 import java.net.URL
 
@@ -36,7 +35,6 @@ class NotificationsViewModel(
     private val chatRepository = app.chatRepository
     private val energyPrefs = UserPreferences(application)
     private val _state = MutableStateFlow(NotificationsUiState())
-    private var lastProcessedIds = emptySet<String>()
     private val processedIds = mutableSetOf<String>()
     private val voiceManager = VoiceManager(application)
     val state: StateFlow<NotificationsUiState> = _state.asStateFlow()
@@ -53,7 +51,7 @@ class NotificationsViewModel(
                 chatRepository.observeUserMessages(currentUserId),
                 userRepository.observeMyProfile(),
                 energyPrefs.usersData
-            ) { messages, myProfileSnapshot, persistedUsers ->
+            ) { messages, myProfileSnapshot, _ ->
 
                 // 1. Собираем все уникальные ID отправителей из списка сообщений
                 val senderIds = messages.map { it.senderId }.distinct()

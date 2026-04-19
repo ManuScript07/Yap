@@ -3,11 +3,8 @@ package com.example.yap.ui.screen.notification
 
 import android.annotation.SuppressLint
 import android.content.Context
-import android.content.Intent
 import android.location.Location
-import android.net.Uri
 import android.util.Log
-import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -73,7 +70,6 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.yap.R
-import com.example.yap.data.model.UserItem
 import com.example.yap.ui.screen.home.HomeViewModel
 import com.example.yap.ui.screen.home.YapType
 import com.example.yap.ui.theme.LocalAdditionColors

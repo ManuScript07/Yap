@@ -1,11 +1,10 @@
 package com.example.yap.util
 
 
-import java.util.Date
-import java.util.Locale
-import com.google.firebase.Timestamp
 import android.text.format.DateUtils
+import com.google.firebase.Timestamp
 import java.text.SimpleDateFormat
+import java.util.Locale
 
 
 fun formatTime(timestamp: Timestamp?): String {

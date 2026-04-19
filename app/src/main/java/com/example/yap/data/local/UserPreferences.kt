@@ -11,7 +11,6 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 
-// Расширение для контекста (обычно вверху файла или в отдельном Singleton)
 private val Context.dataStore by preferencesDataStore(name = "user_settings")
 
 class UserPreferences(private val context: Context) {

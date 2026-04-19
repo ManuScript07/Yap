@@ -453,7 +453,7 @@ class HomeViewModel(
 
                 val senderId = FirebaseAuth.getInstance().currentUser?.uid ?: return@launch
                 Log.d("API1", "Receiver ID: $receiverId")
-                var messageToSend = MessageEntity(
+                val messageToSend = MessageEntity(
                     senderId = senderId,
                     receiverId = receiverId,
                     type = currentYapType.name,
@@ -536,10 +536,6 @@ class HomeViewModel(
             showStatus(resId = R.string.no_internet, durationMs = 3000)
             return
         }
-
-        val isLocEnabled = _state.value.isLocationEnabled
-
-
 
 
         if (_state.value.currentStars < PRICE_SIMPLE_YAP) {
@@ -664,8 +660,6 @@ class HomeViewModel(
                 val file = File(path)
                 if (file.exists() && file.length() > 0) {
                     Log.d("API1", "Файл записан. Размер: ${file.length()} байт")
-                    val currentPrice = _state.value.yapPrice
-                    val shouldTranscribe = currentPrice > 0
 
                     _state.update { it.copy(
                         voiceAudioUri = path,

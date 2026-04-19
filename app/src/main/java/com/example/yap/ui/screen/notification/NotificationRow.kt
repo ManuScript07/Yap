@@ -201,7 +201,7 @@ private fun NotificationCardContent(
                     )
                 }
 
-                item.audioUrl?.let { url ->
+                item.audioUrl?.let {
                     NotificationActionText(
                         text = stringResource(R.string.listen_voice),
                         baseScale = baseScale,
