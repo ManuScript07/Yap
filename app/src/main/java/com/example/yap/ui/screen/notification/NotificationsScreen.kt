@@ -6,8 +6,10 @@ import android.content.Context
 import android.location.Location
 import android.util.Log
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
@@ -25,6 +27,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -32,6 +35,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -43,7 +47,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -72,11 +75,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
@@ -167,53 +172,76 @@ fun NotificationsScreen(
                     bottom = 20.dp * baseScale
                 )
             ) {
-                items(
-                    items = state.notifications,
-                    key = { it.id },
-                    contentType = { "notification" }
-                ) { notification ->
-
-                    NotificationRow(
-                        modifier = Modifier.animateItem(
-                            fadeInSpec = tween(500),
-                            placementSpec = spring(stiffness = Spring.StiffnessLow),
-                            fadeOutSpec = tween(300)
-                        ),
-                        item = notification,
-                        onDelete = { onDelete(notification.id) },
-                        onMute = { onMute(notification.id) },
-                        onYapClick = {
-                            viewModel
-                                .toggleUserQuickList(
-                                    notification.user,
-                                    notification.isUserInQuickList) },
-
-                        onYapSend = {
-                            fetchLocationAndSendDirectYap(
-                                context = context,
-                                onLocationReady = { lat, lon ->
-                                    homeViewModel.handleDirectSend(
-                                        userId = notification.user.id,
-                                        latitude = lat,
-                                        longitude = lon,
-                                        type = YapType.YAP
-                                    )
-                                },
-                                isLocationEnabled = isLocationEnabled,
+                if (state.notifications.isEmpty()) {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillParentMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = stringResource(R.string.no_notifications),
+                                fontSize = 20.sp * baseScale,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier
+                                    .padding(horizontal = 48.dp * baseScale)
+                                    .graphicsLayer(translationY = - (innerPadding.calculateTopPadding().value))
                             )
-                        },
-                        onLocationClick = {
-                            notification.latitude?.let { lat ->
-                                notification.longitude?.let { lon ->
-                                    onLocationClick(lat, lon, notification.user.name)
-                                }
-                            }
-                        },
-                        onNavigateToProfile = guardedNavigateToProfile,
-                        onListenClick = {
-                            viewModel.selectNotification(notification)
                         }
-                    )
+                    }
+                } else {
+                    items(
+                        items = state.notifications,
+                        key = { it.id },
+                        contentType = { "notification" }
+                    ) { notification ->
+
+                        NotificationRow(
+                            modifier = Modifier.animateItem(
+                                fadeInSpec = tween(500),
+                                placementSpec = spring(stiffness = Spring.StiffnessLow),
+                                fadeOutSpec = tween(300)
+                            ),
+                            item = notification,
+                            onDelete = { onDelete(notification.id) },
+                            onMute = { onMute(notification.id) },
+                            onYapClick = {
+                                viewModel
+                                    .toggleUserQuickList(
+                                        notification.user,
+                                        notification.isUserInQuickList
+                                    )
+                            },
+
+                            onYapSend = {
+                                fetchLocationAndSendDirectYap(
+                                    context = context,
+                                    onLocationReady = { lat, lon ->
+                                        homeViewModel.handleDirectSend(
+                                            userId = notification.user.id,
+                                            latitude = lat,
+                                            longitude = lon,
+                                            type = YapType.YAP
+                                        )
+                                    },
+                                    isLocationEnabled = isLocationEnabled,
+                                )
+                            },
+                            onLocationClick = {
+                                notification.latitude?.let { lat ->
+                                    notification.longitude?.let { lon ->
+                                        onLocationClick(lat, lon, notification.user.name)
+                                    }
+                                }
+                            },
+                            onNavigateToProfile = guardedNavigateToProfile,
+                            onListenClick = {
+                                viewModel.selectNotification(notification)
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -388,162 +416,158 @@ fun BoxScope.SystemStatusPill(
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun VoiceDetailsSheet(
-    state: NotificationsUiState,
-    onDismiss: () -> Unit,
-    onTogglePlay: (String) -> Unit,
-    onRequestTranscription: (String) -> Unit,
-    onSeek: (Float) -> Unit,
-    currentProgressMs: Int = 0,
-    totalDurationMs: Int = 12000,
-    onPrepare: (String) -> Unit,
-) {
-    val sheetState = rememberModalBottomSheetState()
-    val notification = state.selectedNotification ?: return
-
-    // Применяем твой скейл
-    val baseScale = LocalBaseScale.current
-
-    var isDragging by remember { mutableStateOf(false) }
-
-    // 2. Локальное значение слайдера (0.0 .. 1.0)
-    var localSliderValue by remember { mutableFloatStateOf(0f) }
-
-    // Вычисляем целевое значение из ViewModel
-    val targetProgress = if (totalDurationMs > 0) currentProgressMs.toFloat() / totalDurationMs else 0f
-
-    val animatedProgress by animateFloatAsState(
-        targetValue = if (isDragging) localSliderValue else targetProgress,
-        animationSpec = if (isDragging) snap() else tween(200, easing = LinearEasing),
-        label = "SliderSmooth"
-    )
-
-    LaunchedEffect(targetProgress) {
-        if (!isDragging) {
-            localSliderValue = targetProgress
-        }
-    }
-
-    LaunchedEffect(notification.audioUrl) {
-        notification.audioUrl?.let { url ->
-            onPrepare(url)
-        }
-    }
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        dragHandle = { BottomSheetDefaults.DragHandle() },
-        containerColor = Color(0xFFB9B9E5)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp * baseScale, vertical = 16.dp * baseScale)
-                .navigationBarsPadding(),
-            horizontalAlignment = Alignment.CenterHorizontally
+        @Composable
+        fun VoiceDetailsSheet(
+            state: NotificationsUiState,
+            onDismiss: () -> Unit,
+            onTogglePlay: (String) -> Unit,
+            onRequestTranscription: (String) -> Unit,
+            onSeek: (Float) -> Unit,
+            currentProgressMs: Int = 0,
+            totalDurationMs: Int = 12000,
+            onPrepare: (String) -> Unit,
         ) {
-            Text(
-                text = "Расшифровка",
-                style = MaterialTheme.typography.titleLarge.copy(
-                    fontSize = MaterialTheme.typography.titleLarge.fontSize * baseScale
-                ),
-                fontWeight = FontWeight.Bold,
-                color = Color.Black
+            val sheetState = rememberModalBottomSheetState()
+            val notification = state.selectedNotification ?: return
+
+            val baseScale = LocalBaseScale.current
+
+            var isDragging by remember { mutableStateOf(false) }
+
+            var localSliderValue by remember { mutableFloatStateOf(0f) }
+
+            val targetProgress = if (totalDurationMs > 0) currentProgressMs.toFloat() / totalDurationMs else 0f
+
+            val animatedProgress by animateFloatAsState(
+                targetValue = if (isDragging) localSliderValue else targetProgress,
+                animationSpec = if (isDragging) snap() else tween(200, easing = LinearEasing),
+                label = "SliderSmooth"
             )
 
-            Spacer(Modifier.height(24.dp * baseScale))
-
-            // БЛОК РАСШИФРОВКИ
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f, fill = false) // Позволяет скроллить текст, если он длинный
-            ) {
-                when {
-                    notification.messageText != null -> {
-                        // 1. Текст есть - показываем его
-                        Text(
-                            text = notification.messageText,
-                            style = MaterialTheme.typography.bodyLarge.copy(
-                                fontSize = MaterialTheme.typography.bodyLarge.fontSize * baseScale
-                            ),
-                            color = Color(0xFF333333),
-                            lineHeight = 24.sp * baseScale
-                        )
-                    }
-                    notification.isTranscribing -> {
-                        // 2. Идет расшифровка - показываем Shimmer
-                        Column {
-                            repeat(5) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(16.dp * baseScale)
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .shimmerEffect()
-                                )
-                                Spacer(Modifier.height(8.dp * baseScale))
-                            }
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth(0.6f)
-                                    .height(16.dp * baseScale)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .shimmerEffect()
-                            )
-                        }
-                    }
-                    else -> {
-                        // 3. Текста нет - предлагаем расшифровать
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                text = "Голосовое сообщение не расшифровано",
-                                color = Color.DarkGray,
-                                fontSize = 14.sp * baseScale
-                            )
-                            Spacer(Modifier.height(12.dp * baseScale))
-                            Button(
-                                onClick = { notification.audioUrl?.let { onRequestTranscription(it) } },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6B52A3))
-                            ) {
-                                Text("Расшифровать", fontSize = 14.sp * baseScale)
-                            }
-                        }
-                    }
+            LaunchedEffect(targetProgress) {
+                if (!isDragging) {
+                    localSliderValue = targetProgress
                 }
             }
 
-            Spacer(Modifier.height(32.dp * baseScale))
+            LaunchedEffect(notification.audioUrl) {
+                notification.audioUrl?.let { url ->
+                    onPrepare(url)
+                }
+            }
+
+            ModalBottomSheet(
+                onDismissRequest = onDismiss,
+                sheetState = sheetState,
+                dragHandle = { BottomSheetDefaults.DragHandle() },
+                containerColor = LocalAdditionColors.current.purpleBackColor
+            ) {
+                Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 30.dp * baseScale)
+                .navigationBarsPadding(),
+            horizontalAlignment = Alignment.Start
+        ) {
+            when {
+                notification.messageText != null -> {
+                    Text(
+                        text = stringResource(R.string.transcription),
+                        fontSize = 24.sp * baseScale,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+
+                    Spacer(Modifier.height(20.dp * baseScale))
+
+                    Text(
+                        text = notification.messageText.trim(),
+                        fontSize = 18.sp * baseScale,
+                        color = LocalAdditionColors.current.secondTextColor,
+                        lineHeight = 20.sp * baseScale,
+                        textAlign = TextAlign.Start
+                    )
+                }
+                notification.isTranscribing -> {
+                    Text(
+                        text = stringResource(R.string.transcription),
+                        fontSize = 24.sp * baseScale,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(Modifier.height(24.dp * baseScale))
+                    TranscriptionShimmer(baseScale)
+                }
+                else -> {
+                    val interactionSource = remember { MutableInteractionSource() }
+                    Text(
+                        text = stringResource(R.string.to_decipher),
+                        fontSize = 24.sp * baseScale,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp * baseScale))
+                            .background(LocalAdditionColors.current.purpleLightColor.copy(alpha = 0.8f))
+                            .padding(horizontal = 8.dp * baseScale, vertical = 8.dp * baseScale)
+                            .clickable(
+                                interactionSource = interactionSource,
+                                indication = null
+                            ) {
+                                notification.audioUrl?.let { onRequestTranscription(it) }
+                            }
+                    )
+                }
+            }
+
+
+            Spacer(Modifier.height(24.dp * baseScale))
 
             // ПЛЕЕР
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(72.dp * baseScale) // Высота по самому высокому элементу (Play)
             ) {
+                // 1. Анимация размеров (Play — высокая, Pause — квадратная)
+                val buttonWidth by animateDpAsState(if (state.isPlaying) 54.dp else 48.dp, label = "w")
+                val buttonCornerRadius by animateDpAsState(if (state.isPlaying) 8.dp else 24.dp, label = "r")
+
+                val buttonColor by animateColorAsState(
+                    targetValue = if (state.isPlaying)
+                        LocalAdditionColors.current.purpleLightColor
+                    else
+                        LocalAdditionColors.current.purpleSurfaceColor
+                )
+
+                val contentColor by animateColorAsState(
+                    targetValue = if (state.isPlaying)
+                        LocalAdditionColors.current.purpleSurfaceColor
+                    else
+                        Color.White
+                )
+
                 // Кнопка Play/Pause
-                FilledIconButton(
-                    onClick = { notification.audioUrl?.let { onTogglePlay(it) } },
-                    colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = Color(0xFF6B52A3),
-                        contentColor = Color.White
-                    ),
-                    modifier = Modifier.size(48.dp * baseScale)
+                Box(
+                    modifier = Modifier
+                        .width(buttonWidth * baseScale)
+                        .height(54.dp * baseScale)
+                        .clip(RoundedCornerShape(buttonCornerRadius * baseScale))
+                        .background(buttonColor)
+                        .clickable { notification.audioUrl?.let { onTogglePlay(it) } },
+                    contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         painter = painterResource(
                             if (state.isPlaying) R.drawable.baseline_pause_32 else R.drawable.baseline_play_arrow_32
                         ),
-                        contentDescription = "Play/Pause",
+                        contentDescription = null,
+                        tint = contentColor,
                         modifier = Modifier.size(32.dp * baseScale)
                     )
                 }
 
-                Spacer(Modifier.width(12.dp * baseScale))
+                Spacer(Modifier.width(10.dp * baseScale))
 
                 Slider(
                     value = if (isDragging) localSliderValue else animatedProgress,
@@ -555,15 +579,41 @@ fun VoiceDetailsSheet(
                         isDragging = false
                         onSeek(localSliderValue * totalDurationMs)
                     },
-                    modifier = Modifier.weight(1f),
-                    colors = SliderDefaults.colors(
-                        thumbColor = Color(0xFF6B52A3),
-                        activeTrackColor = Color(0xFF6B52A3),
-                        inactiveTrackColor = Color(0xFF6B52A3).copy(alpha = 0.3f)
-                    )
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(54.dp * baseScale),
+                    // Кастомный ползунок (вертикальная палочка)
+                    thumb = {
+                        Box(
+                            Modifier
+                                .width(4.dp * baseScale)
+                                .height(56.dp * baseScale)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(LocalAdditionColors.current.purpleSurfaceColor)
+                        )
+                    },
+                    // Кастомный трек (высокая плашка)
+                    track = {
+                        val currentFraction = if (isDragging) localSliderValue else animatedProgress
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(54.dp * baseScale)
+                                .clip(RoundedCornerShape(14.dp * baseScale))
+                                .background(LocalAdditionColors.current.purpleLightColor.copy(alpha = 0.5f))
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(currentFraction.coerceIn(0f, 1f))
+                                    .fillMaxHeight()
+                                    .background(LocalAdditionColors.current.purpleSurfaceColor)
+                            )
+                        }
+                    }
                 )
 
-                Spacer(Modifier.width(12.dp * baseScale))
+                Spacer(Modifier.width(10.dp * baseScale))
 
                 val displayTimeMs = if (isDragging) {
                     (localSliderValue * totalDurationMs).toInt()
@@ -575,19 +625,47 @@ fun VoiceDetailsSheet(
 
                 Text(
                     text = formatTime(displayTimeMs),
-                    style = MaterialTheme.typography.labelLarge.copy(
-                        fontSize = MaterialTheme.typography.labelLarge.fontSize * baseScale
-                    ),
-                    color = Color(0xFF6B52A3),
+                    fontSize = 15.sp * baseScale,
+                    fontWeight = FontWeight.Bold,
+                    color = LocalAdditionColors.current.purpleSurfaceColor,
                     modifier = Modifier
-                        .background(Color.White.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
-                        .padding(horizontal = 10.dp * baseScale, vertical = 6.dp * baseScale)
+                        .height(54.dp * baseScale)
+                        .background(
+                            LocalAdditionColors.current.purpleLightColor,
+                            RoundedCornerShape(8.dp * baseScale)
+                        )
+                        .padding(horizontal = 12.dp * baseScale)
+                        .wrapContentHeight(Alignment.CenterVertically)
                 )
             }
-            Spacer(Modifier.height(16.dp * baseScale))
+            Spacer(Modifier.height(32.dp * baseScale))
         }
     }
 }
+
+@Composable
+fun TranscriptionShimmer(baseScale: Float) {
+    Column {
+        repeat(4) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(24.dp * baseScale)
+                    .clip(RoundedCornerShape(8.dp))
+                    .shimmerEffect()
+            )
+            Spacer(Modifier.height(5.dp * baseScale))
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.4f)
+                .height(24.dp * baseScale)
+                .clip(RoundedCornerShape(8.dp))
+                .shimmerEffect()
+        )
+    }
+}
+
 
 
 

@@ -59,7 +59,11 @@ val LightAdditionColors = AdditionalColors(
     secondTextColor = Color(0xFF414141),
     headerColor = Color(0xFFE5E9F1),
     notifText = Color(0xFF74777F),
-    deleteColor = Color(0xFFE57373)
+    deleteColor = Color(0xFFE57373),
+    purpleBackColor = Color(0xFFB9B9EB),
+    purpleSurfaceColor = Color(0xFF6750A4),
+    purpleLightColor = Color(0xFFE8DEF8)
+
 )
 
 val LocalAdditionColors = staticCompositionLocalOf {

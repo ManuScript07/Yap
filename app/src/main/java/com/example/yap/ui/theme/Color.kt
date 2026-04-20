@@ -25,5 +25,8 @@ data class AdditionalColors(
     val secondTextColor: Color,
     val headerColor: Color,
     val notifText: Color,
-    val deleteColor: Color
+    val deleteColor: Color,
+    val purpleBackColor: Color,
+    val purpleSurfaceColor: Color,
+    val purpleLightColor: Color
 )

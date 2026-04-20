@@ -6,9 +6,15 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -134,14 +140,17 @@ fun NavigationApp() {
     Scaffold(
         modifier = Modifier
             .fillMaxSize(),
+
 //            .windowInsetsPadding(WindowInsets(0, 0, 0, 0)),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
 
         bottomBar = {
+            Column {
                 NavigationBar(
                     containerColor = additionalColors.bottomSurface,
                     tonalElevation = 0.dp,
-                    windowInsets = WindowInsets(0, 0, 0, 0)
+                    windowInsets = WindowInsets(0, 0, 0, 0),
+                    modifier = Modifier.height(64.dp)
                 ) {
                     bottomItems.forEach { screen ->
                         val isSelected = currentTab == screen
@@ -190,6 +199,13 @@ fun NavigationApp() {
                             )
                         )
                     }
+                }
+                Spacer(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(additionalColors.bottomSurface) // Тот же цвет, что у меню
+                        .navigationBarsPadding() // Эта штука просто создаст пустой блок высотой с кнопки
+                )
             }
         }
     ) { innerPadding ->
@@ -198,6 +214,7 @@ fun NavigationApp() {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
+
         ) {
             bottomItems.forEach { screen ->
                 TabNavHost(

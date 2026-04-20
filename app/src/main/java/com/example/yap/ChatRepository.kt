@@ -99,7 +99,7 @@ class ChatRepository(
             .whereEqualTo("receiverId", currentUserId)
             .whereEqualTo("visibleForReceiver", true)
             .orderBy("timestamp", Query.Direction.DESCENDING)
-            .limit(50)
+            .limit(20)
 
         val subscription = query.addSnapshotListener { snapshot, error ->
 
@@ -142,7 +142,8 @@ class ChatRepository(
         Log.d("ChatRepository", "!!! ЗАПРОС НА СКРЫТИЕ СООБЩЕНИЯ: id=$messageId !!!")
         try {
             messagesCollection.document(messageId)
-                .update("visibleForReceiver", false) // delete()
+//                .update("visibleForReceiver", false)
+                .delete()// delete()
                 .await()
             Log.d("ChatRepository", "--- СООБЩЕНИЕ $messageId ТЕПЕРЬ СКРЫТО (visibleForReceiver = false) ---")
         } catch (e: Exception) {

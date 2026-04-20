@@ -91,7 +91,7 @@ class NotificationsViewModel(
                             isYapActive = isInCloudList,
                             isMuted = isMuted
                         ),
-                        messageText = displayShortText,
+                        messageText = displayShortText?.trim(),
                         hasLocation = entity.latitude != null,
                         latitude = entity.latitude,
                         longitude = entity.longitude,

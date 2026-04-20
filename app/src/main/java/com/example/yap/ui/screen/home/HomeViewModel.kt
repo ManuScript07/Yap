@@ -714,12 +714,15 @@ class HomeViewModel(
 
 
     fun resetYapButton() {
+
+        Log.d("API1", "Отмена")
         voiceManager.stopRecording()
         voiceManager.stopPlayback()
-
-        _state.update { currentState ->
+        // Если что это основная проблема
+        updateStateWithPrice { currentState ->
             val shouldResetType = currentState.yapType == YapType.VOICE
 
+            Log.d("API1", "Тип Yap: $shouldResetType")
             currentState.copy(
                 yapButtonState = YapButtonState.IDLE,
                 yapType = if (shouldResetType) YapType.YAP else currentState.yapType,
@@ -819,12 +822,12 @@ class HomeViewModel(
 
 
                     _state.update { it.copy(
-                        transcribedText = text,
+                        transcribedText = text.trim(),
                         isTranscribing = false
                     ) }
                     messageIds.forEach { msgId ->
                         viewModelScope.launch {
-                            chatRepository.updateMessageText(msgId, text)
+                            chatRepository.updateMessageText(msgId, text.trim())
                         }
                     }
                 }

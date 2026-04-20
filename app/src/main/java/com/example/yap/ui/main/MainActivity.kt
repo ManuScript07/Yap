@@ -28,16 +28,7 @@ class MainActivity : ComponentActivity() {
         val splashScreen = installSplashScreen()
 
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge(
-//            statusBarStyle = SystemBarStyle.auto(
-//                Color.TRANSPARENT,
-//                Color.TRANSPARENT
-//            ),
-//            navigationBarStyle = SystemBarStyle.auto(
-//                Color.TRANSPARENT,
-//                Color.TRANSPARENT
-//            )
-        )
+        enableEdgeToEdge()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             window.isNavigationBarContrastEnforced = false
         }

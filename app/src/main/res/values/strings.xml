@@ -22,7 +22,9 @@
     <string name="yap_sent_success">Yap отправлен</string>
     <string name="listen_voice">прослушать</string>
     <string name="sent_yap">Отправил(а) Yap</string>
-
+    <string name="transcription">Расшифровка</string>
+    <string name="to_decipher">Расшифровать</string>
+    <string name="no_notifications">У вас нет уведомлений</string>
 
 
 
