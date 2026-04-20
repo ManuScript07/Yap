@@ -12,6 +12,7 @@ import com.example.yap.ui.main.YapApp
 import com.example.yap.util.formatTime
 import com.example.yap.util.getTimeAgo
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,6 +25,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.io.File
 import java.net.URL
+import kotlin.coroutines.cancellation.CancellationException
 
 class NotificationsViewModel(
     application: Application,
@@ -37,6 +39,7 @@ class NotificationsViewModel(
     private val _state = MutableStateFlow(NotificationsUiState())
     private val processedIds = mutableSetOf<String>()
     private val voiceManager = VoiceManager(application)
+    private val muteJobs = mutableMapOf<String, Job>()
     val state: StateFlow<NotificationsUiState> = _state.asStateFlow()
 
     init {
@@ -110,20 +113,53 @@ class NotificationsViewModel(
     }
 
     fun muteNotification(notificationId: String) {
-        viewModelScope.launch {
-            // Находим уведомление в текущем стейте, чтобы понять, какой юзер отправил его
-            val targetNotification = _state.value.notifications.find { it.id == notificationId }
-            val targetUserId = targetNotification?.user?.id ?: return@launch
+        // 1. Находим уведомление
+        val targetNotification = _state.value.notifications.find { it.id == notificationId }
+        val targetUserId = targetNotification?.user?.id ?: return
+        val currentlyMuted = targetNotification.isMuted
 
-            // Берем текущий статус мута из модели уведомления
-            val currentlyMuted = targetNotification.isMuted
+        // --- OPTIMISTIC UI UPDATE ---
+        // Сразу меняем состояние в локальном State, не дожидаясь ответа сервера.
+        // Пользователь мгновенно видит результат нажатия.
+        _state.update { currentState ->
+            currentState.copy(
+                notifications = currentState.notifications.map {
+                    if (it.id == notificationId) it.copy(isMuted = !currentlyMuted) else it
+                }
+            )
+        }
 
+        // --- DEBOUNCE LOGIC ---
+        // Если пользователь кликнул еще раз по этому же юзеру в течение 500мс — отменяем прошлый запрос
+        muteJobs[targetUserId]?.cancel()
+
+        muteJobs[targetUserId] = viewModelScope.launch {
             try {
-                // Отправляем в Firebase.
-                // Наш observeMessages подхватит изменение профиля и обновит список автоматически!
+                delay(500) // "Полка" ожидания. Если за это время прилетит новый клик, этот Job умрет.
+
+                Log.d("NotificationsVM", "Отправка запроса в Firebase: target=$targetUserId, mute=${!currentlyMuted}")
                 userRepository.toggleMute(targetUserId, !currentlyMuted)
+
+            } catch (e: CancellationException) {
+                // Это норма: просто пользователь кликнул еще раз, не считаем за ошибку
+                Log.d("NotificationsVM", "Запрос отменен: пользователь передумал")
             } catch (e: Exception) {
                 Log.e("NotificationsVM", "Ошибка при муте: ${e.message}")
+
+                // --- ROLLBACK (Откат) ---
+                // Если сервер вернул ошибку, возвращаем иконку в исходное состояние
+                _state.update { currentState ->
+                    currentState.copy(
+                        notifications = currentState.notifications.map {
+                            if (it.id == notificationId) it.copy(isMuted = currentlyMuted) else it
+                        }
+                    )
+                }
+            } finally {
+                // Чистим карту Job после завершения (успешного или нет)
+                if (muteJobs[targetUserId] == coroutineContext[Job]) {
+                    muteJobs.remove(targetUserId)
+                }
             }
         }
     }

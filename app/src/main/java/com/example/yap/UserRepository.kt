@@ -43,34 +43,15 @@ class UserRepository(private val firestore: FirebaseFirestore = FirebaseFirestor
         }
         auth.addAuthStateListener(listener)
 
-        // Сразу отправляем текущее состояние
         trySend(auth.currentUser)
 
         awaitClose {
             auth.removeAuthStateListener(listener)
         }
-    }.distinctUntilChanged() // Чтобы не триггерить UI на одинаковые события
-    // Получить текущего ID
+    }.distinctUntilChanged()
     val currentUserId: String?
         get() = FirebaseAuth.getInstance().currentUser?.uid
 
-    // 1. Получить данные пользователя по ID (замена cachedUsers)
-//    suspend fun getUserProfile(userId: String): UserItem? {
-//        return try {
-//            val snapshot = usersCollection.document(userId).get().await()
-//            if (!snapshot.exists()) {
-//                Log.e("NAV_DEBUG", "Document for $userId does not exist!")
-//                return null
-//            }
-//            // Маппим документ в UserItem
-//            val name = snapshot.getString("name") ?: "Unknown"
-//            UserItem(id = userId, name = name, isYapActive = false, avatarRes = R.drawable.avatar_1)
-//            // Позже заменишь avatarRes на загрузку картинки по URL
-//        } catch (e: Exception) {
-//            Log.e("NAV_DEBUG", "Error loading profile for $userId: ${e.message}")
-//            null
-//        }
-//    }
 
     suspend fun getUsersByIds(ids: List<String>): List<UserItem> {
         if (ids.isEmpty()) return emptyList()
@@ -78,42 +59,71 @@ class UserRepository(private val firestore: FirebaseFirestore = FirebaseFirestor
         val uniqueIds = ids.distinct()
         val currentCache = profileCache.value
 
-        // 1. Находим только те ID, которых реально нет в памяти (RAM)
-        val idsToLoad = uniqueIds.filter { !currentCache.containsKey(it) }
-
-        // 2. Если все в кэше, сразу возвращаем результат
-        if (idsToLoad.isEmpty()) {
+        // 1. Проверяем оперативную память (L1)
+        val idsNotInMemory = uniqueIds.filter { !currentCache.containsKey(it) }
+        if (idsNotInMemory.isEmpty()) {
             return uniqueIds.mapNotNull { currentCache[it] }
         }
 
         return try {
-            // 3. РАЗБИВАЕМ список на куски по 30 (ЧАНКИ)
-            // chunked(30) превращает [1..40] в [[1..30], [31..40]]
-            val newlyLoadedUsers = idsToLoad.chunked(30).flatMap { chunk ->
-                val snapshot = usersCollection
-                    .whereIn(FieldPath.documentId(), chunk) // Теперь тут всегда <= 30
+            val loadedUsers = mutableListOf<UserItem>()
+
+            // 2. Пытаемся достать недостающих из Дискового Кэша Firestore (L2)
+            // Это быстро и бесплатно.
+            idsNotInMemory.chunked(30).forEach { chunk ->
+                val cacheSnapshot = usersCollection
+                    .whereIn(FieldPath.documentId(), chunk)
                     .get(Source.CACHE)
                     .await()
 
-                snapshot.documents.mapNotNull { doc ->
-                    val name = doc.getString("name") ?: "Unknown"
-                    UserItem(id = doc.id, name = name, isYapActive = false, avatarRes = R.drawable.avatar_1)
+                cacheSnapshot.documents.forEach { doc ->
+                    loadedUsers.add(mapToUser(doc))
                 }
             }
 
-            // 4. Обновляем кэш памяти новыми бойцами
-            if (newlyLoadedUsers.isNotEmpty()) {
-                profileCache.update { it + newlyLoadedUsers.associateBy { u -> u.id } }
+            // 3. Проверяем: всех ли нашли?
+            val foundIds = loadedUsers.map { it.id }.toSet()
+            val missingFromCache = idsNotInMemory.filter { !foundIds.contains(it) }
+
+            // 4. Если кого-то нет в кэше (как после переустановки), идем на Сервер (L3)
+            if (missingFromCache.isNotEmpty()) {
+                Log.d("UserRepository", "В кэше нет ${missingFromCache.size} чел, запрос к сети...")
+                missingFromCache.chunked(30).forEach { chunk ->
+                    val serverSnapshot = usersCollection
+                        .whereIn(FieldPath.documentId(), chunk)
+                        .get(Source.SERVER) // Вот здесь мы платим чтение, но только 1 раз
+                        .await()
+
+                    serverSnapshot.documents.forEach { doc ->
+                        loadedUsers.add(mapToUser(doc))
+                    }
+                }
             }
 
-            // 5. Возвращаем полный список (старые + только что загруженные)
+            // 5. Синхронно обновляем кэш в памяти
+            if (loadedUsers.isNotEmpty()) {
+                profileCache.update { it + loadedUsers.associateBy { u -> u.id } }
+            }
+
+            // 6. Собираем финальный список из актуального кэша
             val finalCache = profileCache.value
             uniqueIds.mapNotNull { finalCache[it] }
 
         } catch (e: Exception) {
-            Log.e("UserRepository", "Batch load failed: ${e.message}")
+            Log.e("UserRepository", "Ошибка при загрузке профилей: ${e.message}")
+            // Если всё упало (нет сети), возвращаем хотя бы то, что было в памяти
             uniqueIds.mapNotNull { currentCache[it] }
         }
+    }
+
+    // Выносим маппинг, чтобы не дублировать логику
+    private fun mapToUser(doc: DocumentSnapshot): UserItem {
+        return UserItem(
+            id = doc.id,
+            name = doc.getString("name") ?: "Unknown",
+            isYapActive = false,
+            avatarRes = R.drawable.avatar_1
+        )
     }
 
     // 2. Добавить/удалить пользователя из "Быстрого списка" (Quick List)
@@ -130,54 +140,73 @@ class UserRepository(private val firestore: FirebaseFirestore = FirebaseFirestor
     // 3. Замутить / размутить пользователя
     suspend fun toggleMute(targetUserId: String, mute: Boolean) {
         val uid = currentUserId ?: return
+        Log.d("UserRepository", "!!! ТРАНЗАКЦИЯ МУТА: target=$targetUserId, action=${if (mute) "ADD" else "REMOVE"} !!!")
         val updateOperation = if (mute) {
             FieldValue.arrayUnion(targetUserId)
         } else {
             FieldValue.arrayRemove(targetUserId)
         }
-        usersCollection.document(uid).update("mutedUsers", updateOperation).await()
+        try {
+            usersCollection.document(uid).update("mutedUsers", updateOperation).await()
+            Log.d("UserRepository", "--- МУТ УСПЕШНО ОБНОВЛЕН в Cloud Firestore ---")
+        } catch (e: Exception) {
+            Log.e("UserRepository", "ОШИБКА МУТА для $targetUserId: ${e.message}", e)
+        }
     }
 
-    // 4. Слушать свой профиль (чтобы реактивно обновлять списки мутов и контактов)
+
+    // 1. Выносим поток в ленивое свойство (Property), чтобы он не пересоздавался при каждом вызове функции
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun observeMyProfile(): Flow<DocumentSnapshot?> {
-        return myProfileSharedFlow ?: currentUserFlow.flatMapLatest { user ->
+    private val profileFlow: Flow<DocumentSnapshot?> by lazy {
+        currentUserFlow.flatMapLatest { user ->
             val uid = user?.uid
             if (uid == null) {
+                Log.d("UserRepository", "User is null, profile flow emitted null")
                 flowOf(null)
             } else {
-                // Явно указываем тип данных в callbackFlow
+                // ФИКС 1: Явно указываем тип данных <DocumentSnapshot?>,
+                // чтобы компилятор не вывел Nothing?
                 callbackFlow<DocumentSnapshot?> {
-                    Log.d("FIREBASE_TEST", "!!! СЛУШАТЕЛЬ ПРОФИЛЯ СОЗДАН !!!")
-                    val listener = usersCollection.document(uid).addSnapshotListener { snapshot, _ ->
-                        // Теперь ошибки "Nothing?" не будет
-                        trySend(snapshot)
-                    }
+                    Log.d("FIREBASE_TEST", "!!! СЛУШАТЕЛЬ ПРОФИЛЯ СОЗДАН для $uid !!!")
+
+                    val registration = usersCollection.document(uid)
+                        .addSnapshotListener { snapshot, error ->
+                            if (error != null) {
+                                Log.e("UserRepository", "SnapshotListener error: ${error.message}")
+                                return@addSnapshotListener
+                            }
+                            val result = trySend(snapshot)
+                            if (result.isFailure) {
+                                Log.e("UserRepository", "Failed to send profile snapshot to flow")
+                            }
+                        }
+
                     awaitClose {
                         Log.e("FIREBASE_TEST", "--- СЛУШАТЕЛЬ ПРОФИЛЯ ЗАКРЫТ ---")
-                        listener.remove()
+                        registration.remove()
                     }
                 }
             }
-        }.distinctUntilChanged { old, new ->
-            if (old == null || new == null) return@distinctUntilChanged old == new
-
-            // Используем getStringList или просто заменяем [] на .get("field")
-            // чтобы избежать ложной ошибки API 26 (конфликт с Regex Matcher)
-            val oldQuick = old.get("quickList") as? List<*>
-            val newQuick = new.get("quickList") as? List<*>
-            val oldMuted = old.get("mutedUsers") as? List<*>
-            val newMuted = new.get("mutedUsers") as? List<*>
-
-            oldQuick == newQuick && oldMuted == newMuted
-        }.shareIn(
-            scope = repositoryScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            replay = 1
-        ).also {
-            myProfileSharedFlow = it
         }
+            .distinctUntilChanged { old, new ->
+                if (old == null || new == null) return@distinctUntilChanged old == new
+
+                val oldQuick = old["quickList"] as? List<*>
+                val newQuick = new["quickList"] as? List<*>
+                val oldMuted = old["mutedUsers"] as? List<*>
+                val newMuted = new["mutedUsers"] as? List<*>
+
+                oldQuick == newQuick && oldMuted == newMuted
+            }
+            .shareIn(
+                scope = repositoryScope,
+                started = SharingStarted.WhileSubscribed(5000),
+                replay = 1
+            )
     }
+
+    // 2. Публичный метод теперь просто возвращает готовую ссылку на поток
+    fun observeMyProfile(): Flow<DocumentSnapshot?> = profileFlow
 
     suspend fun signInAnonymously(): Boolean {
         return try {

@@ -91,6 +91,33 @@ class ChatRepository(
         }
     }
 
+    // Новый метод: только загрузка файла в Supabase
+    suspend fun uploadVoiceFile(file: File, senderId: String): Result<String> {
+        return try {
+            if (!file.exists()) return Result.failure(Exception("Файл не найден"))
+
+            val fileName = "${UUID.randomUUID()}.m4a"
+            val fullPath = "$senderId/$fileName"
+
+            // Загружаем файл (один раз!)
+            val bytes = file.readBytes()
+            supabase.storage.from("yaps").upload(
+                path = fullPath,
+                data = bytes
+            ) {
+                upsert = false
+            }
+
+            // Используем встроенный метод получения публичной ссылки
+            val downloadUrl = "${SupabaseConfig.PROJECT_URL}/storage/v1/object/public/${SupabaseConfig.BUCKET_NAME}/$fullPath"
+            Result.success(downloadUrl)
+
+        } catch (e: Exception) {
+            Log.e("ChatRepository", "Ошибка загрузки файла в хранилище: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
     // 2. Обновление текста (для расшифровки голоса)
     suspend fun updateMessageText(messageId: String, transcribedText: String) {
         try {
@@ -104,7 +131,7 @@ class ChatRepository(
     // Слушаем сообщения, где текущий юзер является получателем ИЛИ отправителем
     // 1. Приватный низкоуровневый источник (Холодный поток)
     private fun createMessagesFlow(currentUserId: String): Flow<List<MessageEntity>> = callbackFlow {
-        Log.d("FIREBASE_TEST", "!!! РЕАЛЬНЫЙ ЗАПРОС К FIREBASE СОЗДАН !!!")
+        Log.d("FIREBASE_TEST", "!!! РЕАЛЬНЫЙ ЗАПРОС К FIREBASE СОЗДАН для $currentUserId !!!")
         val query = messagesCollection
             .whereEqualTo("receiverId", currentUserId)
             .whereEqualTo("visibleForReceiver", true)
@@ -132,7 +159,7 @@ class ChatRepository(
         awaitClose {
             Log.e("FIREBASE_TEST", "--- СОЕДИНЕНИЕ ЗАКРЫТО ---")
             subscription.remove()
-            messagesCache.remove(currentUserId)
+//            messagesCache.remove(currentUserId)
         }
     }
 
@@ -149,10 +176,14 @@ class ChatRepository(
     }
 
     suspend fun hideMessageForReceiver(messageId: String) {
+        Log.d("ChatRepository", "!!! ЗАПРОС НА СКРЫТИЕ СООБЩЕНИЯ: id=$messageId !!!")
         try {
-            messagesCollection.document(messageId).update("visibleForReceiver", false).await()
+            messagesCollection.document(messageId)
+                .update("visibleForReceiver", false) // delete()
+                .await()
+            Log.d("ChatRepository", "--- СООБЩЕНИЕ $messageId ТЕПЕРЬ СКРЫТО (visibleForReceiver = false) ---")
         } catch (e: Exception) {
-            Log.e("ChatRepository", "Error hiding message", e)
+            Log.e("ChatRepository", "ОШИБКА при скрытии сообщения $messageId: ${e.message}", e)
         }
     }
 }

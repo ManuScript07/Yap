@@ -449,13 +449,14 @@ class HomeViewModel(
                     startEnergyRegeneration(REGEN_DELAY_MS)
                 }
 
-                val receiverId = state.users.find { it.isYapActive }?.id ?: return@launch
+                val activeReceivers = state.users.filter { it.isYapActive }
+                if (activeReceivers.isEmpty()) return@launch
 
                 val senderId = FirebaseAuth.getInstance().currentUser?.uid ?: return@launch
-                Log.d("API1", "Receiver ID: $receiverId")
+
+                Log.d("API1", "Receiver ID: $activeReceivers")
                 val messageToSend = MessageEntity(
                     senderId = senderId,
-                    receiverId = receiverId,
                     type = currentYapType.name,
                     latitude = if (state.isLocationEnabled) latitude else null,
                     longitude = if (state.isLocationEnabled) longitude else null,
@@ -465,40 +466,55 @@ class HomeViewModel(
                 when (currentYapType) {
                     YapType.VOICE -> {
                         Log.d("API1", "МГНОВЕННАЯ ОТПРАВКА ГОЛОСА: $audioPath")
-
-                        // ШАГ 1: Загружаем в Supabase и создаем запись в Firestore
                         if (fileToSend != null) {
                             viewModelScope.launch {
-                                val result = chatRepository.sendVoiceMessage(fileToSend, messageToSend)
-                                result.onSuccess { messageId ->
-                                    Log.d("API1", "Голос загружен, ID: $messageId")
-                                    runTranscription(fileToSend, messageId)
+                                // 1. ЗАГРУЖАЕМ ФАЙЛ ОДИН РАЗ
+                                val uploadResult = chatRepository.uploadVoiceFile(fileToSend, senderId)
+
+                                uploadResult.onSuccess { audioUrl ->
+                                    Log.d("API1", "Голос успешно загружен. URL: $audioUrl")
+
+                                    val generatedMessageIds = mutableListOf<String>()
+
+                                    // 2. РАССЫЛАЕМ СООБЩЕНИЯ В FIRESTORE С ЭТИМ URL
+                                    activeReceivers.forEach { receiver ->
+                                        val voiceMessage = messageToSend.copy(
+                                            receiverId = receiver.id,
+                                            audioUrl = audioUrl,
+                                            text = null // Ждем транскрипцию
+                                        )
+
+                                        // Используем обычный sendMessage для создания записи в базе
+                                        val dbResult = chatRepository.sendMessage(voiceMessage)
+                                        dbResult.onSuccess { msgId ->
+                                            generatedMessageIds.add(msgId)
+                                        }
+                                    }
+
+                                    // 3. ЗАПУСКАЕМ ТРАНСКРИБАЦИЮ ОДИН РАЗ, ПЕРЕДАВАЯ ВСЕ ID
+                                    if (generatedMessageIds.isNotEmpty()) {
+                                        runTranscription(fileToSend, generatedMessageIds)
+                                    }
+                                }.onFailure {
+                                    Log.e("API1", "Не удалось загрузить аудиофайл: ${it.message}")
+                                    // Можно показать Toast об ошибке загрузки
                                 }
                             }
                         }
                     }
                     else -> {
-                        // ШАГ 2: Обычная логика для текста
-                        val finalMessage = messageToSend.copy(
-                            text = if (currentYapType == YapType.YAP) "Отправил(а) Yap" else state.userGeneratedContent
-                        )
-
-                        viewModelScope.launch {
-                            chatRepository.sendMessage(finalMessage)
+                        activeReceivers.forEach { receiver ->
+                            val textMessage = messageToSend.copy(
+                                receiverId = receiver.id,
+                                text = if (currentYapType == YapType.YAP) "Отправил(а) Yap" else state.userGeneratedContent
+                            )
+                            viewModelScope.launch {
+                                chatRepository.sendMessage(textMessage)
+                            }
                         }
                     }
                 }
 
-                // 1. Отправляем сообщение в базу
-//                val result = chatRepository.sendMessage(messageToSend)
-//
-//                // 2. Если успешно отправлено и это голос — запускаем расшифровку
-//                result.onSuccess { messageId ->
-//                    if (currentYapType == YapType.VOICE && fileToSend != null) {
-//                        // Теперь мы передаем правильный файл и ID сообщения!
-//                        runTranscription(fileToSend, messageId)
-//                    }
-//                }
 
                 saveEnergyToStore(newStars, lastAnchorTime)
 
@@ -792,7 +808,7 @@ class HomeViewModel(
 
 
 
-    private fun runTranscription(file: File, messageId: String) {
+    private fun runTranscription(file: File, messageIds: List<String>) {
 
         viewModelScope.launch(Dispatchers.IO) {
             _state.update { it.copy(isTranscribing = true, transcribedText = null) }
@@ -808,12 +824,11 @@ class HomeViewModel(
                         transcribedText = text,
                         isTranscribing = false
                     ) }
-                    chatRepository.updateMessageText(messageId, text)
-
-                    // --- ЛОГИКА ДЛЯ БУДУЩЕГО (Firebase) ---
-                    // Если ты уже отправил сообщение (например, сохранил ID последнего сообщения),
-                    // здесь можно вызвать:
-                    // repository.updateMessageText(lastMessageId, text)
+                    messageIds.forEach { msgId ->
+                        viewModelScope.launch {
+                            chatRepository.updateMessageText(msgId, text)
+                        }
+                    }
                 }
                 .onFailure { error ->
                     Log.e("STT1", "Ошибка расшифровки (возможно, нет сети): ${error.message}")
