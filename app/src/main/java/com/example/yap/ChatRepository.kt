@@ -54,43 +54,6 @@ class ChatRepository(
         }
     }
 
-    suspend fun sendVoiceMessage(file: File, message: MessageEntity): Result<String> {
-        return try {
-            // Проверка: а есть ли файл вообще?
-            if (!file.exists()) return Result.failure(Exception("Файл не найден"))
-
-            // 1. Формируем пути (voice_messages/userId/uuid.m4a)
-            val fileName = "${UUID.randomUUID()}.m4a"
-            val fullPath = "${message.senderId}/$fileName"
-
-            // 2. Загружаем файл в Supabase
-            // Используем .storage.from("yaps"), убедись что бакет называется именно так
-            supabase.storage.from("yaps").upload(
-                path = fullPath,
-                data = file.readBytes()
-            ) {
-                upsert = false
-            }
-
-
-            val downloadUrl = "${SupabaseConfig.PROJECT_URL}/storage/v1/object/public/${SupabaseConfig.BUCKET_NAME}/$fullPath"
-
-            // 4. Подготавливаем объект сообщения для Firestore
-            // audioUrl — ссылка на Supabase, text — null (ждем расшифровку)
-            val messageWithAudio = message.copy(
-                audioUrl = downloadUrl,
-                text = null
-            )
-
-            // 5. Сохраняем в Firestore и возвращаем результат (ID документа)
-            sendMessage(messageWithAudio)
-
-        } catch (e: Exception) {
-            Log.e("ChatRepository", "Ошибка отправки голоса: ${e.localizedMessage}")
-            Result.failure(e)
-        }
-    }
-
     // Новый метод: только загрузка файла в Supabase
     suspend fun uploadVoiceFile(file: File, senderId: String): Result<String> {
         return try {
@@ -163,7 +126,7 @@ class ChatRepository(
         }
     }
 
-    // 2. Публичный "Горячий" поток (Экономит запросы)
+
     fun observeUserMessages(currentUserId: String): Flow<List<MessageEntity>> {
         return messagesCache.getOrPut(currentUserId) {
             createMessagesFlow(currentUserId)
@@ -186,4 +149,6 @@ class ChatRepository(
             Log.e("ChatRepository", "ОШИБКА при скрытии сообщения $messageId: ${e.message}", e)
         }
     }
+
+
 }

@@ -10,7 +10,6 @@ import com.example.yap.MessageEntity
 import com.example.yap.R
 import com.example.yap.data.manager.VoiceManager
 import com.example.yap.data.model.UserItem
-import com.example.yap.service.GroqTranscriptionService
 import com.example.yap.ui.components.YapButtonState
 import com.example.yap.ui.main.YapApp
 import com.example.yap.util.NetworkMonitor
@@ -39,14 +38,13 @@ class HomeViewModel(
     private val userRepository = app.userRepository
     private val chatRepository = app.chatRepository
 
-//    private val CURRENT_USER_ID = "1"
-//    val currentUserUid = FirebaseAuth.getInstance().currentUser?.uid
+    private val transcriptionService = app.transcriptionService
 
     private val energyPrefs = UserPreferences(application)
     private val voiceManager = VoiceManager(application)
 //    private val transcriptionService = VoskTranscriptionService(application)
 //    private val transcriptionService = ServerTranscriptionService()
-    private val transcriptionService = GroqTranscriptionService()
+
 
     private val networkMonitor = NetworkMonitor(application)
 

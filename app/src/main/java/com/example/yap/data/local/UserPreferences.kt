@@ -21,6 +21,7 @@ class UserPreferences(private val context: Context) {
         val SAVED_USERS = stringPreferencesKey("saved_users")
         val READ_MESSAGE_IDS = stringPreferencesKey("read_message_ids")
         val VOICE_CACHE_MAP = stringPreferencesKey("voice_cache_map")
+        val TRANSCRIPTIONS_CACHE = stringPreferencesKey("transcriptions_cache")
     }
 
 
@@ -48,6 +49,12 @@ class UserPreferences(private val context: Context) {
 
     val voiceCacheMap: Flow<Map<String, String>> = context.dataStore.data.map { prefs ->
         val json = prefs[Keys.VOICE_CACHE_MAP] ?: return@map emptyMap()
+        val type = object : TypeToken<Map<String, String>>() {}.type
+        gson.fromJson(json, type)
+    }
+
+    val transcriptionsCache: Flow<Map<String, String>> = context.dataStore.data.map { prefs ->
+        val json = prefs[Keys.TRANSCRIPTIONS_CACHE] ?: return@map emptyMap()
         val type = object : TypeToken<Map<String, String>>() {}.type
         gson.fromJson(json, type)
     }
@@ -94,6 +101,21 @@ class UserPreferences(private val context: Context) {
 
             currentMap[url] = localPath
             prefs[Keys.VOICE_CACHE_MAP] = gson.toJson(currentMap)
+        }
+    }
+
+    suspend fun saveTranscriptionToCache(audioUrl: String, text: String) {
+        context.dataStore.edit { prefs ->
+            val currentJson = prefs[Keys.TRANSCRIPTIONS_CACHE]
+            val type = object : TypeToken<MutableMap<String, String>>() {}.type
+            val currentMap: MutableMap<String, String> = if (currentJson.isNullOrEmpty()) {
+                mutableMapOf()
+            } else {
+                gson.fromJson(currentJson, type)
+            }
+
+            currentMap[audioUrl] = text
+            prefs[Keys.TRANSCRIPTIONS_CACHE] = gson.toJson(currentMap)
         }
     }
 

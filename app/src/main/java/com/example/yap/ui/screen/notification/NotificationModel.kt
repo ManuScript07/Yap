@@ -16,13 +16,15 @@ data class NotificationItemModel(
     val isUserInQuickList: Boolean,
     val isMuted: Boolean,
     val audioUrl: String? = null,
-
+    val isTranscribing: Boolean = false
 )
 
 data class NotificationsUiState(
     val notifications: List<NotificationItemModel> = emptyList(),
     val isRefreshing: Boolean = false,
-    val selectedNotification: NotificationItemModel? = null, // Сообщение для диалога
+    val selectedNotification: NotificationItemModel? = null,
     val isPlaying: Boolean = false,
-    val isLoading: Boolean = false
+    val isLoading: Boolean = false,
+    val currentProgressMs: Int = 0,
+    val totalDurationMs: Int = 0
 )

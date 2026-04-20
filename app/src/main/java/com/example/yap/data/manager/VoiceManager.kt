@@ -6,6 +6,12 @@ import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.os.Build
 import android.util.Log
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable.isActive
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.io.File
 
 class VoiceManager(private val context: Context) {
@@ -18,6 +24,9 @@ class VoiceManager(private val context: Context) {
     var isRecording: Boolean = false
         private set
 
+    private var currentDataSource: String? = null
+
+    private var progressJob: Job? = null
 
 
     fun startRecording() {
@@ -125,15 +134,18 @@ class VoiceManager(private val context: Context) {
     }
 
     fun stopPlayback() {
+        stopProgressTracker()
         try {
+            // Проверяем именно через isPlaying, чтобы не вызвать ошибку состояния MediaPlayer
             if (player?.isPlaying == true) {
                 player?.stop()
             }
         } catch (e: Exception) {
-            // Игнорируем ошибки при остановке
+            Log.e("VoiceManager", "Ошибка при остановке плеера: ${e.message}")
         } finally {
             player?.release()
             player = null
+            currentDataSource = null // КРИТИЧНО: чтобы следующий togglePlayback считал новый запуск "чистым"
         }
     }
 
@@ -153,19 +165,41 @@ class VoiceManager(private val context: Context) {
     fun getCurrentPosition(): Int = player?.currentPosition ?: 0
 
 
-    // Внутри твоего VoiceManager
-    fun playUrl(
-        url: String,
+    fun seekTo(positionMs: Int) {
+        try {
+            player?.seekTo(positionMs)
+        } catch (e: Exception) {
+            Log.e("VoiceManager", "Ошибка перемотки: ${e.message}")
+        }
+    }
+
+    fun togglePlayback(
+        source: String,
         onStateChanged: (Boolean) -> Unit,
+        onProgress: (current: Int, total: Int) -> Unit, // Новый коллбэк
         onCompletion: () -> Unit
     ) {
-        if (player != null) {
-            stopPlayback()
+        // 1. Если это тот же самый файл и он играет — ставим на паузу
+        if (currentDataSource == source && player?.isPlaying == true) {
+            player?.pause()
+            stopProgressTracker()
+            onStateChanged(false)
+            return
         }
 
-        try {
-            val isNetwork = url.startsWith("http") // Проверяем: сеть или локальный файл
+        // 2. Если это тот же файл и он на паузе — продолжаем
+        if (currentDataSource == source && player != null) {
+            player?.start()
+            startProgressTracker(onProgress, onCompletion, onStateChanged)
+            onStateChanged(true)
+            return
+        }
 
+        // 3. Если файл новый или плеера нет — создаем с нуля
+        stopPlayback()
+        currentDataSource = source
+
+        try {
             player = MediaPlayer().apply {
                 setAudioAttributes(
                     AudioAttributes.Builder()
@@ -173,35 +207,116 @@ class VoiceManager(private val context: Context) {
                         .setUsage(AudioAttributes.USAGE_MEDIA)
                         .build()
                 )
-                setDataSource(url)
+                setDataSource(source)
+
+                val isNetwork = source.startsWith("http")
 
                 if (isNetwork) {
-                    prepareAsync() // Для Supabase
+                    prepareAsync()
                     setOnPreparedListener {
                         start()
+                        startProgressTracker(onProgress, onCompletion, onStateChanged)
                         onStateChanged(true)
                     }
                 } else {
-                    prepare() // СТАНДАРТНЫЙ МЕТОД для кэшированного файла
+                    prepare() // Локальный файл из кэша или записи грузится мгновенно
                     start()
+                    startProgressTracker(onProgress, onCompletion, onStateChanged)
                     onStateChanged(true)
                 }
 
                 setOnCompletionListener {
-                    stopPlayback()
+                    Log.d("VoiceManager", "Playback COMPLETED")
+                    handleManualCompletion(onCompletion, onStateChanged)
+                }
+
+                setOnErrorListener { _, _, _ ->
+                    stopProgressTracker()
                     onCompletion()
                     onStateChanged(false)
-                }
-                setOnErrorListener { _, _, _ ->
-                    stopPlayback()
-                    onCompletion()
+                    resetState()
                     false
                 }
             }
         } catch (e: Exception) {
             Log.e("VoiceManager", "Ошибка проигрывания: ${e.message}")
-            onCompletion()
+            handleManualCompletion(onCompletion, onStateChanged)
         }
     }
+
+    private fun startProgressTracker(onProgress: (Int, Int) -> Unit, onCompletion: () -> Unit, onStateChanged: (Boolean) -> Unit) {
+        progressJob?.cancel()
+        progressJob = CoroutineScope(Dispatchers.Main).launch {
+            while (isActive) {
+                val p = player
+                if (p != null && p.isPlaying) {
+                    val current = p.currentPosition
+                    val total = p.duration
+
+                    onProgress(current, total)
+
+                    // ХАК: Если до конца осталось меньше 150мс — считаем, что всё.
+                    // Некоторые файлы никогда не выбрасывают OnCompletionListener.
+                    if (total > 0 && (total - current) < 150) {
+                        Log.d("VoiceManager", "Конец близок (ручной детект)")
+                        handleManualCompletion(onCompletion, onStateChanged)
+                        break
+                    }
+                } else if (p != null && !p.isPlaying && currentDataSource != null) {
+                    // Если плеер перестал играть сам по себе, но мы не ставили на паузу
+                    // (Это происходит на некоторых прошивках вместо OnCompletion)
+                    handleManualCompletion(onCompletion, onStateChanged)
+                    break
+                }
+                delay(100)
+            }
+        }
+    }
+
+    private fun handleManualCompletion(onCompletion: () -> Unit, onStateChanged: (Boolean) -> Unit) {
+        stopProgressTracker()
+        onCompletion()
+        onStateChanged(false)
+        resetState()
+    }
+
+    private fun stopProgressTracker() {
+        progressJob?.cancel()
+        progressJob = null
+    }
+
+    private fun resetState() {
+        player?.release()
+        player = null
+        currentDataSource = null
+    }
+
+    fun prepareTrack(source: String, onPrepared: (Int) -> Unit) {
+        // Если этот файл уже загружен, просто отдаем длительность
+        if (currentDataSource == source && player != null) {
+            onPrepared(player?.duration ?: 0)
+            return
+        }
+
+        stopPlayback()
+        currentDataSource = source
+        try {
+            player = MediaPlayer().apply {
+                setDataSource(source)
+                setOnPreparedListener {
+                    onPrepared(it.duration)
+                }
+                // Готовим в фоне, чтобы UI не фризил
+                prepareAsync()
+            }
+        } catch (e: Exception) {
+            Log.e("VoiceManager", "Error preparing: ${e.message}")
+        }
+    }
+
+    fun isPlayingSource(source: String): Boolean =
+        currentDataSource == source && player?.isPlaying == true
+
+
 
 }

@@ -6,7 +6,10 @@ import android.content.Context
 import android.location.Location
 import android.util.Log
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -25,6 +28,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -34,12 +38,18 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.BottomSheetDefaults
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -53,12 +63,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
@@ -76,6 +88,8 @@ import com.example.yap.ui.theme.LocalAdditionColors
 import com.example.yap.ui.theme.LocalBaseScale
 import com.example.yap.util.compose.StatusBarIconsColor
 import com.example.yap.util.compose.rememberLambda
+import com.example.yap.util.extension.shimmerEffect
+import com.example.yap.util.formatTime
 import com.example.yap.util.openMap
 import com.google.android.gms.location.LocationServices
 import kotlinx.coroutines.FlowPreview
@@ -212,8 +226,20 @@ fun NotificationsScreen(
     if (state.selectedNotification != null) {
         VoiceDetailsSheet(
             state = state,
+            // Передаем актуальные значения из стейта
+            currentProgressMs = state.currentProgressMs,
+            totalDurationMs = state.totalDurationMs,
+
             onDismiss = { viewModel.selectNotification(null) },
-            onTogglePlay = { url -> viewModel.togglePlayback(url) }
+            onTogglePlay = { url -> viewModel.togglePlayback(url) },
+            onRequestTranscription = { audioUrl ->
+                viewModel.requestTranscription(
+                    notificationId = state.selectedNotification!!.id,
+                    audioUrl = audioUrl
+                )
+            },
+            onSeek = { newPosition -> viewModel.seekTo(newPosition) },
+            onPrepare = { url -> viewModel.prepareAudio(url) }
         )
     }
 }
@@ -366,69 +392,202 @@ fun BoxScope.SystemStatusPill(
 fun VoiceDetailsSheet(
     state: NotificationsUiState,
     onDismiss: () -> Unit,
-    onTogglePlay: (String) -> Unit
+    onTogglePlay: (String) -> Unit,
+    onRequestTranscription: (String) -> Unit,
+    onSeek: (Float) -> Unit,
+    currentProgressMs: Int = 0,
+    totalDurationMs: Int = 12000,
+    onPrepare: (String) -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState()
     val notification = state.selectedNotification ?: return
+
+    // Применяем твой скейл
+    val baseScale = LocalBaseScale.current
+
+    var isDragging by remember { mutableStateOf(false) }
+
+    // 2. Локальное значение слайдера (0.0 .. 1.0)
+    var localSliderValue by remember { mutableFloatStateOf(0f) }
+
+    // Вычисляем целевое значение из ViewModel
+    val targetProgress = if (totalDurationMs > 0) currentProgressMs.toFloat() / totalDurationMs else 0f
+
+    val animatedProgress by animateFloatAsState(
+        targetValue = if (isDragging) localSliderValue else targetProgress,
+        animationSpec = if (isDragging) snap() else tween(200, easing = LinearEasing),
+        label = "SliderSmooth"
+    )
+
+    LaunchedEffect(targetProgress) {
+        if (!isDragging) {
+            localSliderValue = targetProgress
+        }
+    }
+
+    LaunchedEffect(notification.audioUrl) {
+        notification.audioUrl?.let { url ->
+            onPrepare(url)
+        }
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         dragHandle = { BottomSheetDefaults.DragHandle() },
-        containerColor = Color(0xFFB9B9E5) // Цвет из твоего скрина
+        containerColor = Color(0xFFB9B9E5)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(20.dp),
+                .padding(horizontal = 24.dp * baseScale, vertical = 16.dp * baseScale)
+                .navigationBarsPadding(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
                 text = "Расшифровка",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold
+                style = MaterialTheme.typography.titleLarge.copy(
+                    fontSize = MaterialTheme.typography.titleLarge.fontSize * baseScale
+                ),
+                fontWeight = FontWeight.Bold,
+                color = Color.Black
             )
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(24.dp * baseScale))
 
-            // Текст расшифровки (если его нет — показываем "Расшифровывается...")
-            Text(
-                text = notification.messageText ?: "Идет расшифровка сообщения...",
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color.DarkGray
-            )
+            // БЛОК РАСШИФРОВКИ
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = false) // Позволяет скроллить текст, если он длинный
+            ) {
+                when {
+                    notification.messageText != null -> {
+                        // 1. Текст есть - показываем его
+                        Text(
+                            text = notification.messageText,
+                            style = MaterialTheme.typography.bodyLarge.copy(
+                                fontSize = MaterialTheme.typography.bodyLarge.fontSize * baseScale
+                            ),
+                            color = Color(0xFF333333),
+                            lineHeight = 24.sp * baseScale
+                        )
+                    }
+                    notification.isTranscribing -> {
+                        // 2. Идет расшифровка - показываем Shimmer
+                        Column {
+                            repeat(5) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(16.dp * baseScale)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .shimmerEffect()
+                                )
+                                Spacer(Modifier.height(8.dp * baseScale))
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(0.6f)
+                                    .height(16.dp * baseScale)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .shimmerEffect()
+                            )
+                        }
+                    }
+                    else -> {
+                        // 3. Текста нет - предлагаем расшифровать
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = "Голосовое сообщение не расшифровано",
+                                color = Color.DarkGray,
+                                fontSize = 14.sp * baseScale
+                            )
+                            Spacer(Modifier.height(12.dp * baseScale))
+                            Button(
+                                onClick = { notification.audioUrl?.let { onRequestTranscription(it) } },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6B52A3))
+                            ) {
+                                Text("Расшифровать", fontSize = 14.sp * baseScale)
+                            }
+                        }
+                    }
+                }
+            }
 
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(32.dp * baseScale))
 
-            // Плеер
+            // ПЛЕЕР
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                IconButton(onClick = { notification.audioUrl?.let { onTogglePlay(it) } }) {
+                // Кнопка Play/Pause
+                FilledIconButton(
+                    onClick = { notification.audioUrl?.let { onTogglePlay(it) } },
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = Color(0xFF6B52A3),
+                        contentColor = Color.White
+                    ),
+                    modifier = Modifier.size(48.dp * baseScale)
+                ) {
                     Icon(
                         painter = painterResource(
                             if (state.isPlaying) R.drawable.baseline_pause_32 else R.drawable.baseline_play_arrow_32
                         ),
-                        contentDescription = null,
-                        modifier = Modifier.size(48.dp)
+                        contentDescription = "Play/Pause",
+                        modifier = Modifier.size(32.dp * baseScale)
                     )
                 }
 
-                // Здесь можно добавить индикатор прогресса (LinearProgressIndicator)
-                Spacer(Modifier.width(8.dp))
-                Box(
-                    Modifier
-                        .weight(1f)
-                        .height(40.dp)
-                        .background(Color.White.copy(alpha = 0.3f), RoundedCornerShape(20.dp))
+                Spacer(Modifier.width(12.dp * baseScale))
+
+                Slider(
+                    value = if (isDragging) localSliderValue else animatedProgress,
+                    onValueChange = {
+                        isDragging = true
+                        localSliderValue = it
+                    },
+                    onValueChangeFinished = {
+                        isDragging = false
+                        onSeek(localSliderValue * totalDurationMs)
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = SliderDefaults.colors(
+                        thumbColor = Color(0xFF6B52A3),
+                        activeTrackColor = Color(0xFF6B52A3),
+                        inactiveTrackColor = Color(0xFF6B52A3).copy(alpha = 0.3f)
+                    )
                 )
 
-                Spacer(Modifier.width(8.dp))
-                Text("0:12") // Время можно брать из MediaPlayer
+                Spacer(Modifier.width(12.dp * baseScale))
+
+                val displayTimeMs = if (isDragging) {
+                    (localSliderValue * totalDurationMs).toInt()
+                } else if (state.isPlaying || currentProgressMs > 0) {
+                    currentProgressMs
+                } else {
+                    totalDurationMs
+                }
+
+                Text(
+                    text = formatTime(displayTimeMs),
+                    style = MaterialTheme.typography.labelLarge.copy(
+                        fontSize = MaterialTheme.typography.labelLarge.fontSize * baseScale
+                    ),
+                    color = Color(0xFF6B52A3),
+                    modifier = Modifier
+                        .background(Color.White.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                        .padding(horizontal = 10.dp * baseScale, vertical = 6.dp * baseScale)
+                )
             }
-            Spacer(Modifier.height(40.dp))
+            Spacer(Modifier.height(16.dp * baseScale))
         }
     }
 }
+
+
 

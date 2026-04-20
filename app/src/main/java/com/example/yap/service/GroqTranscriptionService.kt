@@ -58,17 +58,4 @@ class GroqTranscriptionService {
             Result.failure(e)
         }
     }
-
-    suspend fun transcribeBytes(bytes: ByteArray, fileName: String): Result<String> = withContext(Dispatchers.IO) {
-        try {
-            // Создаем RequestBody напрямую из массива байтов
-            val requestFile = bytes.toRequestBody("audio/m4a".toMediaTypeOrNull())
-            val body = MultipartBody.Part.createFormData("file", fileName, requestFile)
-
-            val response = api.transcribe(apiKey, body)
-            Result.success(response.text)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
 }

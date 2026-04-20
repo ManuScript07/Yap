@@ -4,6 +4,7 @@ import UserPreferences
 import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.application
 import androidx.lifecycle.viewModelScope
 import com.example.yap.R
 import com.example.yap.data.manager.VoiceManager
@@ -35,17 +36,26 @@ class NotificationsViewModel(
     private val app = application as YapApp
     private val userRepository = app.userRepository
     private val chatRepository = app.chatRepository
+    private val transcriptionService = app.transcriptionService
     private val energyPrefs = UserPreferences(application)
     private val _state = MutableStateFlow(NotificationsUiState())
     private val processedIds = mutableSetOf<String>()
     private val voiceManager = VoiceManager(application)
     private val muteJobs = mutableMapOf<String, Job>()
+    private val activeDownloads = mutableSetOf<String>()
+
+
     val state: StateFlow<NotificationsUiState> = _state.asStateFlow()
 
     init {
-//        loadNotifications()
         observeMessages()
     }
+
+    override fun onCleared() {
+        super.onCleared()
+        voiceManager.stopPlayback()
+    }
+
     private fun observeMessages() {
         val currentUserId = userRepository.currentUserId ?: return
 
@@ -53,8 +63,9 @@ class NotificationsViewModel(
             combine(
                 chatRepository.observeUserMessages(currentUserId),
                 userRepository.observeMyProfile(),
-                energyPrefs.usersData
-            ) { messages, myProfileSnapshot, _ ->
+                energyPrefs.usersData,
+                energyPrefs.transcriptionsCache
+            ) { messages, myProfileSnapshot, _, transCache ->
 
                 // 1. Собираем все уникальные ID отправителей из списка сообщений
                 val senderIds = messages.map { it.senderId }.distinct()
@@ -72,6 +83,7 @@ class NotificationsViewModel(
 
                     val isInCloudList = cloudQuickListIds.contains(entity.senderId)
                     val isMuted = mutedIds.contains(entity.senderId)
+                    val displayShortText = entity.text ?: transCache[entity.audioUrl]
 
                     NotificationItemModel(
                         id = entity.id,
@@ -79,7 +91,7 @@ class NotificationsViewModel(
                             isYapActive = isInCloudList,
                             isMuted = isMuted
                         ),
-                        messageText = entity.text,
+                        messageText = displayShortText,
                         hasLocation = entity.latitude != null,
                         latitude = entity.latitude,
                         longitude = entity.longitude,
@@ -88,6 +100,7 @@ class NotificationsViewModel(
                         isUserInQuickList = isInCloudList,
                         isMuted = isMuted,
                         audioUrl = entity.audioUrl,
+                        isTranscribing = false
                     )
                 }
             }
@@ -192,8 +205,13 @@ class NotificationsViewModel(
     }
 
     fun selectNotification(notification: NotificationItemModel?) {
-        _state.update { it.copy(selectedNotification = notification) }
-        // Если закрываем диалог — стопаем звук
+
+        _state.update { it.copy(
+            selectedNotification = notification,
+            currentProgressMs = 0,
+            totalDurationMs = 0
+        ) }
+
         if (notification == null) {
             voiceManager.stopPlayback()
             _state.update { it.copy(isPlaying = false) }
@@ -202,59 +220,206 @@ class NotificationsViewModel(
 
     fun togglePlayback(url: String) {
         viewModelScope.launch {
-            // Если уже играет — ставим на паузу (твоя стандартная логика)
-            if (voiceManager.isActuallyPlaying()) {
-                voiceManager.pausePlaybackOnly()
-                _state.update { it.copy(isPlaying = false) }
-                return@launch
-            }
-
-            // Проверяем кэш в DataStore
+            // 1. Определяем финальный источник (Кэш или URL)
             val cacheMap = energyPrefs.voiceCacheMap.first()
             val localPath = cacheMap[url]
 
-            if (localPath != null && File(localPath).exists()) {
-                Log.d("API1", "Играем из кэша (локально): $localPath")
-                voiceManager.playUrl(localPath,
-                    onStateChanged = { playing -> _state.update { it.copy(isPlaying = playing) } },
-                    onCompletion = { _state.update { it.copy(isPlaying = false) } }
-                )
+            val finalSource = if (localPath != null && File(localPath).exists()) {
+                Log.d("VOICE", "Используем локальный кэш: $localPath")
+                localPath
             } else {
-                Log.d("API1", "Кэша нет, стримим из Supabase...")
-                voiceManager.playUrl(url,
-                    onStateChanged = { playing -> _state.update { it.copy(isPlaying = playing) } },
-                    onCompletion = { _state.update { it.copy(isPlaying = false) } }
-                )
-
-                // Фоновое кэширование, чтобы в следующий раз не дергать сервер
+                Log.d("VOICE", "Кэша нет, стримим: $url")
+                // Если кэша нет, запускаем загрузку в фоне на будущее
                 downloadToCache(url)
+                url
             }
+
+            // 2. Просто просим менеджер "обработать" этот источник
+            voiceManager.togglePlayback(
+                source = finalSource,
+                onStateChanged = { playing ->
+                    _state.update { it.copy(isPlaying = playing) }
+                },
+                onProgress = { current, total ->
+                    // ОБНОВЛЯЕМ ПРОГРЕСС В СТЕЙТЕ
+                    _state.update { it.copy(
+                        currentProgressMs = current,
+                        totalDurationMs = total
+                    ) }
+                },
+                onCompletion = {
+                    _state.update { it.copy(
+                        isPlaying = false,
+                        currentProgressMs = 0
+                    ) }
+                }
+            )
         }
+    }
+
+    fun seekTo(positionMs: Float) {
+        voiceManager.seekTo(positionMs.toInt())
+        _state.update { it.copy(currentProgressMs = positionMs.toInt()) }
     }
 
     private fun downloadToCache(url: String) {
+        if (!activeDownloads.add(url)) return
         viewModelScope.launch(Dispatchers.IO) {
+            // Используем константный префикс для легкой очистки кэша в будущем
+            val cacheDir = getApplication<Application>().cacheDir
+            val finalFile = File(cacheDir, "voice_${url.hashCode()}.m4a")
+            val tempFile = File(cacheDir, "temp_${url.hashCode()}.tmp")
+
+            // 1. Если файл уже есть, ничего не делаем
+            if (finalFile.exists() && finalFile.length() > 0) return@launch
+
             try {
-                // Используем hashCode для уникального имени файла
-                val file = File(getApplication<Application>().cacheDir, "voice_${url.hashCode()}.m4a")
-                if (!file.exists()) {
-                    URL(url).openStream().use { input ->
-                        file.outputStream().use { output -> input.copyTo(output) }
+                Log.d("API1", "Начинаем загрузку: $url")
+
+                // 2. Качаем во временный файл
+                URL(url).openStream().use { input ->
+                    tempFile.outputStream().use { output ->
+                        input.copyTo(output)
                     }
-                    // Сохраняем маппинг URL -> Path в DataStore
-                    energyPrefs.saveFileToCacheMap(url, file.absolutePath)
-                    Log.d("API1", "Файл успешно закеширован: ${file.absolutePath}")
+                }
+
+                // 3. Атомарная операция: если докачали полностью, переименовываем
+                if (tempFile.exists() && tempFile.length() > 0) {
+                    if (tempFile.renameTo(finalFile)) {
+                        // 4. Только после успеха обновляем маппинг в DataStore
+                        energyPrefs.saveFileToCacheMap(url, finalFile.absolutePath)
+                        Log.d("API1", "Кэш готов: ${finalFile.name}")
+                    }
                 }
             } catch (e: Exception) {
-                Log.e("API1", "Ошибка загрузки в кэш: ${e.message}")
+                Log.e("API1", "Ошибка загрузки: ${url.hashCode()}", e)
+                // Чистим временный файл, если что-то пошло не так
+                if (tempFile.exists()) tempFile.delete()
+            } finally {
+                activeDownloads.remove(url)
+                Log.d("API1", "Загрузка завершена или прервана для: $url")
             }
         }
     }
 
-    override fun onCleared() {
-        super.onCleared()
-        voiceManager.stopPlayback()
+
+    fun requestTranscription(notificationId: String, audioUrl: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            // 1. Включаем анимацию загрузки (Shimmer) для конкретного сообщения
+            updateNotificationState(notificationId, isTranscribing = true)
+
+            try {
+                // 2. Получаем файл (скачиваем или берем из кэша)
+                val file = downloadOrGetVoiceFile(audioUrl)
+
+                if (file == null || !file.exists()) {
+                    Log.e("NotificationsVM", "Не удалось получить аудиофайл")
+                    updateNotificationState(notificationId, isTranscribing = false)
+                    return@launch
+                }
+
+                // 3. Отправляем в Groq API
+                Log.d("NotificationsVM", "Начинаем расшифровку файла: ${file.name}")
+                transcriptionService.transcribe(file)
+                    .onSuccess { text ->
+                        // 4. Успех! Обновляем UI (текст появился, загрузка выключена)
+                        updateNotificationText(notificationId, text)
+
+                        // 5. Сохраняем в базу данных!
+                        // Чтобы при следующем входе текст уже был и мы не тратили API лимиты
+                        energyPrefs.saveTranscriptionToCache(audioUrl, text)
+                        Log.d("NotificationsVM", "Текст сохранен в локальный кэш")
+                    }
+                    .onFailure { error ->
+                        Log.e("NotificationsVM", "Ошибка Groq: ${error.message}")
+                        updateNotificationState(notificationId, isTranscribing = false)
+                        // Тут можно кинуть сайд-эффект для Toast'а "Ошибка сети"
+                    }
+
+            } catch (e: Exception) {
+                Log.e("NotificationsVM", "Критическая ошибка: ${e.message}")
+                updateNotificationState(notificationId, isTranscribing = false)
+            }
+        }
     }
 
+    // --- ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ ---
 
+    // Метод для безопасного скачивания во временный файл (похож на то, что мы делали для кэша плеера)
+    private fun downloadOrGetVoiceFile(url: String): File? {
+        val cacheDir = application.cacheDir
+        val finalFile = File(cacheDir, "transcribe_${url.hashCode()}.m4a")
+        val tempFile = File(cacheDir, "transcribe_${url.hashCode()}.tmp")
+
+        // Проверяем наличие уже готового файла
+        if (finalFile.exists() && finalFile.length() > 100) return finalFile
+
+        return try {
+            URL(url).openStream().use { input ->
+                tempFile.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+            // Атомарная операция: переименовываем только если загрузка прошла успешно
+            if (tempFile.exists() && tempFile.length() > 100) {
+                tempFile.renameTo(finalFile)
+                finalFile
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            if (tempFile.exists()) tempFile.delete()
+            Log.e("NotificationsVM", "Ошибка загрузки файла", e)
+            null
+        }
+    }
+
+    // Обновляем флаг загрузки в списке И в открытом диалоге
+    private fun updateNotificationState(id: String, isTranscribing: Boolean) {
+        _state.update { currentState ->
+            val updatedList = currentState.notifications.map {
+                if (it.id == id) it.copy(isTranscribing = isTranscribing) else it
+            }
+            val updatedSelected = if (currentState.selectedNotification?.id == id) {
+                currentState.selectedNotification.copy(isTranscribing = isTranscribing)
+            } else currentState.selectedNotification
+
+            currentState.copy(
+                notifications = updatedList,
+                selectedNotification = updatedSelected
+            )
+        }
+    }
+
+    // Обновляем текст в списке И в открытом диалоге
+    private fun updateNotificationText(id: String, text: String) {
+        _state.update { currentState ->
+            val updatedList = currentState.notifications.map {
+                if (it.id == id) it.copy(messageText = text, isTranscribing = false) else it
+            }
+            val updatedSelected = if (currentState.selectedNotification?.id == id) {
+                currentState.selectedNotification.copy(messageText = text, isTranscribing = false)
+            } else currentState.selectedNotification
+
+            currentState.copy(
+                notifications = updatedList,
+                selectedNotification = updatedSelected
+            )
+        }
+    }
+
+    fun prepareAudio(url: String) {
+        viewModelScope.launch {
+            val cacheMap = energyPrefs.voiceCacheMap.first()
+            val localPath = cacheMap[url]
+            val finalSource = if (localPath != null && File(localPath).exists()) localPath else url
+
+            voiceManager.prepareTrack(finalSource) { duration ->
+                _state.update { it.copy(
+                    totalDurationMs = duration,
+                    currentProgressMs = 0
+                ) }
+            }
+        }
+    }
 }

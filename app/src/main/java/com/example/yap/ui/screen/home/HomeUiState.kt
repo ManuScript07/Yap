@@ -43,12 +43,16 @@ data class HomeUiState(
     val didOverrideMessage: Boolean = false,
     val maxDurationMs: Long = 20_000L,
     val totalDurationMs: Long = 0L,
+    val currentProgressMs: Int = 0,
 
     val isSystemAlertOverridden: Boolean = false,
     val isPlayingVoice: Boolean = false,
 
     val transcribedText: String? = null,
-    val isTranscribing: Boolean = false
+    val isTranscribing: Boolean = false,
+
+
+
 )
 
 enum class MessageType {
