@@ -24,7 +24,9 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableLongState
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -53,15 +55,16 @@ import com.example.yap.ui.screen.ProfileScreen
 import com.example.yap.ui.screen.home.HomeScreen
 import com.example.yap.ui.screen.home.HomeViewModel
 import com.example.yap.ui.screen.notification.NotificationsScreen
+import com.example.yap.ui.screen.splash.SplashViewModel
 import com.example.yap.ui.screen.user_profile.UserProfileScreen
 import com.example.yap.ui.theme.LocalAdditionColors
+import kotlinx.coroutines.yield
 
 
 @SuppressLint("RestrictedApi")
 @Composable
-fun NavigationApp() {
+fun NavigationApp(splashViewModel: SplashViewModel = viewModel()) {
 
-//    val context = LocalContext.current
 
     val bottomItems = listOf(Screen.Chats, Screen.Map, Screen.Home, Screen.Friends, Screen.Profile) // Порядок
 
@@ -70,16 +73,8 @@ fun NavigationApp() {
 
     val navLockTime = remember { mutableLongStateOf(0L) }
     val sharedViewModel: HomeViewModel = viewModel()
-//    val sharedViewModel: HomeViewModel = viewModel(
-//        factory = object : ViewModelProvider.Factory {
-//            override fun <T : ViewModel> create(modelClass: Class<T>): T {
-//                return HomeViewModel(
-//                    application = context.applicationContext as Application,
-//                    chatRepository = ChatRepository()
-//                ) as T
-//            }
-//        }
-//    )
+    val currentPendingRoute by splashViewModel.pendingRoute.collectAsState()
+
 
     // Saver для сохранения текущей вкладки при пересоздании Activity
     val screenSaver = Saver<Screen, String>(
@@ -91,11 +86,6 @@ fun NavigationApp() {
                 Screen.Map.route -> Screen.Map
                 Screen.Friends.route -> Screen.Friends
                 Screen.Profile.route -> Screen.Profile
-//                Screen.HomeDetails.route -> Screen.HomeDetails
-//                Screen.HomeDeepDetails.route -> Screen.HomeDeepDetails
-//                Screen.HomeSettings.route -> Screen.HomeSettings
-//                Screen.Favorites.route -> Screen.Favorites
-//                Screen.FavDetails.route -> Screen.FavDetails
                 else -> Screen.Home
             }
         }
@@ -107,16 +97,13 @@ fun NavigationApp() {
 
     val context = LocalContext.current
 
+    val additionalColors = LocalAdditionColors.current
+
     // Обработка системной кнопки Back
     BackHandler {
         val currentNavController = navControllers[currentTab]!!
 
-//        val backStackRoutes = currentNavController.currentBackStack.value
-//            .mapNotNull { it.destination.route }
-//            .joinToString(" -> ")
-//
-//        Log.d("NAV_DEBUG", "Текущий таб: ${currentTab.route}")
-//        Log.d("NAV_DEBUG", "Стек этого таба: $backStackRoutes")
+
 
         // 1. Пытаемся вернуться назад ВНУТРИ текущего таба
         // (например, из HomeDetails в Home)
@@ -134,14 +121,31 @@ fun NavigationApp() {
             (context as? Activity)?.moveTaskToBack(true)
         }
     }
-    val additionalColors = LocalAdditionColors.current
 
+
+
+    LaunchedEffect(currentPendingRoute) {
+        if (currentPendingRoute == AppDestinations.NOTIFICATIONS) {
+            currentTab = Screen.Home
+
+            // Даем Compose время переключить вкладку
+            yield()
+
+            val navController = navControllers[Screen.Home]
+            if (navController?.currentDestination?.route != AppDestinations.NOTIFICATIONS) {
+                navController?.navigate(AppDestinations.NOTIFICATIONS) {
+                    launchSingleTop = true
+                }
+            }
+
+            // ОБЯЗАТЕЛЬНО: Очищаем роут после перехода!
+            splashViewModel.onRouteConsumed()
+        }
+    }
 
     Scaffold(
         modifier = Modifier
             .fillMaxSize(),
-
-//            .windowInsetsPadding(WindowInsets(0, 0, 0, 0)),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
 
         bottomBar = {

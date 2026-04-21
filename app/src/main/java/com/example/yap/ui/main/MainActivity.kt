@@ -1,11 +1,10 @@
 package com.example.yap.ui.main
 
 import android.annotation.SuppressLint
-import android.graphics.Color
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
@@ -37,6 +36,7 @@ class MainActivity : ComponentActivity() {
             false
         }
 
+        checkIntent(intent)
 
         setContent {
             val configuration = LocalConfiguration.current
@@ -46,6 +46,18 @@ class MainActivity : ComponentActivity() {
                     AppEntryWithSplash(viewModel)
                 }
             }
+        }
+    }
+
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        checkIntent(intent)
+    }
+
+    private fun checkIntent(intent: Intent?) {
+        intent?.getStringExtra("target_screen")?.let { route ->
+            viewModel.navigateTo(route)
         }
     }
 

@@ -8,9 +8,11 @@ import com.example.yap.UserRepository
 import com.example.yap.ui.main.YapApp
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -22,7 +24,12 @@ class SplashViewModel(application: Application) : AndroidViewModel(application) 
     private val repository = app.userRepository
 
     private val _isSplashVisible = MutableStateFlow(true)
+
+    private val _navigationEvent = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    val navigationEvent = _navigationEvent.asSharedFlow()
     val isSplashVisible = _isSplashVisible.asStateFlow()
+    private val _pendingRoute = MutableStateFlow<String?>(null)
+    val pendingRoute = _pendingRoute.asStateFlow()
 
     // Превращаем Flow из репозитория в StateFlow для UI
     val isReady: StateFlow<Boolean> = repository.currentUserFlow
@@ -39,5 +46,14 @@ class SplashViewModel(application: Application) : AndroidViewModel(application) 
             delay(1200)
             _isSplashVisible.value = false
         }
+    }
+
+    fun navigateTo(route: String) {
+        _pendingRoute.value = route
+    }
+
+    // Вызываем, когда успешно перешли, чтобы не зацикливаться
+    fun onRouteConsumed() {
+        _pendingRoute.value = null
     }
 }

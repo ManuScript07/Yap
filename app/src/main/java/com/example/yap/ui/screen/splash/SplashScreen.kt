@@ -35,7 +35,7 @@ fun AppEntryWithSplash(
         // Мы рендерим основное приложение ТОЛЬКО если авторизация пройдена.
         // Это предотвратит лишние запросы к Firebase и наслоение UI.
         if (isReady) {
-            NavigationApp()
+            NavigationApp(splashViewModel)
         } else if (!splashVisible) {
             // Если сплэш уже ушел, а мы всё еще не готовы (нет юзера)
             AuthScreen(

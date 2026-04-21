@@ -2,13 +2,17 @@ package com.example.yap.service
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.example.yap.R
 import com.example.yap.UserRepository
+import com.example.yap.ui.main.MainActivity
 import com.example.yap.ui.main.YapApp
+import com.example.yap.ui.navigation.AppDestinations
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import kotlinx.coroutines.CoroutineScope
@@ -51,11 +55,26 @@ class MyFcmService : FirebaseMessagingService() {
             notificationManager.createNotificationChannel(channel)
         }
 
+        val intent = Intent(this, MainActivity::class.java).apply {
+            // КЛЮЧЕВОЕ ИЗМЕНЕНИЕ 3: Обязательно задаем Action
+            action = Intent.ACTION_VIEW
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("target_screen", AppDestinations.NOTIFICATIONS)
+        }
+
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            0,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         val notification = NotificationCompat.Builder(this, channelId)
             .setContentTitle(title)
             .setContentText(message)
             .setSmallIcon(R.drawable.yap2)
             .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
             .build()
 
         notificationManager.notify(Random.nextInt(), notification)
