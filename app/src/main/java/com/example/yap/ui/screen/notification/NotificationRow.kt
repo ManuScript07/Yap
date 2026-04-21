@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -82,19 +83,21 @@ fun NotificationRow(
     val memoizedNavigate = remember(item) { onNavigateToProfile }
     val memoizedListenClick = remember(item) { { onListenClick() } }
 
+
     val dismissState = rememberSwipeToDismissBoxState(
         confirmValueChange = { direction ->
-            when (direction) {
-                SwipeToDismissBoxValue.StartToEnd -> {
-                    currentOnMute()
-                    false
-                }
-                SwipeToDismissBoxValue.EndToStart -> true
-                else -> false
-            }
+            direction != SwipeToDismissBoxValue.StartToEnd
         },
         positionalThreshold = { it * 0.5f }
     )
+
+    LaunchedEffect(dismissState.targetValue) {
+        if (dismissState.targetValue == SwipeToDismissBoxValue.StartToEnd) {
+            currentOnMute()
+
+            dismissState.reset()
+        }
+    }
 
     val isSettledAsDeleted = dismissState.currentValue == SwipeToDismissBoxValue.EndToStart
 

@@ -39,7 +39,6 @@ class UserRepository(
     private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     // Кэш для потока профиля
-    private var myProfileSharedFlow: Flow<DocumentSnapshot?>? = null
 
     val currentUserFlow: Flow<FirebaseUser?> = callbackFlow {
         val auth = FirebaseAuth.getInstance()

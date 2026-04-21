@@ -76,6 +76,14 @@ class ChatRepository(
             try {
                 // А) Получаем токен ПОЛУЧАТЕЛЯ
                 val receiverDoc = usersCollection.document(receiverId).get().await()
+
+                // Без защиты, такие проверки надо делать на сервере
+                val mutedUsers = receiverDoc.get("mutedUsers") as? List<String> ?: emptyList()
+                if (mutedUsers.contains(senderId)) {
+                    Log.d("PUSH_SENDER", "Уведомление отменено: получатель $receiverId замьютил отправителя $senderId")
+                    return@withContext // Просто выходим, не дергая сервер Render
+                }
+
                 val fcmToken = receiverDoc.getString("fcmToken")
 
                 if (fcmToken.isNullOrEmpty()) {
@@ -85,10 +93,8 @@ class ChatRepository(
 
                 // Б) Получаем имя ОТПРАВИТЕЛЯ (чтобы красиво показать в уведомлении)
                 val senderDoc = usersCollection.document(senderId).get().await()
-                // Замени "name" на то поле, где у тебя хранится имя юзера (например "username" или "nickname")
                 val senderName = senderDoc.getString("name") ?: "Новое сообщение"
 
-                // В) Формируем JSON для твоего сервера
                 val jsonMap = mapOf(
                     "fcmToken" to fcmToken,
                     "senderName" to senderName,
@@ -99,7 +105,7 @@ class ChatRepository(
                 // Г) Отправляем POST запрос на твой Render сервер
                 val requestBody = jsonString.toRequestBody("application/json; charset=utf-8".toMediaType())
                 val request = Request.Builder()
-                    .url("https://yap-server.onrender.com/send-notification") // Твой сервер!
+                    .url("https://yap-server.onrender.com/send-notification")
                     .post(requestBody)
                     .build()
 
@@ -116,7 +122,6 @@ class ChatRepository(
         }
     }
 
-    // Новый метод: только загрузка файла в Supabase
     suspend fun uploadVoiceFile(file: File, senderId: String): Result<String> {
         return try {
             if (!file.exists()) return Result.failure(Exception("Файл не найден"))
@@ -124,7 +129,6 @@ class ChatRepository(
             val fileName = "${UUID.randomUUID()}.m4a"
             val fullPath = "$senderId/$fileName"
 
-            // Загружаем файл (один раз!)
             val bytes = file.readBytes()
             supabase.storage.from("yaps").upload(
                 path = fullPath,
@@ -133,7 +137,6 @@ class ChatRepository(
                 upsert = false
             }
 
-            // Используем встроенный метод получения публичной ссылки
             val downloadUrl = "${SupabaseConfig.PROJECT_URL}/storage/v1/object/public/${SupabaseConfig.BUCKET_NAME}/$fullPath"
             Result.success(downloadUrl)
 
@@ -143,7 +146,6 @@ class ChatRepository(
         }
     }
 
-    // 2. Обновление текста (для расшифровки голоса)
     suspend fun updateMessageText(messageId: String, transcribedText: String) {
         try {
             messagesCollection.document(messageId).update("text", transcribedText).await()
