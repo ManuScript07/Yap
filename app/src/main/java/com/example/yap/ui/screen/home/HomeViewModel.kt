@@ -40,7 +40,7 @@ class HomeViewModel(
 
     private val transcriptionService = app.transcriptionService
 
-    private val energyPrefs = UserPreferences(application)
+    private val energyPrefs = app.userPrefs
     private val voiceManager = VoiceManager(application)
 //    private val transcriptionService = VoskTranscriptionService(application)
 //    private val transcriptionService = ServerTranscriptionService()
@@ -61,10 +61,12 @@ class HomeViewModel(
     private var statusJob: Job? = null
 
     init {
+        Log.d("API1", "Инициализация")
         updateStateWithPrice { it }
         observeQuickList()
         observeEnergy()
         observeNotificationsCount()
+        observeAuthStateAndSyncFcmToken()
     }
     companion object {
         const val PRICE_TEXT = 4
@@ -78,6 +80,19 @@ class HomeViewModel(
         super.onCleared()
         voiceManager.stopPlayback()
         voiceManager.cancelRecording()
+    }
+
+    private fun observeAuthStateAndSyncFcmToken() {
+        viewModelScope.launch {
+            userRepository.currentUserFlow.collect { user ->
+                if (user != null) {
+                    Log.d("FCM_SYNC", "User authenticated: ${user.uid}. Checking FCM token...")
+                    userRepository.updateFcmTokenIfNeeded()
+                } else {
+                    Log.d("FCM_SYNC", "No active user. Skipping FCM sync.")
+                }
+            }
+        }
     }
 
     private fun updateStateWithPrice(update: (HomeUiState) -> HomeUiState) {

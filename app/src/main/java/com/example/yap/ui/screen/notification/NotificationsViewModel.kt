@@ -37,7 +37,7 @@ class NotificationsViewModel(
     private val userRepository = app.userRepository
     private val chatRepository = app.chatRepository
     private val transcriptionService = app.transcriptionService
-    private val energyPrefs = UserPreferences(application)
+    private val energyPrefs = app.userPrefs
     private val _state = MutableStateFlow(NotificationsUiState())
     private val processedIds = mutableSetOf<String>()
     private val voiceManager = VoiceManager(application)

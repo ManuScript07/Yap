@@ -7,6 +7,7 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import com.google.firebase.firestore.Query
+import com.google.gson.Gson
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.createSupabaseClient
 import kotlinx.coroutines.CoroutineScope
@@ -19,6 +20,11 @@ import java.io.File
 import java.util.UUID
 import io.github.jan.supabase.storage.Storage
 import io.github.jan.supabase.storage.storage
+import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 
 object SupabaseConfig {
     const val BUCKET_NAME = "yaps"
@@ -36,6 +42,10 @@ class ChatRepository(
 ) {
 
     private val messagesCollection = firestore.collection("messages")
+    private val usersCollection = firestore.collection("users")
+
+    private val client = OkHttpClient()
+    private val gson = Gson()
     // при выходе из аккаунта очистить
     private val messagesCache = java.util.concurrent.ConcurrentHashMap<String, Flow<List<MessageEntity>>>()
 
@@ -48,9 +58,61 @@ class ChatRepository(
             val messageWithId = message.copy(id = documentRef.id)
 
             documentRef.set(messageWithId).await()
+
+            sendPushNotification(
+                senderId = messageWithId.senderId,
+                receiverId = messageWithId.receiverId,
+                text = messageWithId.text
+            )
+
             Result.success(documentRef.id)
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+
+    private suspend fun sendPushNotification(senderId: String, receiverId: String, text: String?) {
+        withContext(Dispatchers.IO) {
+            try {
+                // А) Получаем токен ПОЛУЧАТЕЛЯ
+                val receiverDoc = usersCollection.document(receiverId).get().await()
+                val fcmToken = receiverDoc.getString("fcmToken")
+
+                if (fcmToken.isNullOrEmpty()) {
+                    Log.e("PUSH_SENDER", "У пользователя $receiverId нет токена. Пуш не отправлен.")
+                    return@withContext
+                }
+
+                // Б) Получаем имя ОТПРАВИТЕЛЯ (чтобы красиво показать в уведомлении)
+                val senderDoc = usersCollection.document(senderId).get().await()
+                // Замени "name" на то поле, где у тебя хранится имя юзера (например "username" или "nickname")
+                val senderName = senderDoc.getString("name") ?: "Новое сообщение"
+
+                // В) Формируем JSON для твоего сервера
+                val jsonMap = mapOf(
+                    "fcmToken" to fcmToken,
+                    "senderName" to senderName,
+                    "text" to text
+                )
+                val jsonString = gson.toJson(jsonMap)
+
+                // Г) Отправляем POST запрос на твой Render сервер
+                val requestBody = jsonString.toRequestBody("application/json; charset=utf-8".toMediaType())
+                val request = Request.Builder()
+                    .url("https://yap-server.onrender.com/send-notification") // Твой сервер!
+                    .post(requestBody)
+                    .build()
+
+                client.newCall(request).execute().use { response ->
+                    if (response.isSuccessful) {
+                        Log.d("PUSH_SENDER", "Успех! Сервер Render принял запрос.")
+                    } else {
+                        Log.e("PUSH_SENDER", "Ошибка Render: ${response.code} ${response.message}")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("PUSH_SENDER", "Сбой при отправке пуша", e)
+            }
         }
     }
 

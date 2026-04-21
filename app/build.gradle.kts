@@ -76,6 +76,8 @@ dependencies {
     // Библиотека для Google Auth (если планируешь вход через Google)
     implementation("com.google.firebase:firebase-auth")
 
+    implementation("com.google.firebase:firebase-messaging:25.0.1")
+
     // Библиотека для Cloud Storage (если будем загружать аудиофайлы)
     implementation("com.google.firebase:firebase-storage")
     implementation("com.google.firebase:firebase-analytics")
@@ -109,12 +111,13 @@ dependencies {
     implementation("androidx.core:core-splashscreen:1.0.1")
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")
-    implementation("com.squareup.okhttp3:logging-interceptor:4.10.0")
+    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
     implementation("androidx.datastore:datastore-preferences:1.1.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
     implementation("com.google.android.gms:play-services-location:21.2.0")
     implementation(libs.androidx.compose.foundation)
     implementation(libs.googleid)
+    implementation(libs.androidx.compose.remote.creation.core)
 
 
     // Тесты и дебаг

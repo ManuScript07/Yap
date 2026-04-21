@@ -1,5 +1,6 @@
 package com.example.yap.ui.main
 
+import UserPreferences
 import android.app.Application
 import com.example.yap.ChatRepository
 import com.example.yap.UserRepository
@@ -11,7 +12,11 @@ import com.google.firebase.firestore.PersistentCacheSettings
 
 class YapApp : Application() {
 
-    val userRepository by lazy { UserRepository() }
+    val userPrefs by lazy { UserPreferences(applicationContext) }
+
+    val userRepository by lazy {
+        UserRepository(userPrefs = userPrefs)
+    }
     val chatRepository by lazy { ChatRepository() }
     val transcriptionService by lazy{ GroqTranscriptionService() }
 

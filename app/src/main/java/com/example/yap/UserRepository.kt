@@ -1,5 +1,6 @@
 package com.example.yap
 
+import UserPreferences
 import android.util.Log
 import com.example.yap.data.model.UserItem
 import com.google.firebase.auth.FirebaseAuth
@@ -10,6 +11,7 @@ import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Source
+import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -20,13 +22,17 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.tasks.await
 
-class UserRepository(private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()) {
+class UserRepository(
+    private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance(),
+    private val userPrefs: UserPreferences
+) {
     val usersCollection = firestore.collection("users")
     private val profileCache = MutableStateFlow<Map<String, UserItem>>(emptyMap())
 
@@ -52,6 +58,33 @@ class UserRepository(private val firestore: FirebaseFirestore = FirebaseFirestor
     val currentUserId: String?
         get() = FirebaseAuth.getInstance().currentUser?.uid
 
+
+    suspend fun updateFcmTokenIfNeeded() {
+        val userId = currentUserId ?: return
+
+        try {
+            // 1. Получаем свежий токен от сервиса Google
+            val token = FirebaseMessaging.getInstance().token.await()
+
+            // 2. Достаем последний сохраненный токен из DataStore (читаем первое значение из Flow)
+            val lastSavedToken = userPrefs.lastFcmToken.first()
+
+            // 3. Сравниваем
+            if (token != lastSavedToken) {
+                // Обновляем в Firestore
+                usersCollection.document(userId)
+                    .update("fcmToken", token)
+                    .await()
+
+                // Сохраняем в DataStore, чтобы не частить с запросами
+                userPrefs.updateLastFcmToken(token)
+
+                Log.d("FCM_TEST", "Token updated in Cloud and Local: $token")
+            }
+        } catch (e: Exception) {
+            Log.e("FCM_TEST", "Error updating FCM token", e)
+        }
+    }
 
     suspend fun getUsersByIds(ids: List<String>): List<UserItem> {
         if (ids.isEmpty()) return emptyList()

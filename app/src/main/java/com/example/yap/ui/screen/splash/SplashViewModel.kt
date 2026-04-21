@@ -1,8 +1,11 @@
 package com.example.yap.ui.screen.splash
 
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.yap.UserRepository
+import com.example.yap.ui.main.YapApp
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -13,7 +16,10 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-class SplashViewModel(private val repository: UserRepository = UserRepository()) : ViewModel() {
+class SplashViewModel(application: Application) : AndroidViewModel(application) {
+
+    private val app = application as YapApp
+    private val repository = app.userRepository
 
     private val _isSplashVisible = MutableStateFlow(true)
     val isSplashVisible = _isSplashVisible.asStateFlow()

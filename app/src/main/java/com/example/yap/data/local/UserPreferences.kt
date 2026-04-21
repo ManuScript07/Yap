@@ -22,6 +22,7 @@ class UserPreferences(private val context: Context) {
         val READ_MESSAGE_IDS = stringPreferencesKey("read_message_ids")
         val VOICE_CACHE_MAP = stringPreferencesKey("voice_cache_map")
         val TRANSCRIPTIONS_CACHE = stringPreferencesKey("transcriptions_cache")
+        val LAST_FCM_TOKEN = stringPreferencesKey("last_fcm_token")
     }
 
 
@@ -58,6 +59,8 @@ class UserPreferences(private val context: Context) {
         val type = object : TypeToken<Map<String, String>>() {}.type
         gson.fromJson(json, type)
     }
+
+    val lastFcmToken: Flow<String?> = context.dataStore.data.map { it[Keys.LAST_FCM_TOKEN] }
 
     suspend fun saveEnergy(stars: Int, timestamp: Long) {
         context.dataStore.edit { prefs ->
@@ -116,6 +119,12 @@ class UserPreferences(private val context: Context) {
 
             currentMap[audioUrl] = text
             prefs[Keys.TRANSCRIPTIONS_CACHE] = gson.toJson(currentMap)
+        }
+    }
+
+    suspend fun updateLastFcmToken(token: String) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.LAST_FCM_TOKEN] = token
         }
     }
 
