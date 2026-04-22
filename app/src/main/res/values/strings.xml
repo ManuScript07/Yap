@@ -27,6 +27,7 @@
     <string name="no_notifications">У вас нет уведомлений</string>
     <string name="hey_yap">Привет, это Yap</string>
     <string name="sign_google">Войти через Google</string>
+    <string name="voice_message_placeholder">Голосовое сообщение</string>
 
 
 

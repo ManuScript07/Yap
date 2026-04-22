@@ -42,7 +42,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -147,11 +146,26 @@ private fun NotificationCardContent(
     onNavigateToProfile: (String) -> Unit,
     onListenClick: () -> Unit
 ) {
-    val messageLineHeight = if (item.hasLocation) (20 * baseScale).sp else (24 * baseScale).sp
+
+    val isVoice = item.audioUrl != null
+
+    val showPlaceholder = isVoice && item.messageText.isNullOrBlank()
+
+    val textToShow = if (showPlaceholder) {
+        stringResource(R.string.voice_message_placeholder)
+    } else {
+        item.messageText ?: ""
+    }
 
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                if (isVoice) Modifier.clickable { onListenClick() }
+                else Modifier
+            ),
         color = MaterialTheme.colorScheme.background
+
     ) {
         Row(
             modifier = Modifier
@@ -190,27 +204,25 @@ private fun NotificationCardContent(
                     )
                 )
 
-                item.messageText?.let {
+                if (textToShow.isNotEmpty()) {
                     Text(
-                        text = it,
+                        text = textToShow,
                         fontSize = (16 * baseScale).sp,
+                        // Если это заглушка, подсвечиваем её цветом бренда
                         color = LocalAdditionColors.current.notifText,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        lineHeight = messageLineHeight,
-                        style = LocalTextStyle.current.copy(
-                            platformStyle = PlatformTextStyle(includeFontPadding = false)
-                        )
+                        lineHeight = (20 * baseScale).sp
                     )
                 }
 
-                item.audioUrl?.let {
-                    NotificationActionText(
-                        text = stringResource(R.string.listen_voice),
-                        baseScale = baseScale,
-                        onClick = onListenClick
-                    )
-                }
+//                item.audioUrl?.let {
+//                    NotificationActionText(
+//                        text = stringResource(R.string.listen_voice),
+//                        baseScale = baseScale,
+//                        onClick = onListenClick
+//                    )
+//                }
 
                 if (item.hasLocation) {
                     NotificationActionText(

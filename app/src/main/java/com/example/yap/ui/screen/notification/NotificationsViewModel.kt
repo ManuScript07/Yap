@@ -82,7 +82,17 @@ class NotificationsViewModel(
 
                     val isInCloudList = cloudQuickListIds.contains(entity.senderId)
                     val isMuted = mutedIds.contains(entity.senderId)
-                    val displayShortText = entity.text ?: transCache[entity.audioUrl]
+
+                    val audioUrl = entity.audioUrl
+                    val cachedTranscription = transCache[audioUrl]
+                    val dbText = entity.text
+
+                    val actualText = if (audioUrl != null) {
+                        dbText ?: cachedTranscription // Может быть null, если еще не расшифровано
+                    } else {
+                        dbText
+                    }
+
 
                     NotificationItemModel(
                         id = entity.id,
@@ -90,7 +100,7 @@ class NotificationsViewModel(
                             isYapActive = isInCloudList,
                             isMuted = isMuted
                         ),
-                        messageText = displayShortText?.trim(),
+                        messageText = actualText?.trim(),
                         hasLocation = entity.latitude != null,
                         latitude = entity.latitude,
                         longitude = entity.longitude,
@@ -98,7 +108,7 @@ class NotificationsViewModel(
                         timeAgo = getTimeAgo(entity.timestamp),
                         isUserInQuickList = isInCloudList,
                         isMuted = isMuted,
-                        audioUrl = entity.audioUrl,
+                        audioUrl = audioUrl,
                         isTranscribing = false
                     )
                 }
