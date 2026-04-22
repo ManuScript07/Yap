@@ -1,6 +1,7 @@
 package com.example.yap.service
 
 import android.util.Log
+import com.example.yap.RemoteConfigManager
 import com.example.yap.data.api.GroqTranscriptionApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -8,14 +9,18 @@ import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.RequestBody.Companion.asRequestBody
-import okhttp3.RequestBody.Companion.toRequestBody
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.io.File
 import java.util.concurrent.TimeUnit
 
-class GroqTranscriptionService {
-    private val apiKey = "Bearer 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"
+class GroqTranscriptionService(
+    private val configManager: RemoteConfigManager
+) {
+
+    private val authHeader: String
+        get() = configManager.groqApiKey
+
     val okHttpClient = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
@@ -51,7 +56,7 @@ class GroqTranscriptionService {
             val requestFile = file.asRequestBody("audio/*".toMediaTypeOrNull())
             val body = MultipartBody.Part.createFormData("file", file.name, requestFile)
 
-            val response = api.transcribe(apiKey, body)
+            val response = api.transcribe(authHeader, body)
             Result.success(response.text)
         } catch (e: Exception) {
             Log.e("GroqSTT", "Ошибка API: ${e.message}")

@@ -76,6 +76,9 @@ dependencies {
     // Библиотека для Google Auth (если планируешь вход через Google)
     implementation("com.google.firebase:firebase-auth")
 
+    implementation("com.google.firebase:firebase-config")
+
+
     implementation("com.google.firebase:firebase-messaging:25.0.1")
 
     // Библиотека для Cloud Storage (если будем загружать аудиофайлы)

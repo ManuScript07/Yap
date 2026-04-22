@@ -147,7 +147,6 @@ import com.google.android.gms.location.LocationServices
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
-//    viewModel: HomeViewModel = viewModel(),
     viewModel: HomeViewModel,
     onNavigateToProfile: (String) -> Unit,
     onNavigateToNotifications: () -> Unit,

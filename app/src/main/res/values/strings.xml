@@ -28,6 +28,7 @@
     <string name="hey_yap">Привет, это Yap</string>
     <string name="sign_google">Войти через Google</string>
     <string name="voice_message_placeholder">Голосовое сообщение</string>
+    <string name="nework_error">Не удалось отправить голосовое</string>
 
 
 

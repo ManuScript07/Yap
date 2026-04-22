@@ -2,6 +2,7 @@ package com.example.yap.ui.main
 
 import UserPreferences
 import android.app.Application
+import com.example.yap.RemoteConfigManager
 import com.example.yap.data.repository.ChatRepository
 import com.example.yap.data.repository.UserRepository
 import com.example.yap.service.GroqTranscriptionService
@@ -12,13 +13,16 @@ import com.google.firebase.firestore.PersistentCacheSettings
 
 class YapApp : Application() {
 
+    val configManager by lazy { RemoteConfigManager() }
+
     val userPrefs by lazy { UserPreferences(applicationContext) }
 
     val userRepository by lazy {
         UserRepository(userPrefs = userPrefs)
     }
-    val chatRepository by lazy { ChatRepository() }
-    val transcriptionService by lazy{ GroqTranscriptionService() }
+
+    val chatRepository by lazy { ChatRepository(configManager) }
+    val transcriptionService by lazy{ GroqTranscriptionService(configManager) }
 
     override fun onCreate() {
         super.onCreate()
@@ -32,6 +36,6 @@ class YapApp : Application() {
 
         FirebaseFirestore.getInstance().firestoreSettings = settings
 
-
+        val _triggerFetch = configManager
     }
 }

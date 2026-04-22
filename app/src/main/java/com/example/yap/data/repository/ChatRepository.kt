@@ -2,6 +2,7 @@ package com.example.yap.data.repository
 
 
 import android.util.Log
+import com.example.yap.RemoteConfigManager
 import com.example.yap.data.model.MessageEntity
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.channels.awaitClose
@@ -9,7 +10,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import com.google.firebase.firestore.Query
 import com.google.gson.Gson
-import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.createSupabaseClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -28,20 +28,24 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.concurrent.ConcurrentHashMap
 
-object SupabaseConfig {
-    const val BUCKET_NAME = "yaps"
-    const val PROJECT_URL = "https://fnouaplmxqztiruyusuu.supabase.co"
-    const val ANON_KEY = "sb_publishable_MjHvC7svZQsVEcvQTOIk5A_WmOMDt-O"
-}
+//object SupabaseConfig {
+//    const val BUCKET_NAME = "yaps"
+//    const val PROJECT_URL = "https://fnouaplmxqztiruyusuu.supabase.co"
+//    const val ANON_KEY = "sb_publishable_MjHvC7svZQsVEcvQTOIk5A_WmOMDt-O"
+//}
 class ChatRepository(
-    private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance(),
-    private val supabase: SupabaseClient = createSupabaseClient(
-        supabaseUrl = SupabaseConfig.PROJECT_URL,
-        supabaseKey = SupabaseConfig.ANON_KEY
-    ) {
-        install(Storage)
-    }
+    private val configManager: RemoteConfigManager,
+    private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
 ) {
+
+    private val supabase by lazy {
+        createSupabaseClient(
+            supabaseUrl = configManager.supabaseUrl,
+            supabaseKey = configManager.supabaseAnonKey
+        ) {
+            install(Storage)
+        }
+    }
 
     private val messagesCollection = firestore.collection("messages")
     private val usersCollection = firestore.collection("users")
@@ -125,27 +129,37 @@ class ChatRepository(
     }
 
     suspend fun uploadVoiceFile(file: File, senderId: String): Result<String> {
-        return try {
-            if (!file.exists()) return Result.failure(Exception("Файл не найден"))
+        // Делаем до 3 попыток с нарастающей задержкой
+        var lastException: Exception? = null
 
-            val fileName = "${UUID.randomUUID()}.m4a"
-            val fullPath = "$senderId/$fileName"
+        repeat(3) { attempt ->
+            try {
+                if (!file.exists()) return Result.failure(Exception("Файл не найден"))
 
-            val bytes = file.readBytes()
-            supabase.storage.from("yaps").upload(
-                path = fullPath,
-                data = bytes
-            ) {
-                upsert = false
+                val fileName = "${UUID.randomUUID()}.m4a"
+                val fullPath = "$senderId/$fileName"
+
+                val bytes = file.readBytes()
+
+                // Сама загрузка
+                supabase.storage.from(configManager.supabaseBucket).upload(
+                    path = fullPath,
+                    data = bytes
+                ) { upsert = false }
+
+                // Если дошли сюда — успех!
+                val downloadUrl = "${configManager.supabaseUrl}/storage/v1/object/public/${configManager.supabaseBucket}/$fullPath"
+                return Result.success(downloadUrl)
+
+            } catch (e: Exception) {
+                lastException = e
+                Log.w("ChatRepository", "Попытка ${attempt + 1} не удалась: ${e.message}")
+                // Ждем перед следующей попыткой (1с, 2с...)
+                kotlinx.coroutines.delay((attempt + 1) * 1000L)
             }
-
-            val downloadUrl = "${SupabaseConfig.PROJECT_URL}/storage/v1/object/public/${SupabaseConfig.BUCKET_NAME}/$fullPath"
-            Result.success(downloadUrl)
-
-        } catch (e: Exception) {
-            Log.e("ChatRepository", "Ошибка загрузки файла в хранилище: ${e.message}")
-            Result.failure(e)
         }
+
+        return Result.failure(lastException ?: Exception("Неизвестная ошибка загрузки"))
     }
 
     suspend fun updateMessageText(messageId: String, transcribedText: String) {
@@ -215,6 +229,11 @@ class ChatRepository(
         } catch (e: Exception) {
             Log.e("ChatRepository", "ОШИБКА при скрытии сообщения $messageId: ${e.message}", e)
         }
+    }
+
+    fun clearCacheOnLogout() {
+        firestore.terminate()
+        firestore.clearPersistence()
     }
 
 

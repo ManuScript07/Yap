@@ -1,6 +1,5 @@
 package com.example.yap.ui.screen.home
 
-import UserPreferences
 import android.app.Application
 import android.util.Log
 import androidx.annotation.StringRes
@@ -36,6 +35,7 @@ class HomeViewModel(
 ) : AndroidViewModel(application) {
 
     private val app = application as YapApp
+    private val configManager = app.configManager
     private val userRepository = app.userRepository
     private val chatRepository = app.chatRepository
 
@@ -51,7 +51,6 @@ class HomeViewModel(
 
     private val _state = MutableStateFlow(
         HomeUiState(
-//            users = getInitialUsers(),
         )
     )
     val state: StateFlow<HomeUiState> = _state.asStateFlow()
@@ -61,6 +60,21 @@ class HomeViewModel(
     private var lastAnchorTime: Long = 0L
     private var statusJob: Job? = null
 
+    private val regenDelay: Long
+        get() = configManager.regenDelayMs
+
+    private val priceSimpleYap: Int
+        get() = configManager.priceSimpleYap
+
+    private val priceEmoji: Int
+        get() = configManager.priceEmoji
+
+    private val priceText: Int
+        get() = configManager.priceText
+
+    private val priceVoice: Int
+        get() = configManager.priceVoice
+
     init {
         Log.d("API1", "Инициализация")
         updateStateWithPrice { it }
@@ -69,13 +83,7 @@ class HomeViewModel(
         observeNotificationsCount()
         observeAuthStateAndSyncFcmToken()
     }
-    companion object {
-        const val PRICE_TEXT = 4
-        const val PRICE_EMOJI = 2
-        const val PRICE_VOICE = 12
-        const val PRICE_SIMPLE_YAP = 1
-        const val REGEN_DELAY_MS = 1000L
-    }
+
 
     override fun onCleared() {
         super.onCleared()
@@ -155,13 +163,13 @@ class HomeViewModel(
 
                     val (finalStars, _) = if (savedTime == null || savedTime == 0L) {
                         lastAnchorTime = currentTime
-                        baseStars to REGEN_DELAY_MS
+                        baseStars to regenDelay
                     } else {
                         val timePassed = currentTime - savedTime
-                        val restoredStars = (timePassed / REGEN_DELAY_MS).toInt()
-                        val timeSpentInCurrentCycle = timePassed % REGEN_DELAY_MS
+                        val restoredStars = (timePassed / regenDelay).toInt()
+                        val timeSpentInCurrentCycle = timePassed % regenDelay
                         lastAnchorTime = currentTime - timeSpentInCurrentCycle
-                        (baseStars + restoredStars).coerceAtMost(max) to (REGEN_DELAY_MS - timeSpentInCurrentCycle)
+                        (baseStars + restoredStars).coerceAtMost(max) to (regenDelay - timeSpentInCurrentCycle)
                     }
 
                     currentState.copy(
@@ -172,7 +180,7 @@ class HomeViewModel(
 
                 // Запуск регенерации
                 if (_state.value.currentStars < _state.value.maxStars) {
-                    startEnergyRegeneration(REGEN_DELAY_MS)
+                    startEnergyRegeneration(regenDelay)
                 }
             }
         }
@@ -406,10 +414,10 @@ class HomeViewModel(
         if (selectedCount == 0) return 0
 
         val pricePerUser = when (type) {
-            YapType.EMOJI -> PRICE_EMOJI
-            YapType.TEXT -> PRICE_TEXT
-            YapType.VOICE -> PRICE_VOICE
-            YapType.YAP -> PRICE_SIMPLE_YAP
+            YapType.EMOJI -> priceEmoji
+            YapType.TEXT -> priceText
+            YapType.VOICE -> priceVoice
+            YapType.YAP -> priceSimpleYap
         }
         return selectedCount * pricePerUser
     }
@@ -460,7 +468,7 @@ class HomeViewModel(
 
                 if (state.currentStars == state.maxStars) {
                     lastAnchorTime = System.currentTimeMillis()
-                    startEnergyRegeneration(REGEN_DELAY_MS)
+                    startEnergyRegeneration(regenDelay)
                 }
 
                 val activeReceivers = state.users.filter { it.isYapActive }
@@ -511,7 +519,7 @@ class HomeViewModel(
                                     }
                                 }.onFailure {
                                     Log.e("API1", "Не удалось загрузить аудиофайл: ${it.message}")
-                                    // Можно показать Toast об ошибке загрузки
+                                    showAlert(resId = R.string.nework_error, durationMs = 2000L)
                                 }
                             }
                         }
@@ -568,7 +576,7 @@ class HomeViewModel(
         }
 
 
-        if (_state.value.currentStars < PRICE_SIMPLE_YAP) {
+        if (_state.value.currentStars < priceSimpleYap) {
             showStatus(resId = R.string.not_enough_stars, durationMs = 2000)
             return
         }
@@ -587,14 +595,14 @@ class HomeViewModel(
 
     }
 
-    private fun startEnergyRegeneration(initialDelay: Long = REGEN_DELAY_MS) {
+    private fun startEnergyRegeneration(initialDelay: Long = regenDelay) {
         regenJob?.cancel()
         regenJob = viewModelScope.launch {
             var currentDelay = initialDelay
 
             while (true) {
                 delay(currentDelay)
-                currentDelay = REGEN_DELAY_MS
+                currentDelay = regenDelay
 
                 val max = _state.value.maxStars
                 val current = _state.value.currentStars
@@ -767,10 +775,10 @@ class HomeViewModel(
     fun getPriceForType(type: YapType): Int {
         val selectedCount = _state.value.users.count { it.isYapActive }
         return selectedCount * when (type) {
-            YapType.EMOJI -> PRICE_EMOJI
-            YapType.TEXT -> PRICE_TEXT
-            YapType.VOICE -> PRICE_VOICE
-            YapType.YAP -> PRICE_SIMPLE_YAP
+            YapType.EMOJI -> priceEmoji
+            YapType.TEXT -> priceText
+            YapType.VOICE -> priceVoice
+            YapType.YAP -> priceSimpleYap
         }
     }
 
