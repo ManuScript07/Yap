@@ -56,6 +56,7 @@ fun AuthScreen(
     StatusBarIconsColor(isLight = true)
     val context = LocalContext.current
     val state by viewModel.authState.collectAsState()
+    val isLoading = state is AuthViewModel.AuthState.Loading
 
     val scale = LocalBaseScale.current
 
@@ -90,6 +91,7 @@ fun AuthScreen(
                     color = MaterialTheme.colorScheme.onPrimaryContainer,
 
                     textAlign = TextAlign.Center,
+                    letterSpacing = 1.sp
                 )
 
                 Spacer(modifier = Modifier.height(12.dp * scale))
@@ -106,18 +108,19 @@ fun AuthScreen(
                 } else {
                     Surface(
                         onClick = {
-                            startGoogleSignIn(context) { token ->
-                                viewModel.handleGoogleSignIn(token)
+                            // Блокируем клик, если уже грузимся
+                            if (!isLoading) {
+                                viewModel.handleGoogleSignIn(context)
                             }
                         },
-                        shape = RoundedCornerShape(24.dp * scale),
+                        modifier = Modifier.width(280.dp * scale),
+                        shape = RoundedCornerShape(28.dp * scale),
                         color = MaterialTheme.colorScheme.onPrimaryContainer,
                     ) {
                         Row(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .height(56.dp * scale)
-                                .padding(horizontal = 10.dp * scale),
+                                .height(60.dp * scale)
+                                .padding(horizontal = 16.dp * scale),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.Center
                         ) {
@@ -125,16 +128,15 @@ fun AuthScreen(
                             Icon(
                                 painter = painterResource(id = R.drawable.ic_google_logo),
                                 contentDescription = null,
-                                modifier = Modifier.size(24.dp * scale),
-                                tint = Color.Unspecified // Важно, чтобы иконка была цветной
+                                modifier = Modifier.size(32.dp * scale),
+                                tint = MaterialTheme.colorScheme.background
                             )
 
-                            Spacer(modifier = Modifier.width(12.dp * scale))
+                            Spacer(modifier = Modifier.width(14.dp * scale))
 
                             Text(
                                 text = stringResource(R.string.sign_google),
-
-                                fontSize = (16.sp * scale),
+                                fontSize = (18.sp * scale),
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.background
 
@@ -147,7 +149,7 @@ fun AuthScreen(
                 if (state is AuthViewModel.AuthState.Error) {
                     Text(
                         text = (state as AuthViewModel.AuthState.Error).message,
-                        color = Color.Red,
+                        color = MaterialTheme.colorScheme.error,
                         fontSize = (14.sp * scale),
                         textAlign = TextAlign.Center,
                         modifier = Modifier.padding(horizontal = 8.dp)
@@ -161,39 +163,37 @@ fun AuthScreen(
 
 
 
-fun startGoogleSignIn(context: Context, onTokenReceived: (String) -> Unit) {
-    // Нам нужен scope, чтобы запустить suspend функцию.
-    // Обычно в Activity это lifecycleScope.
-    val activity = context as? ComponentActivity ?: return
+suspend fun startGoogleSignIn(context: Context): String? {
     val credentialManager = CredentialManager.create(context)
 
     val googleIdOption = GetGoogleIdOption.Builder()
-        .setFilterByAuthorizedAccounts(false)
+        .setFilterByAuthorizedAccounts(false) // Позволяет выбрать любой аккаунт
         .setServerClientId(context.getString(R.string.default_web_client_id))
-        .setAutoSelectEnabled(true)
+        // Отключаем авто-выбор для кнопки "Войти", чтобы диалог всегда появлялся явно и быстро
+        .setAutoSelectEnabled(false)
         .build()
 
     val request = GetCredentialRequest.Builder()
         .addCredentialOption(googleIdOption)
         .build()
 
-    // Запускаем корутину
-    activity.lifecycleScope.launch {
-        try {
-            val result = credentialManager.getCredential(context, request)
-            val credential = result.credential
+    return try {
+        val result = credentialManager.getCredential(context, request)
+        val credential = result.credential
 
-            if (credential is CustomCredential &&
-                credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
-
-                val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
-                onTokenReceived(googleIdTokenCredential.idToken)
-            }
-        } catch (e: GetCredentialException) {
-            Log.e("Auth", "Ошибка Credential Manager: ${e.message}")
-            // Здесь можно добавить callback для обработки ошибки в UI
-        } catch (e: Exception) {
-            Log.e("Auth", "Непредвиденная ошибка: ${e.message}")
+        if (credential is CustomCredential &&
+            credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
+            val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
+            googleIdTokenCredential.idToken
+        } else {
+            null
         }
+    } catch (e: GetCredentialException) {
+        // Важно: если пользователь просто закрыл диалог (отмена)
+        Log.e("Auth", "User cancelled or failed: ${e.message}")
+        null
+    } catch (e: Exception) {
+        Log.e("Auth", "Unexpected error: ${e.message}")
+        null
     }
 }

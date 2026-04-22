@@ -29,6 +29,8 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 
 class UserRepository(
     private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance(),
@@ -267,29 +269,43 @@ class UserRepository(
     }
 
     suspend fun signInWithGoogle(idToken: String): Boolean {
-        return try {
-            val credential = GoogleAuthProvider.getCredential(idToken, null)
-            val result = FirebaseAuth.getInstance().signInWithCredential(credential).await()
-            val user = result.user
+        // 1. Выполняем в IO-потоке, так как это сетевые операции
+        return withContext(Dispatchers.IO) {
+            try {
+                // 2. Ограничиваем всё выполнение 15 секундами
+                // Если за это время Firebase не ответит, вылетит TimeoutCancellationException
+                withTimeout(15000L) {
+                    val credential = GoogleAuthProvider.getCredential(idToken, null)
+                    val result = FirebaseAuth.getInstance().signInWithCredential(credential).await()
+                    val user = result.user
 
-            if (user != null) {
-                val docRef = usersCollection.document(user.uid)
-                val doc = docRef.get().await()
+                    if (user != null) {
+                        val docRef = usersCollection.document(user.uid)
+                        val doc = docRef.get().await()
 
-                if (!doc.exists()) {
-                    val initialData = mapOf(
-                        "name" to (user.displayName ?: "New User"),
-                        "email" to user.email,
-                        "quickList" to emptyList<String>(),
-                        "mutedUsers" to emptyList<String>()
-                    )
-                    docRef.set(initialData).await()
+                        if (!doc.exists()) {
+                            val initialData = mapOf(
+                                "name" to (user.displayName ?: "New User"),
+                                "email" to user.email,
+                                "quickList" to emptyList<String>(),
+                                "mutedUsers" to emptyList<String>(),
+                                "createdAt" to com.google.firebase.Timestamp.now() // Полезно для аналитики
+                            )
+                            docRef.set(initialData).await()
+                        }
+                        true
+                    } else {
+                        Log.e("UserRepository", "User is null after successful Firebase auth")
+                        false
+                    }
                 }
-                true
-            } else false
-        } catch (e: Exception) {
-            Log.e("UserRepository", "Google Auth failed", e)
-            false
+            } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+                Log.e("UserRepository", "Auth failed: Connection timeout")
+                false
+            } catch (e: Exception) {
+                Log.e("UserRepository", "Google Auth failed: ${e.localizedMessage}", e)
+                false
+            }
         }
     }
 }

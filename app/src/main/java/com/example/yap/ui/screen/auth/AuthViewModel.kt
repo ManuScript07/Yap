@@ -1,6 +1,7 @@
 package com.example.yap.ui.screen.auth
 
 import android.app.Application
+import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.yap.ui.main.YapApp
@@ -16,14 +17,29 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     private val _authState = MutableStateFlow<AuthState>(AuthState.Idle)
     val authState = _authState.asStateFlow()
 
-    fun handleGoogleSignIn(idToken: String) {
+    fun handleGoogleSignIn(context: Context) {
         viewModelScope.launch {
+            // 1. Сразу включаем лоадер, чтобы пользователь видел отклик
             _authState.value = AuthState.Loading
-            val success = repository.signInWithGoogle(idToken)
-            if (success) {
-                _authState.value = AuthState.Success
-            } else {
-                _authState.value = AuthState.Error("Ошибка авторизации в Firebase")
+
+            try {
+                // Вызываем наш менеджер (обновим его ниже)
+                val idToken = startGoogleSignIn(context)
+
+                if (idToken != null) {
+                    // 2. Идем в Firebase
+                    val success = repository.signInWithGoogle(idToken)
+                    if (success) {
+                        _authState.value = AuthState.Success
+                    } else {
+                        _authState.value = AuthState.Error("Ошибка регистрации в базе данных")
+                    }
+                } else {
+                    // Пользователь отменил вход или произошла ошибка
+                    _authState.value = AuthState.Idle
+                }
+            } catch (e: Exception) {
+                _authState.value = AuthState.Error("Ошибка: ${e.localizedMessage}")
             }
         }
     }
