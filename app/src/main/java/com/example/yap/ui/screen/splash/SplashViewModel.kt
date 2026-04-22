@@ -2,9 +2,7 @@ package com.example.yap.ui.screen.splash
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.yap.UserRepository
 import com.example.yap.ui.main.YapApp
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.delay

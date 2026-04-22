@@ -103,7 +103,7 @@ class NotificationsViewModel(
                     )
                 }
             }
-                .catch { e -> /* ... */ }
+                .catch { _ -> /* ... */ }
                 .collect { updatedNotifications ->
                     _state.update { it.copy(notifications = updatedNotifications, isLoading = false) }
                 }

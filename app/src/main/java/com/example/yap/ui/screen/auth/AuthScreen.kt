@@ -1,41 +1,51 @@
 package com.example.yap.ui.screen.auth
 
+
 import android.content.Context
-
-
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.wear.compose.material.Button
-import androidx.wear.compose.material.CircularProgressIndicator
-import androidx.wear.compose.material.MaterialTheme
-import androidx.wear.compose.material.Text
-import com.example.yap.R
-import kotlinx.coroutines.launch
+import androidx.compose.ui.unit.sp
 import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
+import androidx.credentials.exceptions.GetCredentialException
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.wear.compose.material.Text
+import com.example.yap.R
+import com.example.yap.ui.theme.LocalBaseScale
+import com.example.yap.util.compose.StatusBarIconsColor
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
-import androidx.credentials.exceptions.GetCredentialException
+import kotlinx.coroutines.launch
 
 
 @Composable
@@ -43,53 +53,106 @@ fun AuthScreen(
     onAuthSuccess: () -> Unit,
     viewModel: AuthViewModel = viewModel()
 ) {
+    StatusBarIconsColor(isLight = true)
     val context = LocalContext.current
     val state by viewModel.authState.collectAsState()
 
-    // Наблюдаем за успехом, чтобы перейти на следующий экран
+    val scale = LocalBaseScale.current
+
     LaunchedEffect(state) {
         if (state is AuthViewModel.AuthState.Success) {
             onAuthSuccess()
         }
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        contentAlignment = Alignment.Center
+
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.primary
     ) {
         Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = (32.dp * scale)),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(20.dp)
+            verticalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(
-                text = "Добро пожаловать в Yap",
-                fontWeight = FontWeight.Bold
-            )
+            // Верхняя часть: Приветствие
+            Column(
+                modifier = Modifier.padding(top = (120.dp * scale)),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = stringResource(R.string.hey_yap),
 
-            if (state is AuthViewModel.AuthState.Loading) {
-                CircularProgressIndicator()
-            } else {
-                Button(
-                    onClick = {
-                        // Здесь запускается логика выбора аккаунта (ниже)
-                        startGoogleSignIn(context) { token ->
-                            viewModel.handleGoogleSignIn(token)
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth().height(56.dp),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text("Войти через Google")
-                }
+                    fontSize = (32.sp * scale),
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+
+                    textAlign = TextAlign.Center,
+                )
+
+                Spacer(modifier = Modifier.height(12.dp * scale))
             }
 
-            if (state is AuthViewModel.AuthState.Error) {
-                Text(
-                    text = (state as AuthViewModel.AuthState.Error).message,
-                    color = MaterialTheme.colors.onError
-                )
+            // Нижняя часть: Кнопка и статусы
+            Column(
+                modifier = Modifier.padding(bottom = (60.dp * scale)),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp * scale)
+            ) {
+                if (state is AuthViewModel.AuthState.Loading) {
+                    CircularProgressIndicator(color = MaterialTheme.colorScheme.onSurface)
+                } else {
+                    Surface(
+                        onClick = {
+                            startGoogleSignIn(context) { token ->
+                                viewModel.handleGoogleSignIn(token)
+                            }
+                        },
+                        shape = RoundedCornerShape(24.dp * scale),
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(56.dp * scale)
+                                .padding(horizontal = 10.dp * scale),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            // Иконка Google (замени на свою, если есть в ресурсах)
+                            Icon(
+                                painter = painterResource(id = R.drawable.ic_google_logo),
+                                contentDescription = null,
+                                modifier = Modifier.size(24.dp * scale),
+                                tint = Color.Unspecified // Важно, чтобы иконка была цветной
+                            )
+
+                            Spacer(modifier = Modifier.width(12.dp * scale))
+
+                            Text(
+                                text = stringResource(R.string.sign_google),
+
+                                fontSize = (16.sp * scale),
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.background
+
+                            )
+                        }
+                    }
+                }
+
+                // Вывод ошибки, если она есть
+                if (state is AuthViewModel.AuthState.Error) {
+                    Text(
+                        text = (state as AuthViewModel.AuthState.Error).message,
+                        color = Color.Red,
+                        fontSize = (14.sp * scale),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 8.dp)
+                    )
+                }
             }
         }
     }

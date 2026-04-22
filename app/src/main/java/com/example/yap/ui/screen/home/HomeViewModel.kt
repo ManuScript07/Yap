@@ -6,7 +6,7 @@ import android.util.Log
 import androidx.annotation.StringRes
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.yap.MessageEntity
+import com.example.yap.data.model.MessageEntity
 import com.example.yap.R
 import com.example.yap.data.manager.VoiceManager
 import com.example.yap.data.model.UserItem
@@ -15,6 +15,7 @@ import com.example.yap.ui.main.YapApp
 import com.example.yap.util.NetworkMonitor
 import com.example.yap.util.extension.countGraphemeClusters
 import com.example.yap.util.extension.isEmojiOnly
+import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -473,7 +474,7 @@ class HomeViewModel(
                     type = currentYapType.name,
                     latitude = if (state.isLocationEnabled) latitude else null,
                     longitude = if (state.isLocationEnabled) longitude else null,
-                    timestamp = com.google.firebase.Timestamp.now()
+                    timestamp = Timestamp.now()
                 )
 
                 when (currentYapType) {

@@ -9,7 +9,7 @@ import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.example.yap.R
-import com.example.yap.UserRepository
+import com.example.yap.data.repository.UserRepository
 import com.example.yap.ui.main.MainActivity
 import com.example.yap.ui.main.YapApp
 import com.example.yap.ui.navigation.AppDestinations

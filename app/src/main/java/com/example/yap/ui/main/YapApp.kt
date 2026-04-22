@@ -2,8 +2,8 @@ package com.example.yap.ui.main
 
 import UserPreferences
 import android.app.Application
-import com.example.yap.ChatRepository
-import com.example.yap.UserRepository
+import com.example.yap.data.repository.ChatRepository
+import com.example.yap.data.repository.UserRepository
 import com.example.yap.service.GroqTranscriptionService
 import com.google.firebase.FirebaseApp
 import com.google.firebase.firestore.FirebaseFirestore

@@ -1,7 +1,8 @@
-package com.example.yap
+package com.example.yap.data.repository
 
 import UserPreferences
 import android.util.Log
+import com.example.yap.R
 import com.example.yap.data.model.UserItem
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser

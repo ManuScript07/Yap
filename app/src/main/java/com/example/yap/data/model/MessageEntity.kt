@@ -1,5 +1,7 @@
-package com.example.yap
+package com.example.yap.data.model
 
+import com.google.firebase.Timestamp
+import com.google.firebase.firestore.ServerTimestamp
 
 data class MessageEntity(
     val id: String = "",
@@ -10,7 +12,7 @@ data class MessageEntity(
     val audioUrl: String? = null,
     val latitude: Double? = null,
     val longitude: Double? = null,
-    @get:com.google.firebase.firestore.ServerTimestamp
-    val timestamp: com.google.firebase.Timestamp? = null,
+    @get:ServerTimestamp
+    val timestamp: Timestamp? = null,
     val visibleForReceiver: Boolean = true
 )

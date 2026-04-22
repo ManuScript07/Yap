@@ -1,7 +1,8 @@
-package com.example.yap
+package com.example.yap.data.repository
 
 
 import android.util.Log
+import com.example.yap.data.model.MessageEntity
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -25,6 +26,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import java.util.concurrent.ConcurrentHashMap
 
 object SupabaseConfig {
     const val BUCKET_NAME = "yaps"
@@ -47,7 +49,7 @@ class ChatRepository(
     private val client = OkHttpClient()
     private val gson = Gson()
     // при выходе из аккаунта очистить
-    private val messagesCache = java.util.concurrent.ConcurrentHashMap<String, Flow<List<MessageEntity>>>()
+    private val messagesCache = ConcurrentHashMap<String, Flow<List<MessageEntity>>>()
 
     private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 

@@ -24,6 +24,7 @@ foundation = "1.10.6"
 firebaseAuthKtx = "24.0.1"
 googleid = "1.2.0"
 remoteCreationCore = "1.0.0-alpha07"
+adsMobileSdk = "0.25.0-beta01"
 
 [libraries]
 androidx-compose-material3-v131 = { module = "androidx.compose.material3:material3", version.ref = "material3Version" }
@@ -57,6 +58,7 @@ androidx-compose-foundation = { group = "androidx.compose.foundation", name = "f
 firebase-auth-ktx = { group = "com.google.firebase", name = "firebase-auth-ktx", version.ref = "firebaseAuthKtx" }
 googleid = { group = "com.google.android.libraries.identity.googleid", name = "googleid", version.ref = "googleid" }
 androidx-compose-remote-creation-core = { group = "androidx.compose.remote", name = "remote-creation-core", version.ref = "remoteCreationCore" }
+ads-mobile-sdk = { group = "com.google.android.libraries.ads.mobile.sdk", name = "ads-mobile-sdk", version.ref = "adsMobileSdk" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
