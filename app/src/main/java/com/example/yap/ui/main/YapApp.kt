@@ -10,8 +10,12 @@ import com.google.firebase.FirebaseApp
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreSettings
 import com.google.firebase.firestore.PersistentCacheSettings
+import coil.ImageLoader
+import coil.ImageLoaderFactory
+import coil.disk.DiskCache
+import coil.memory.MemoryCache
 
-class YapApp : Application() {
+class YapApp : Application(), ImageLoaderFactory {
 
     val configManager by lazy { RemoteConfigManager() }
 
@@ -41,4 +45,29 @@ class YapApp : Application() {
 
         val _triggerFetch = configManager
     }
+
+    override fun newImageLoader(): ImageLoader {
+        return ImageLoader.Builder(this)
+            // 1. ГЛАВНАЯ МАГИЯ: Игнорируем `max-age=3600` от Supabase!
+            // Теперь Coil будет вечно хранить картинку, пока ее не вытеснят новые.
+            .respectCacheHeaders(false)
+
+            // 2. Настраиваем мощный кэш на диске (для работы оффлайн)
+            .diskCache {
+                DiskCache.Builder()
+                    .directory(cacheDir.resolve("yap_image_cache"))
+                    .maxSizePercent(0.05) // Отдаем 5% свободного места на устройстве под кэш
+                    .build()
+            }
+            // 3. Настраиваем кэш в оперативной памяти (чтобы список не мерцал при скролле)
+            .memoryCache {
+                MemoryCache.Builder(this)
+                    .maxSizePercent(0.2) // 20% доступной памяти приложению
+                    .build()
+            }
+            // 4. Включаем плавное появление картинок глобально
+            .crossfade(true)
+            .build()
+    }
+
 }

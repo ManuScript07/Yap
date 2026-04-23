@@ -164,14 +164,7 @@ private fun NotificationCardContent(
     val context = LocalContext.current
 
     // 1. Создаем правильный запрос с жестким кэшированием
-    val imageRequest = remember(item.user.avatarUrl) {
-        ImageRequest.Builder(context)
-            .data(item.user.avatarUrl)
-            .crossfade(true) // Плавное появление
-            .diskCachePolicy(CachePolicy.ENABLED)
-            .memoryCachePolicy(CachePolicy.ENABLED)
-            .build()
-    }
+
 
     Surface(
         modifier = Modifier
@@ -190,7 +183,7 @@ private fun NotificationCardContent(
             verticalAlignment = Alignment.Top
         ) {
             AsyncImage(
-                model = if (item.user.avatarUrl.isNullOrEmpty()) R.drawable.avatar_1 else imageRequest,
+                model = item.user.avatarUrl ?: R.drawable.avatar_1,
                 contentDescription = "User Avatar",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier

@@ -1,21 +1,21 @@
 package com.example.yap.ui.screen.splash
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.yap.ui.main.YapApp
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import com.google.firebase.firestore.Source
 
 class SplashViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -68,25 +68,51 @@ class SplashViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             val currentUser = FirebaseAuth.getInstance().currentUser
 
+            // 1. Проверяем Auth (Единственный источник правды об авторизации)
             if (currentUser == null) {
                 _entryState.value = EntryState.NotAuthenticated
-            } else {
-                // ПРОВЕРЯЕМ: есть ли профиль в базе?
+                delay(1200)
+                _isSplashVisible.value = false
+                return@launch
+            }
+
+            // Пользователь АВТОРИЗОВАН. Теперь определяем, куда его пустить.
+            try {
+                // 2. Пытаемся достать профиль из КЭША (работает моментально и без интернета)
+                val docCache = repository.usersCollection.document(currentUser.uid)
+                    .get(Source.CACHE)
+                    .await()
+
+                if (docCache.exists() && docCache.contains("username")) {
+                    _entryState.value = EntryState.FullyReady
+                } else {
+                    _entryState.value = EntryState.NeedsRegistration
+                }
+
+            } catch (cacheException: Exception) {
+                // 3. В кэше пусто (например, первый вход с нового устройства). Идем в СЕТЬ.
                 try {
-                    val doc = repository.usersCollection.document(currentUser.uid).get().await()
-                    if (doc.exists() && doc.contains("username")) {
+                    val docServer = repository.usersCollection.document(currentUser.uid)
+                        .get(Source.SERVER)
+                        .await()
+
+                    if (docServer.exists() && docServer.contains("username")) {
                         _entryState.value = EntryState.FullyReady
                     } else {
                         _entryState.value = EntryState.NeedsRegistration
                     }
-                } catch (e: Exception) {
-                    // Если ошибка сети, можем временно считать неавторизованным
-                    // или оставить Loading
-                    _entryState.value = EntryState.NotAuthenticated
+
+                } catch (networkException: Exception) {
+                    // 4. НЕТ СЕТИ И НЕТ КЭША.
+                    // КРИТИЧЕСКИ ВАЖНО: Мы НЕ переводим в NotAuthenticated!
+                    // Мы предполагаем, что если юзер авторизован, он скорее всего имеет профиль.
+                    // Пускаем его на главный экран. Firestore сам синхронизируется, когда появится сеть.
+                    Log.e("SplashViewModel", "Network error, letting user in offline mode", networkException)
+                    _entryState.value = EntryState.FullyReady
                 }
             }
 
-            // Держим сплэш минимум 1.2 сек для красоты
+            // Держим сплэш минимум 1.2 сек для красоты (если проверки прошли быстрее)
             delay(1200)
             _isSplashVisible.value = false
         }

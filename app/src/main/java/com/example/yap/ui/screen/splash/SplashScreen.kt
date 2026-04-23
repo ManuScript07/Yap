@@ -106,7 +106,7 @@ fun AppEntryWithSplash(
                                 .pointerInput(Unit) {}, // Блокируем клики сквозь лоадер
                             contentAlignment = Alignment.Center
                         ) {
-                            CircularProgressIndicator(color = LocalAdditionColors.current.purpleSurfaceColor)
+                            CircularProgressIndicator(color = MaterialTheme.colorScheme.onSurface)
                         }
                     }
                 }

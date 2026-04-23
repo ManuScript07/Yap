@@ -470,17 +470,6 @@ fun UserListItem(
     var showMenu by rememberSaveable { mutableStateOf(false) }
     val baseScale = LocalBaseScale.current
 
-    val context = LocalContext.current
-
-    // 1. Создаем правильный запрос с жестким кэшированием
-    val imageRequest = remember(user.avatarUrl) {
-        ImageRequest.Builder(context)
-            .data(user.avatarUrl)
-            .crossfade(true) // Плавное появление
-            .diskCachePolicy(CachePolicy.ENABLED)
-            .memoryCachePolicy(CachePolicy.ENABLED)
-            .build()
-    }
 
     Row(
         modifier = Modifier
@@ -494,7 +483,7 @@ fun UserListItem(
         verticalAlignment = Alignment.CenterVertically
     ) {
         AsyncImage(
-            model = if (user.avatarUrl.isNullOrEmpty()) R.drawable.avatar_1 else imageRequest,
+            model = user.avatarUrl ?: R.drawable.avatar_1,
             contentDescription = "Avatar",
             modifier = Modifier
                 .size(54.dp * baseScale)

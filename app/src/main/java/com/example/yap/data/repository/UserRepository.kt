@@ -114,6 +114,7 @@ class UserRepository(
 
         // 1. Проверяем оперативную память (L1)
         val idsNotInMemory = uniqueIds.filter { !currentCache.containsKey(it) }
+
         if (idsNotInMemory.isEmpty()) {
             return uniqueIds.mapNotNull { currentCache[it] }
         }
@@ -123,14 +124,15 @@ class UserRepository(
 
             // 2. Пытаемся достать недостающих из Дискового Кэша Firestore (L2)
             // Это быстро и бесплатно.
-            idsNotInMemory.chunked(10).forEach { chunk ->
-                val cacheSnapshot = usersCollection
-                    .whereIn(FieldPath.documentId(), chunk)
-                    .get(Source.CACHE)
-                    .await()
-
-                cacheSnapshot.documents.forEach { doc ->
-                    loadedUsers.add(mapToUser(doc))
+            idsNotInMemory.chunked(30).forEach { chunk ->
+                try {
+                    val cacheSnapshot = usersCollection
+                        .whereIn(FieldPath.documentId(), chunk)
+                        .get(Source.CACHE)
+                        .await()
+                    cacheSnapshot.documents.forEach { doc -> loadedUsers.add(mapToUser(doc)) }
+                } catch (e: Exception) {
+                    // Игнорируем ошибки кэша (например, если его еще нет)
                 }
             }
 
@@ -141,7 +143,7 @@ class UserRepository(
             // 4. Если кого-то нет в кэше (как после переустановки), идем на Сервер (L3)
             if (missingFromCache.isNotEmpty()) {
                 Log.d("UserRepository", "В кэше нет ${missingFromCache.size} чел, запрос к сети...")
-                missingFromCache.chunked(10).forEach { chunk ->
+                missingFromCache.chunked(30).forEach { chunk ->
                     val serverSnapshot = usersCollection
                         .whereIn(FieldPath.documentId(), chunk)
                         .get(Source.SERVER) // Вот здесь мы платим чтение, но только 1 раз
@@ -153,10 +155,22 @@ class UserRepository(
                 }
             }
 
-            // 5. Синхронно обновляем кэш в памяти
-            if (loadedUsers.isNotEmpty()) {
-                profileCache.update { it + loadedUsers.associateBy { u -> u.id } }
+            // 5. РЕШАЕМ ПРОБЛЕМУ "ВАСИ": Находим ID, которых нет даже на сервере
+            val finalFoundIds = loadedUsers.map { it.id }.toSet()
+            val deletedUserIds = idsNotInMemory.filter { !finalFoundIds.contains(it) }
+
+            // Создаем заглушки для удаленных пользователей
+            val placeholders = deletedUserIds.map { id ->
+                UserItem(
+                    id = id,
+                    name = "Deleted User",
+                    username = "deleted",
+                    avatarUrl = null // Будет подставлен дефолтный аватар в UI
+                )
             }
+
+            val newCacheEntries = (loadedUsers + placeholders).associateBy { it.id }
+            profileCache.update { it + newCacheEntries }
 
             // 6. Собираем финальный список из актуального кэша
             val finalCache = profileCache.value
