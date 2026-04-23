@@ -42,23 +42,15 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.BottomSheetDefaults
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.TopAppBarScrollBehavior
-import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
@@ -87,11 +79,12 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.yap.R
+import com.example.yap.ui.components.BaseTopAppBar
 import com.example.yap.ui.screen.home.HomeViewModel
 import com.example.yap.ui.screen.home.YapType
 import com.example.yap.ui.theme.LocalAdditionColors
 import com.example.yap.ui.theme.LocalBaseScale
-import com.example.yap.util.compose.StatusBarIconsColor
+import com.example.yap.util.compose.SystemBarsIconsColor
 import com.example.yap.util.compose.rememberLambda
 import com.example.yap.util.extension.shimmerEffect
 import com.example.yap.util.formatTime
@@ -114,7 +107,7 @@ fun NotificationsScreen(
     homeViewModel: HomeViewModel
 //    @SuppressLint("ContextCastToActivity") homeViewModel: HomeViewModel = viewModel(LocalContext.current as ComponentActivity)
 ) {
-    StatusBarIconsColor(isLight = true)
+    SystemBarsIconsColor(isLight = true)
 
     val state by viewModel.state.collectAsState()
     val homeState by homeViewModel.state.collectAsState()
@@ -194,7 +187,7 @@ fun NotificationsScreen(
                 } else {
                     items(
                         items = state.notifications,
-                        key = { it.id },
+                        key = { item -> item.id  },
                         contentType = { "notification" }
                     ) { notification ->
 
@@ -299,52 +292,7 @@ fun fetchLocationAndSendDirectYap(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun BaseTopAppBar(
-    title: String,
-    onBack: (() -> Unit)? = null,
-    scrollBehavior: TopAppBarScrollBehavior? = null
-) {
-    val baseScale = LocalBaseScale.current
 
-    TopAppBar(
-        title = {
-            Text(
-                text = title,
-                fontSize = (28 * baseScale).sp,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onBackground
-            )
-        },
-        navigationIcon = {
-            if (onBack != null) {
-                Box(
-                    modifier = Modifier
-                        .minimumInteractiveComponentSize()
-                        .clickable(
-                            onClick = onBack,
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.baseline_arrow_back_24),
-                        contentDescription = "Назад",
-                        modifier = Modifier.size(32.dp),
-                        tint = MaterialTheme.colorScheme.onBackground
-                    )
-                }
-            }
-        },
-        colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = MaterialTheme.colorScheme.background,
-            scrolledContainerColor = LocalAdditionColors.current.headerColor
-        ),
-        scrollBehavior = scrollBehavior
-    )
-}
 
 
 @Composable

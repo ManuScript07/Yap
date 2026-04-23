@@ -119,8 +119,8 @@ class HomeViewModel(
     private fun observeQuickList() {
         viewModelScope.launch {
             // Слушаем профиль из Firebase
-            userRepository.observeMyProfile().collect { snapshot ->
-                val quickListIds = snapshot?.get("quickList") as? List<String> ?: emptyList()
+            userRepository.observeMyProfile().collect { myProfile ->
+                val quickListIds = myProfile?.quickList ?: emptyList()
 
                 if (quickListIds.isNotEmpty()) {
                     val usersFromDb = userRepository.getUsersByIds(quickListIds)

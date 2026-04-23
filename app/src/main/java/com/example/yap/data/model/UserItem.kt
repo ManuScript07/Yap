@@ -1,10 +1,17 @@
 package com.example.yap.data.model
 
 data class UserItem(
-    val id: String,
-    val name: String,
-    val isYapActive: Boolean,
-    val avatarRes: Int,
-    val isMuted: Boolean = false
-
+    val id: String = "",
+    val name: String = "",
+    val username: String = "",
+    val avatarUrl: String? = null,
+    val bio: String = "",
+    val dobTimestamp: Long? = null,
+    val showOnlyDay: Boolean = false,
+    val email: String = "",
+    val isYapActive: Boolean = false,
+    val isMuted: Boolean = false,
+    val createdAt: Long? = null,
+    val quickList: List<String> = emptyList(),
+    val mutedUsers: List<String> = emptyList()
 )

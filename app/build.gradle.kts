@@ -52,6 +52,8 @@ android {
 
 dependencies {
 
+    implementation("io.coil-kt:coil-compose:2.5.0")
+
     // BOM позволяет не указывать версию для каждого отдельного модуля
     implementation(platform("io.github.jan-tennert.supabase:bom:3.5.0"))
 

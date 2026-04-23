@@ -21,6 +21,7 @@ data class AdditionalColors(
     val pinkForGradientColor: Color,
     val popupColor: Color,
     val darkYapButtonBackgroundColor: Color,
+    val surfaceImagePrimaryColor: Color,
     val disabledYabBackgroundColor: Color,
     val secondTextColor: Color,
     val headerColor: Color,
@@ -28,5 +29,10 @@ data class AdditionalColors(
     val deleteColor: Color,
     val purpleBackColor: Color,
     val purpleSurfaceColor: Color,
-    val purpleLightColor: Color
+    val purpleLightColor: Color,
+    val purpleLightBackColor: Color,
+    val surfacePhotoColor: Color,
+    val lightGreyColor: Color,
+    val borderFieldColor: Color,
+    val fieldBackColor: Color
 )

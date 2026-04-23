@@ -130,6 +130,9 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import coil.compose.AsyncImage
+import coil.request.CachePolicy
+import coil.request.ImageRequest
 import com.example.yap.R
 import com.example.yap.data.model.UserItem
 import com.example.yap.ui.components.MainYapButton
@@ -138,7 +141,7 @@ import com.example.yap.ui.theme.LocalAdditionColors
 import com.example.yap.ui.theme.LocalBaseScale
 import com.example.yap.util.LocationHelper
 import com.example.yap.util.LocationHelper.checkLocationSettings
-import com.example.yap.util.compose.StatusBarIconsColor
+import com.example.yap.util.compose.SystemBarsIconsColor
 import com.example.yap.util.compose.rememberLambda
 import com.google.android.gms.location.LocationServices
 
@@ -151,7 +154,7 @@ fun HomeScreen(
     onNavigateToProfile: (String) -> Unit,
     onNavigateToNotifications: () -> Unit,
 ) {
-    StatusBarIconsColor(isLight = true)
+    SystemBarsIconsColor(isLight = true)
     val state by viewModel.state.collectAsState()
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -430,7 +433,7 @@ fun UsersBottomSheet(
         } else {
             items(
                 items = users,
-                key = { it.id }
+                key = { item -> item.id }
             ) { user ->
                 Box(modifier = Modifier.animateItem(
                     fadeInSpec = tween(150),
@@ -467,6 +470,18 @@ fun UserListItem(
     var showMenu by rememberSaveable { mutableStateOf(false) }
     val baseScale = LocalBaseScale.current
 
+    val context = LocalContext.current
+
+    // 1. Создаем правильный запрос с жестким кэшированием
+    val imageRequest = remember(user.avatarUrl) {
+        ImageRequest.Builder(context)
+            .data(user.avatarUrl)
+            .crossfade(true) // Плавное появление
+            .diskCachePolicy(CachePolicy.ENABLED)
+            .memoryCachePolicy(CachePolicy.ENABLED)
+            .build()
+    }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -478,13 +493,17 @@ fun UserListItem(
             .padding(horizontal = 16.dp, vertical = 6.dp * baseScale),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Image(
-            painter = painterResource(user.avatarRes),
-            contentDescription = null,
+        AsyncImage(
+            model = if (user.avatarUrl.isNullOrEmpty()) R.drawable.avatar_1 else imageRequest,
+            contentDescription = "Avatar",
             modifier = Modifier
-                .size(48.dp * baseScale)
+                .size(54.dp * baseScale)
                 .clip(CircleShape),
-            contentScale = ContentScale.Crop
+            contentScale = ContentScale.Crop,
+            // Опционально: можно добавить плейсхолдер, пока грузится сеть
+            placeholder = painterResource(R.drawable.avatar_1),
+            error = painterResource(R.drawable.avatar_1),
+            fallback = painterResource(R.drawable.avatar_1)
         )
 
         Spacer(modifier = Modifier.width(14.dp*baseScale))

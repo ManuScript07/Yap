@@ -72,13 +72,13 @@ class NotificationsViewModel(
                 // 2. Подгружаем их профили одним пакетом (UserRepository теперь кэширует их)
                 val loadedProfiles = userRepository.getUsersByIds(senderIds)
 
-                val cloudQuickListIds = myProfileSnapshot?.get("quickList") as? List<String> ?: emptyList()
-                val mutedIds = myProfileSnapshot?.get("mutedUsers") as? List<String> ?: emptyList()
+                val cloudQuickListIds = myProfileSnapshot?.quickList ?: emptyList()
+                val mutedIds = myProfileSnapshot?.mutedUsers ?: emptyList()
 
                 // 3. Маппим сообщения, используя уже загруженные данные
                 messages.map { entity ->
                     val senderProfile = loadedProfiles.find { it.id == entity.senderId }
-                        ?: UserItem(entity.senderId, "Unknown", false, R.drawable.avatar_1)
+                        ?: UserItem(entity.senderId, "Unknown")
 
                     val isInCloudList = cloudQuickListIds.contains(entity.senderId)
                     val isMuted = mutedIds.contains(entity.senderId)

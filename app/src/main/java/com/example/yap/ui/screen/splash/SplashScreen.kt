@@ -1,5 +1,6 @@
 package com.example.yap.ui.screen.splash
 
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideOutVertically
@@ -7,41 +8,119 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.yap.R
 import com.example.yap.ui.navigation.NavigationApp
 import com.example.yap.ui.screen.auth.AuthScreen
-import com.example.yap.util.compose.StatusBarIconsColor
+import com.example.yap.ui.screen.registration.ProfileRegistrationScreen
+import com.example.yap.ui.screen.registration.RegistrationViewModel
+import com.example.yap.ui.theme.LocalAdditionColors
+import com.example.yap.util.compose.SystemBarsIconsColor
+import com.google.firebase.auth.FirebaseAuth
 
 @Composable
 fun AppEntryWithSplash(
-    splashViewModel: SplashViewModel = viewModel()
+    splashViewModel: SplashViewModel = viewModel(),
+    registrationViewModel: RegistrationViewModel = viewModel()
 ) {
     val splashVisible by splashViewModel.isSplashVisible.collectAsState()
-    val isReady by splashViewModel.isReady.collectAsState()
+    val entryState by splashViewModel.entryState.collectAsState()
+
+    val regState by registrationViewModel.registrationState.collectAsState()
+
+    var currentScreen by remember { mutableStateOf("splash") }
+    var initialNameForRegistration by remember { mutableStateOf("") }
+
+    LaunchedEffect(regState) {
+        if (regState is RegistrationViewModel.RegistrationState.Success) {
+            currentScreen = "main"
+        }
+    }
+
+    LaunchedEffect(splashVisible) {
+        if (!splashVisible && currentScreen == "splash") {
+            currentScreen = when (entryState) {
+                is SplashViewModel.EntryState.FullyReady -> "main"
+                is SplashViewModel.EntryState.NeedsRegistration -> {
+                    // Если профиля нет, берем имя из Google профиля
+                    initialNameForRegistration = FirebaseAuth.getInstance().currentUser?.displayName ?: ""
+                    "registration"
+                }
+                else -> "auth"
+            }
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
 
-        // КЛЮЧЕВОЕ ИЗМЕНЕНИЕ:
-        // Мы рендерим основное приложение ТОЛЬКО если авторизация пройдена.
-        // Это предотвратит лишние запросы к Firebase и наслоение UI.
-        if (isReady) {
-            NavigationApp(splashViewModel)
-        } else if (!splashVisible) {
-            // Если сплэш уже ушел, а мы всё еще не готовы (нет юзера)
-            AuthScreen(
-                onAuthSuccess = { /* Реактивность всё сделает за нас */ }
+        when (currentScreen) {
+            "main" -> NavigationApp(splashViewModel)
+
+            "auth" -> AuthScreen(
+                onAuthSuccessExisting = {
+                    // Старый юзер, пускаем в прилу
+                    currentScreen = "main"
+                },
+                onAuthSuccessNew = { googleName ->
+                    // Новый юзер, перекидываем на создание профиля
+                    initialNameForRegistration = googleName
+                    currentScreen = "registration"
+                }
             )
+
+            "registration" -> {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    ProfileRegistrationScreen(
+                        initialName = initialNameForRegistration,
+                        onComplete = { name, username, dob, showOnlyDay, bio, photoUri ->
+                            // Запускаем процесс регистрации во ViewModel
+                            registrationViewModel.completeRegistration(
+                                name, username, dob, showOnlyDay, bio, photoUri
+                            )
+                        }
+                    )
+
+                    // Показываем лоадер поверх экрана регистрации
+                    if (regState is RegistrationViewModel.RegistrationState.Loading) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color.Black.copy(alpha = 0.5f))
+                                .pointerInput(Unit) {}, // Блокируем клики сквозь лоадер
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(color = LocalAdditionColors.current.purpleSurfaceColor)
+                        }
+                    }
+                }
+            }
         }
+
+        if (regState is RegistrationViewModel.RegistrationState.Error) {
+            val context = LocalContext.current
+            val errorMessage = (regState as RegistrationViewModel.RegistrationState.Error).message
+            LaunchedEffect(regState) {
+                Toast.makeText(context, errorMessage, Toast.LENGTH_SHORT).show()
+            }
+        }
+
 
         // Сплэш всегда рисуем поверх всего, пока он активен
         AnimatedVisibility(
@@ -55,7 +134,7 @@ fun AppEntryWithSplash(
 
 @Composable
 fun SplashContent() {
-    StatusBarIconsColor(isLight = true)
+    SystemBarsIconsColor(isLight = true)
     Box(
         modifier = Modifier
             .fillMaxSize()

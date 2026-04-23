@@ -29,6 +29,22 @@
     <string name="sign_google">Войти через Google</string>
     <string name="voice_message_placeholder">Голосовое сообщение</string>
     <string name="nework_error">Не удалось отправить голосовое</string>
+    <string name="account_creation">Создание аккаунта</string>
+    <string name="select_a_photo">Выберите фото для профиля</string>
+    <string name="dnt_user_other_photo">Не используйте чужие фотографии</string>
+    <string name="your_name">Как вас зовут</string>
+    <string name="input_your_name">Введите ваше имя</string>
+    <string name="user_name">Введите имя пользователя</string>
+    <string name="input_user_name">Введите имя пользователя</string>
+    <string name="unique_nick">Уникальный никнейм профиля</string>
+    <string name="how_old">Сколько вам лет</string>
+    <string name="birthday">ДД/ММ/ГГГГ</string>
+    <string name="only_birthday">Показывать только день рождения</string>
+    <string name="about_me">О себе</string>
+    <string name="write_about_me">Напишите что-нибудь о себе...</string>
+    <string name="ok">OK</string>
+    <string name="cancel">Отмена</string>
+    <string name="complete">Завершить</string>
 
 
 

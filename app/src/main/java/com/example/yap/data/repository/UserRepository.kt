@@ -3,6 +3,7 @@ package com.example.yap.data.repository
 import UserPreferences
 import android.util.Log
 import com.example.yap.R
+import com.example.yap.data.manager.RemoteConfigManager
 import com.example.yap.data.model.UserItem
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
@@ -13,6 +14,10 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Source
 import com.google.firebase.messaging.FirebaseMessaging
+import io.github.jan.supabase.createSupabaseClient
+import io.github.jan.supabase.storage.Storage
+import io.github.jan.supabase.storage.storage
+import io.ktor.websocket.WebSocketDeflateExtension.Companion.install
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -31,11 +36,23 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import java.util.UUID
+import kotlin.getValue
 
 class UserRepository(
     private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance(),
-    private val userPrefs: UserPreferences
+    private val userPrefs: UserPreferences,
+    private val configManager: RemoteConfigManager,
 ) {
+
+    private val supabase by lazy {
+        createSupabaseClient(
+            supabaseUrl = configManager.supabaseUrl,
+            supabaseKey = configManager.supabaseAnonKey
+        ) {
+            install(Storage)
+        }
+    }
     val usersCollection = firestore.collection("users")
     private val profileCache = MutableStateFlow<Map<String, UserItem>>(emptyMap())
 
@@ -57,6 +74,7 @@ class UserRepository(
             auth.removeAuthStateListener(listener)
         }
     }.distinctUntilChanged()
+
     val currentUserId: String?
         get() = FirebaseAuth.getInstance().currentUser?.uid
 
@@ -105,7 +123,7 @@ class UserRepository(
 
             // 2. Пытаемся достать недостающих из Дискового Кэша Firestore (L2)
             // Это быстро и бесплатно.
-            idsNotInMemory.chunked(30).forEach { chunk ->
+            idsNotInMemory.chunked(10).forEach { chunk ->
                 val cacheSnapshot = usersCollection
                     .whereIn(FieldPath.documentId(), chunk)
                     .get(Source.CACHE)
@@ -123,7 +141,7 @@ class UserRepository(
             // 4. Если кого-то нет в кэше (как после переустановки), идем на Сервер (L3)
             if (missingFromCache.isNotEmpty()) {
                 Log.d("UserRepository", "В кэше нет ${missingFromCache.size} чел, запрос к сети...")
-                missingFromCache.chunked(30).forEach { chunk ->
+                missingFromCache.chunked(10).forEach { chunk ->
                     val serverSnapshot = usersCollection
                         .whereIn(FieldPath.documentId(), chunk)
                         .get(Source.SERVER) // Вот здесь мы платим чтение, но только 1 раз
@@ -156,8 +174,16 @@ class UserRepository(
         return UserItem(
             id = doc.id,
             name = doc.getString("name") ?: "Unknown",
-            isYapActive = false,
-            avatarRes = R.drawable.avatar_1
+            username = doc.getString("username") ?: "",
+            avatarUrl = doc.getString("avatarUrl"), // Теперь берем ссылку из базы!
+            bio = doc.getString("bio") ?: "",
+            dobTimestamp = doc.getLong("dobTimestamp"),
+            showOnlyDay = doc.getBoolean("showOnlyDay") ?: false,
+            email = doc.getString("email") ?: "",
+            isYapActive = doc.getBoolean("isYapActive") ?: false,
+            isMuted = doc.getBoolean("isMuted") ?: false,
+            quickList = doc.get("quickList") as? List<String> ?: emptyList(),
+            mutedUsers = doc.get("mutedUsers") as? List<String> ?: emptyList()
         )
     }
 
@@ -192,7 +218,7 @@ class UserRepository(
 
     // 1. Выносим поток в ленивое свойство (Property), чтобы он не пересоздавался при каждом вызове функции
     @OptIn(ExperimentalCoroutinesApi::class)
-    private val profileFlow: Flow<DocumentSnapshot?> by lazy {
+    private val profileFlow: Flow<UserItem?> by lazy {
         currentUserFlow.flatMapLatest { user ->
             val uid = user?.uid
             if (uid == null) {
@@ -201,7 +227,7 @@ class UserRepository(
             } else {
                 // ФИКС 1: Явно указываем тип данных <DocumentSnapshot?>,
                 // чтобы компилятор не вывел Nothing?
-                callbackFlow<DocumentSnapshot?> {
+                callbackFlow<UserItem?> {
                     Log.d("FIREBASE_TEST", "!!! СЛУШАТЕЛЬ ПРОФИЛЯ СОЗДАН для $uid !!!")
 
                     val registration = usersCollection.document(uid)
@@ -210,8 +236,11 @@ class UserRepository(
                                 Log.e("UserRepository", "SnapshotListener error: ${error.message}")
                                 return@addSnapshotListener
                             }
-                            val result = trySend(snapshot)
-                            if (result.isFailure) {
+                            if (snapshot != null && snapshot.exists()) {
+                                trySend(mapToUser(snapshot))
+                            }
+                            else{
+                                trySend(null)
                                 Log.e("UserRepository", "Failed to send profile snapshot to flow")
                             }
                         }
@@ -223,25 +252,45 @@ class UserRepository(
                 }
             }
         }
-            .distinctUntilChanged { old, new ->
-                if (old == null || new == null) return@distinctUntilChanged old == new
-
-                val oldQuick = old["quickList"] as? List<*>
-                val newQuick = new["quickList"] as? List<*>
-                val oldMuted = old["mutedUsers"] as? List<*>
-                val newMuted = new["mutedUsers"] as? List<*>
-
-                oldQuick == newQuick && oldMuted == newMuted
-            }
-            .shareIn(
-                scope = repositoryScope,
-                started = SharingStarted.WhileSubscribed(5000),
-                replay = 1
-            )
+        .distinctUntilChanged()
+        .shareIn(
+            scope = repositoryScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            replay = 1
+        )
     }
 
     // 2. Публичный метод теперь просто возвращает готовую ссылку на поток
-    fun observeMyProfile(): Flow<DocumentSnapshot?> = profileFlow
+    fun observeMyProfile(): Flow<UserItem?> = profileFlow
+
+    suspend fun uploadAvatar(photoBytes: ByteArray, userId: String): Result<String> {
+        return withContext(Dispatchers.IO) {
+            var lastException: Exception? = null
+            repeat(3) { attempt ->
+                try {
+                    val fileName = "avatar_${UUID.randomUUID()}.jpg"
+                    val fullPath = "$userId/$fileName"
+
+                    // Предполагается, что бакет называется "avatars" (замени на свой)
+                    val bucketName = "avatars"
+
+                    supabase.storage.from(bucketName).upload(
+                        path = fullPath,
+                        data = photoBytes
+                    ) { upsert = true }
+
+                    val downloadUrl = "${configManager.supabaseUrl}/storage/v1/object/public/$bucketName/$fullPath"
+                    return@withContext Result.success(downloadUrl)
+
+                } catch (e: Exception) {
+                    lastException = e
+                    kotlinx.coroutines.delay((attempt + 1) * 1000L)
+                }
+            }
+            Result.failure(lastException ?: Exception("Upload failed"))
+        }
+    }
+
 
     suspend fun signInAnonymously(): Boolean {
         return try {
@@ -268,43 +317,54 @@ class UserRepository(
         }
     }
 
-    suspend fun signInWithGoogle(idToken: String): Boolean {
-        // 1. Выполняем в IO-потоке, так как это сетевые операции
+
+
+    suspend fun completeUserRegistration(
+        userId: String,
+        email: String?,
+        userData: Map<String, Any?>
+    ): Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
-                // 2. Ограничиваем всё выполнение 15 секундами
-                // Если за это время Firebase не ответит, вылетит TimeoutCancellationException
+                val docRef = usersCollection.document(userId)
+
+                // Дополняем данные системными полями
+                val finalData = userData.toMutableMap().apply {
+                    put("email", email ?: "")
+                    put("quickList", emptyList<String>())
+                    put("mutedUsers", emptyList<String>())
+                    put("createdAt", FieldValue.serverTimestamp()) // Используем время сервера
+                }
+
+                docRef.set(finalData).await()
+                Result.success(Unit)
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+    }
+
+
+    suspend fun signInWithGoogle(idToken: String): AuthResult {
+        return withContext(Dispatchers.IO) {
+            try {
                 withTimeout(15000L) {
                     val credential = GoogleAuthProvider.getCredential(idToken, null)
                     val result = FirebaseAuth.getInstance().signInWithCredential(credential).await()
-                    val user = result.user
+                    val user = result.user ?: return@withTimeout AuthResult.Error("User is null")
 
-                    if (user != null) {
-                        val docRef = usersCollection.document(user.uid)
-                        val doc = docRef.get().await()
+                    val doc = usersCollection.document(user.uid).get().await()
 
-                        if (!doc.exists()) {
-                            val initialData = mapOf(
-                                "name" to (user.displayName ?: "New User"),
-                                "email" to user.email,
-                                "quickList" to emptyList<String>(),
-                                "mutedUsers" to emptyList<String>(),
-                                "createdAt" to com.google.firebase.Timestamp.now() // Полезно для аналитики
-                            )
-                            docRef.set(initialData).await()
-                        }
-                        true
+                    if (!doc.exists()) {
+                        // МЫ НИЧЕГО НЕ ПИШЕМ В БД ТУТ!
+                        // Просто передаем имя из Гугла для предзаполнения анкеты
+                        AuthResult.SuccessNewUser(defaultName = user.displayName ?: "")
                     } else {
-                        Log.e("UserRepository", "User is null after successful Firebase auth")
-                        false
+                        AuthResult.SuccessExistingUser
                     }
                 }
-            } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
-                Log.e("UserRepository", "Auth failed: Connection timeout")
-                false
             } catch (e: Exception) {
-                Log.e("UserRepository", "Google Auth failed: ${e.localizedMessage}", e)
-                false
+                AuthResult.Error(e.localizedMessage ?: "Auth error")
             }
         }
     }

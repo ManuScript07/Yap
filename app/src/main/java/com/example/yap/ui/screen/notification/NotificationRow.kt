@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -51,6 +52,9 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import coil.request.CachePolicy
+import coil.request.ImageRequest
 import com.example.yap.R
 import com.example.yap.ui.components.YapActionButton
 import com.example.yap.ui.theme.LocalAdditionColors
@@ -157,6 +161,18 @@ private fun NotificationCardContent(
         item.messageText ?: ""
     }
 
+    val context = LocalContext.current
+
+    // 1. Создаем правильный запрос с жестким кэшированием
+    val imageRequest = remember(item.user.avatarUrl) {
+        ImageRequest.Builder(context)
+            .data(item.user.avatarUrl)
+            .crossfade(true) // Плавное появление
+            .diskCachePolicy(CachePolicy.ENABLED)
+            .memoryCachePolicy(CachePolicy.ENABLED)
+            .build()
+    }
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -173,9 +189,9 @@ private fun NotificationCardContent(
                 .fillMaxWidth(),
             verticalAlignment = Alignment.Top
         ) {
-            Image(
-                painter = painterResource(id = item.user.avatarRes),
-                contentDescription = null,
+            AsyncImage(
+                model = if (item.user.avatarUrl.isNullOrEmpty()) R.drawable.avatar_1 else imageRequest,
+                contentDescription = "User Avatar",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .size(56.dp * baseScale)
@@ -185,7 +201,11 @@ private fun NotificationCardContent(
                         indication = null
                     ) {
                         onNavigateToProfile(item.user.id)
-                    }
+                    },
+                // Плейсхолдер и ошибка — используем локальный ресурс
+                placeholder = painterResource(id = R.drawable.avatar_1),
+                error = painterResource(id = R.drawable.avatar_1),
+                fallback = painterResource(R.drawable.avatar_1)
             )
 
             Spacer(modifier = Modifier.width(16.dp * baseScale))

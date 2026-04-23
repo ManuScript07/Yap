@@ -1,5 +1,6 @@
-package com.example.yap
+package com.example.yap.data.manager
 
+import com.example.yap.R
 import com.google.firebase.remoteconfig.FirebaseRemoteConfig
 import com.google.firebase.remoteconfig.FirebaseRemoteConfigSettings
 

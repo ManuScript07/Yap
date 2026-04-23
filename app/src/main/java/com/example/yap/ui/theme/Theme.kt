@@ -55,6 +55,7 @@ val LightAdditionColors = AdditionalColors(
     pinkForGradientColor = Color(0xFFFB62FE),
     popupColor = Color(0xFFA6A6F2),
     darkYapButtonBackgroundColor = Color(0xFFB9D800),
+    surfaceImagePrimaryColor = Color(0xFFCFF202),
     disabledYabBackgroundColor = Color(0xFFD9D9D9),
     secondTextColor = Color(0xFF414141),
     headerColor = Color(0xFFE5E9F1),
@@ -62,7 +63,13 @@ val LightAdditionColors = AdditionalColors(
     deleteColor = Color(0xFFE57373),
     purpleBackColor = Color(0xFFB9B9EB),
     purpleSurfaceColor = Color(0xFF6750A4),
-    purpleLightColor = Color(0xFFE8DEF8)
+    purpleLightColor = Color(0xFFE8DEF8),
+    purpleLightBackColor = Color(0xFFECE6F0),
+    surfacePhotoColor = Color(0xFFD7DAEB),
+    lightGreyColor = Color(0xFFCDCDCD),
+    borderFieldColor = Color(0xFF1E2940),
+    fieldBackColor = Color(0xFFEFF1F8)
+
 
 )
 

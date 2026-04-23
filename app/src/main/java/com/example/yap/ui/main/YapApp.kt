@@ -2,7 +2,7 @@ package com.example.yap.ui.main
 
 import UserPreferences
 import android.app.Application
-import com.example.yap.RemoteConfigManager
+import com.example.yap.data.manager.RemoteConfigManager
 import com.example.yap.data.repository.ChatRepository
 import com.example.yap.data.repository.UserRepository
 import com.example.yap.service.GroqTranscriptionService
@@ -18,7 +18,10 @@ class YapApp : Application() {
     val userPrefs by lazy { UserPreferences(applicationContext) }
 
     val userRepository by lazy {
-        UserRepository(userPrefs = userPrefs)
+        UserRepository(
+            userPrefs = userPrefs,
+            configManager = configManager
+        )
     }
 
     val chatRepository by lazy { ChatRepository(configManager) }

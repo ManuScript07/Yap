@@ -42,7 +42,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.wear.compose.material.Text
 import com.example.yap.R
 import com.example.yap.ui.theme.LocalBaseScale
-import com.example.yap.util.compose.StatusBarIconsColor
+import com.example.yap.util.compose.SystemBarsIconsColor
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import kotlinx.coroutines.launch
@@ -50,10 +50,11 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun AuthScreen(
-    onAuthSuccess: () -> Unit,
+    onAuthSuccessExisting: () -> Unit,
+    onAuthSuccessNew: (String) -> Unit,
     viewModel: AuthViewModel = viewModel()
 ) {
-    StatusBarIconsColor(isLight = true)
+    SystemBarsIconsColor(isLight = true)
     val context = LocalContext.current
     val state by viewModel.authState.collectAsState()
     val isLoading = state is AuthViewModel.AuthState.Loading
@@ -61,8 +62,10 @@ fun AuthScreen(
     val scale = LocalBaseScale.current
 
     LaunchedEffect(state) {
-        if (state is AuthViewModel.AuthState.Success) {
-            onAuthSuccess()
+        when (val currentState = state) {
+            is AuthViewModel.AuthState.SuccessExisting -> onAuthSuccessExisting()
+            is AuthViewModel.AuthState.SuccessNew -> onAuthSuccessNew(currentState.defaultName)
+            else -> {}
         }
     }
 

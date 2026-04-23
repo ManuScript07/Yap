@@ -7,15 +7,20 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
 @Composable
-fun StatusBarIconsColor(isLight: Boolean) {
+fun SystemBarsIconsColor(isLight: Boolean) {
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
             val insetsController = WindowCompat.getInsetsController(window, view)
-            // isLight = true означает, что мы хотим ТЕМНЫЕ иконки (для светлого фона)
-            // isLight = false означает, что мы хотим СВЕТЛЫЕ иконки (для темного фона)
+
+            // Статус-бар (верх)
             insetsController.isAppearanceLightStatusBars = isLight
+
+            // Навигационная панель (низ)
+            // true — темные кнопки (для светлого фона)
+            // false — светлые кнопки (для темного фона)
+            insetsController.isAppearanceLightNavigationBars = isLight
         }
     }
 }

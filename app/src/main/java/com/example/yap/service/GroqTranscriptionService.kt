@@ -1,7 +1,7 @@
 package com.example.yap.service
 
 import android.util.Log
-import com.example.yap.RemoteConfigManager
+import com.example.yap.data.manager.RemoteConfigManager
 import com.example.yap.data.api.GroqTranscriptionApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

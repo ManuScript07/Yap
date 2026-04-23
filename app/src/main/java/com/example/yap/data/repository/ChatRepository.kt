@@ -2,7 +2,7 @@ package com.example.yap.data.repository
 
 
 import android.util.Log
-import com.example.yap.RemoteConfigManager
+import com.example.yap.data.manager.RemoteConfigManager
 import com.example.yap.data.model.MessageEntity
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.channels.awaitClose
@@ -28,11 +28,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.concurrent.ConcurrentHashMap
 
-//object SupabaseConfig {
-//    const val BUCKET_NAME = "yaps"
-//    const val PROJECT_URL = "https://fnouaplmxqztiruyusuu.supabase.co"
-//    const val ANON_KEY = "sb_publishable_MjHvC7svZQsVEcvQTOIk5A_WmOMDt-O"
-//}
+
 class ChatRepository(
     private val configManager: RemoteConfigManager,
     private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
@@ -179,7 +175,7 @@ class ChatRepository(
             .whereEqualTo("receiverId", currentUserId)
             .whereEqualTo("visibleForReceiver", true)
             .orderBy("timestamp", Query.Direction.DESCENDING)
-            .limit(20)
+            .limit(30)
 
         val subscription = query.addSnapshotListener { snapshot, error ->
 
