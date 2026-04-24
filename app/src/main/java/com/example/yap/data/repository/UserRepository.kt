@@ -33,6 +33,8 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
@@ -57,6 +59,8 @@ class UserRepository(
     private val profileCache = MutableStateFlow<Map<String, UserItem>>(emptyMap())
 
     private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    private val fetchMutex = Mutex()
 
     // Кэш для потока профиля
 
@@ -106,82 +110,113 @@ class UserRepository(
         }
     }
 
+
     suspend fun getUsersByIds(ids: List<String>): List<UserItem> {
         if (ids.isEmpty()) return emptyList()
-
+        val tag = "UserRepository"
         val uniqueIds = ids.distinct()
-        val currentCache = profileCache.value
 
-        // 1. Проверяем оперативную память (L1)
-        val idsNotInMemory = uniqueIds.filter { !currentCache.containsKey(it) }
-
-        if (idsNotInMemory.isEmpty()) {
-            return uniqueIds.mapNotNull { currentCache[it] }
+        // 1. Быстрая проверка L1 (RAM)
+        val initialMissing = uniqueIds.filter { !profileCache.value.containsKey(it) }
+        if (initialMissing.isEmpty()) {
+            return uniqueIds.mapNotNull { profileCache.value[it] }
         }
 
-        return try {
-            val loadedUsers = mutableListOf<UserItem>()
+        Log.d(tag, "🔍 Ищем: ${initialMissing.size} чел. (жду мьютекс)")
 
-            // 2. Пытаемся достать недостающих из Дискового Кэша Firestore (L2)
-            // Это быстро и бесплатно.
-            idsNotInMemory.chunked(30).forEach { chunk ->
+        fetchMutex.withLock {
+            val currentCache = profileCache.value
+            val missingFromMemory = uniqueIds.filter { !currentCache.containsKey(it) }
+
+            if (missingFromMemory.isEmpty()) {
+                return uniqueIds.mapNotNull { profileCache.value[it] }
+            }
+
+            val newlyLoaded = mutableListOf<UserItem>()
+            var networkSucceeded = false
+
+            // 2. СНАЧАЛА ИДЕМ В СЕТЬ (L3) С ЖЕСТКИМ ТАЙМАУТОМ
+            // Это решает проблему "Васи": мы всегда проверяем актуальность на сервере.
+            // Таймаут в 2.5 секунды решает проблему "долгого оффлайна".
+            try {
+                Log.d(tag, "🌐 L3 (Network): Проверяем ${missingFromMemory.size} чел. (таймаут 2.5с)")
+
+                withTimeout(2500) { // Если за 2.5 сек ответа нет - выкинет TimeoutCancellationException
+                    missingFromMemory.chunked(30).forEach { chunk ->
+                        val serverSnapshot = usersCollection
+                            .whereIn(FieldPath.documentId(), chunk)
+                            .get(Source.SERVER)
+                            .await()
+                        serverSnapshot.documents.forEach { doc -> newlyLoaded.add(mapToUser(doc)) }
+                    }
+                }
+                networkSucceeded = true
+                Log.d(tag, "✅ L3 (Network): Успешно")
+
+            } catch (e: Exception) {
+                Log.w(tag, "⚠️ Сеть недоступна или таймаут. Ошибка: ${e.message}")
+                networkSucceeded = false
+            }
+
+            // 3. СПАСАТЕЛЬНЫЙ КРУГ: ДИСКОВЫЙ КЭШ (L2)
+            // Если сеть не ответила (networkSucceeded == false), вытягиваем данные из кэша
+            if (!networkSucceeded) {
                 try {
-                    val cacheSnapshot = usersCollection
-                        .whereIn(FieldPath.documentId(), chunk)
-                        .get(Source.CACHE)
-                        .await()
-                    cacheSnapshot.documents.forEach { doc -> loadedUsers.add(mapToUser(doc)) }
+                    Log.d(tag, "💾 L2 (Disk): Пытаемся достать ${missingFromMemory.size} чел. из кэша индивидуально")
+
+                    // Используем обычный цикл вместо whereIn для L2.
+                    // Прямое обращение к документу через .document(id).get(Source.CACHE)
+                    // работает стабильнее, если локальные индексы еще не прогрузились.
+                    missingFromMemory.forEach { id ->
+                        try {
+                            val docSnapshot = usersCollection.document(id).get(Source.CACHE).await()
+                            if (docSnapshot.exists()) {
+                                newlyLoaded.add(mapToUser(docSnapshot))
+                            }
+                        } catch (e: Exception) {
+                            // Если конкретного юзера нет в кэше — просто идем дальше
+                            Log.v(tag, "🔍 ID $id не найден в локальном кэше")
+                        }
+                    }
+                    Log.d(tag, "💾 L2 (Disk): Итого найдено ${newlyLoaded.size} из ${missingFromMemory.size}")
                 } catch (e: Exception) {
-                    // Игнорируем ошибки кэша (например, если его еще нет)
+                    Log.e(tag, "❌ Критическая ошибка L2 кэша: ${e.message}")
                 }
             }
 
-            // 3. Проверяем: всех ли нашли?
-            val foundIds = loadedUsers.map { it.id }.toSet()
-            val missingFromCache = idsNotInMemory.filter { !foundIds.contains(it) }
+            // 4. ЛОГИКА "ВАСИ" (Заглушки для удаленных)
+            // Сработает ТОЛЬКО если сервер успешно ответил, но кого-то не вернул
+            val placeholders = mutableListOf<UserItem>()
+            if (networkSucceeded) {
+                val foundIds = newlyLoaded.map { it.id }.toSet()
+                val deletedUserIds = missingFromMemory.filter { !foundIds.contains(it) }
 
-            // 4. Если кого-то нет в кэше (как после переустановки), идем на Сервер (L3)
-            if (missingFromCache.isNotEmpty()) {
-                Log.d("UserRepository", "В кэше нет ${missingFromCache.size} чел, запрос к сети...")
-                missingFromCache.chunked(30).forEach { chunk ->
-                    val serverSnapshot = usersCollection
-                        .whereIn(FieldPath.documentId(), chunk)
-                        .get(Source.SERVER) // Вот здесь мы платим чтение, но только 1 раз
-                        .await()
-
-                    serverSnapshot.documents.forEach { doc ->
-                        loadedUsers.add(mapToUser(doc))
+                if (deletedUserIds.isNotEmpty()) {
+                    Log.w(tag, "🗑️ Обнаружены удаленные (заглушки): ${deletedUserIds.size} чел.")
+                    deletedUserIds.forEach { id ->
+                        placeholders.add(
+                            UserItem(
+                                id = id,
+                                name = "Deleted User",
+                                username = "deleted",
+                                avatarUrl = null
+                            )
+                        )
                     }
                 }
             }
 
-            // 5. РЕШАЕМ ПРОБЛЕМУ "ВАСИ": Находим ID, которых нет даже на сервере
-            val finalFoundIds = loadedUsers.map { it.id }.toSet()
-            val deletedUserIds = idsNotInMemory.filter { !finalFoundIds.contains(it) }
-
-            // Создаем заглушки для удаленных пользователей
-            val placeholders = deletedUserIds.map { id ->
-                UserItem(
-                    id = id,
-                    name = "Deleted User",
-                    username = "deleted",
-                    avatarUrl = null // Будет подставлен дефолтный аватар в UI
-                )
+            // 5. Сохраняем всё в RAM
+            if (newlyLoaded.isNotEmpty() || placeholders.isNotEmpty()) {
+                val newEntries = (newlyLoaded + placeholders).associateBy { it.id }
+                profileCache.update { it + newEntries }
             }
-
-            val newCacheEntries = (loadedUsers + placeholders).associateBy { it.id }
-            profileCache.update { it + newCacheEntries }
-
-            // 6. Собираем финальный список из актуального кэша
-            val finalCache = profileCache.value
-            uniqueIds.mapNotNull { finalCache[it] }
-
-        } catch (e: Exception) {
-            Log.e("UserRepository", "Ошибка при загрузке профилей: ${e.message}")
-            // Если всё упало (нет сети), возвращаем хотя бы то, что было в памяти
-            uniqueIds.mapNotNull { currentCache[it] }
         }
+
+        // 6. Возвращаем результат
+        return uniqueIds.mapNotNull { profileCache.value[it] }
     }
+
 
     // Выносим маппинг, чтобы не дублировать логику
     private fun mapToUser(doc: DocumentSnapshot): UserItem {
