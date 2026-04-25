@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import com.google.firebase.firestore.Query
 import com.google.gson.Gson
+import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.createSupabaseClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -31,17 +32,10 @@ import java.util.concurrent.ConcurrentHashMap
 
 class ChatRepository(
     private val configManager: RemoteConfigManager,
-    private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
+    private val firestore: FirebaseFirestore,
+    private val supabase: SupabaseClient
 ) {
 
-    private val supabase by lazy {
-        createSupabaseClient(
-            supabaseUrl = configManager.supabaseUrl,
-            supabaseKey = configManager.supabaseAnonKey
-        ) {
-            install(Storage)
-        }
-    }
 
     private val messagesCollection = firestore.collection("messages")
     private val usersCollection = firestore.collection("users")

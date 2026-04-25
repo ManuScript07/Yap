@@ -14,6 +14,9 @@ import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
+import com.google.firebase.auth.FirebaseAuth
+import io.github.jan.supabase.createSupabaseClient
+import io.github.jan.supabase.storage.Storage
 
 class YapApp : Application(), ImageLoaderFactory {
 
@@ -21,14 +24,45 @@ class YapApp : Application(), ImageLoaderFactory {
 
     val userPrefs by lazy { UserPreferences(applicationContext) }
 
+
+    val firestore: FirebaseFirestore by lazy { FirebaseFirestore.getInstance() }
+    val firebaseAuth: FirebaseAuth by lazy { FirebaseAuth.getInstance() }
+
+    val supabaseClient by lazy {
+        createSupabaseClient(
+            supabaseUrl = configManager.supabaseUrl,
+            supabaseKey = configManager.supabaseAnonKey
+        ) {
+            install(Storage)
+            // Применяем настройки OkHttp ко всем запросам приложения
+            httpEngine = io.ktor.client.engine.okhttp.OkHttp.create {
+                config {
+                    connectTimeout(20, java.util.concurrent.TimeUnit.SECONDS)
+                    readTimeout(20, java.util.concurrent.TimeUnit.SECONDS)
+                    writeTimeout(20, java.util.concurrent.TimeUnit.SECONDS)
+                }
+            }
+        }
+    }
+
+
     val userRepository by lazy {
         UserRepository(
+            firestore = firestore,
+            auth = firebaseAuth,
             userPrefs = userPrefs,
-            configManager = configManager
+            configManager = configManager,
+            supabase = supabaseClient
         )
     }
 
-    val chatRepository by lazy { ChatRepository(configManager) }
+    val chatRepository by lazy {
+        ChatRepository(
+            firestore = firestore,
+            configManager = configManager,
+            supabase = supabaseClient
+        )
+    }
     val transcriptionService by lazy{ GroqTranscriptionService(configManager) }
 
     override fun onCreate() {
@@ -41,7 +75,8 @@ class YapApp : Application(), ImageLoaderFactory {
             .setLocalCacheSettings(PersistentCacheSettings.newBuilder().build())
             .build()
 
-        FirebaseFirestore.getInstance().firestoreSettings = settings
+        firestore.firestoreSettings = settings
+
 
         val _triggerFetch = configManager
     }

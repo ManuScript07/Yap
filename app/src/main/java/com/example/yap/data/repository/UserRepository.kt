@@ -14,6 +14,8 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Source
 import com.google.firebase.messaging.FirebaseMessaging
+import io.github.jan.supabase.SupabaseClient
+import io.github.jan.supabase.annotations.SupabaseInternal
 import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.storage.Storage
 import io.github.jan.supabase.storage.storage
@@ -22,7 +24,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -39,23 +43,23 @@ import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import java.util.UUID
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.getValue
 
 class UserRepository(
-    private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance(),
+    private val firestore: FirebaseFirestore,
+    private val auth: FirebaseAuth,
     private val userPrefs: UserPreferences,
     private val configManager: RemoteConfigManager,
+    private val supabase: SupabaseClient
 ) {
 
-    private val supabase by lazy {
-        createSupabaseClient(
-            supabaseUrl = configManager.supabaseUrl,
-            supabaseKey = configManager.supabaseAnonKey
-        ) {
-            install(Storage)
-        }
-    }
+
     val usersCollection = firestore.collection("users")
+
+    fun getCurrentUser(): FirebaseUser? = auth.currentUser
+    val currentUserId: String?
+        get() = auth.currentUser?.uid
     private val profileCache = MutableStateFlow<Map<String, UserItem>>(emptyMap())
 
     private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -65,7 +69,6 @@ class UserRepository(
     // Кэш для потока профиля
 
     val currentUserFlow: Flow<FirebaseUser?> = callbackFlow {
-        val auth = FirebaseAuth.getInstance()
         val listener = FirebaseAuth.AuthStateListener { fbAuth ->
             // Используем trySend().isSuccess для надежности
             trySend(fbAuth.currentUser)
@@ -79,8 +82,7 @@ class UserRepository(
         }
     }.distinctUntilChanged()
 
-    val currentUserId: String?
-        get() = FirebaseAuth.getInstance().currentUser?.uid
+
 
 
     suspend fun updateFcmTokenIfNeeded() {
@@ -342,29 +344,61 @@ class UserRepository(
 
     suspend fun uploadAvatar(photoBytes: ByteArray, userId: String): Result<String> {
         return withContext(Dispatchers.IO) {
-            var lastException: Exception? = null
-            repeat(3) { attempt ->
-                try {
+            try {
+                // Общий таймаут на всю операцию (включая ретраи)
+                withTimeout(45000L) {
                     val fileName = "avatar_${UUID.randomUUID()}.jpg"
                     val fullPath = "$userId/$fileName"
-
-                    // Предполагается, что бакет называется "avatars" (замени на свой)
                     val bucketName = "avatars"
 
-                    supabase.storage.from(bucketName).upload(
-                        path = fullPath,
-                        data = photoBytes
-                    ) { upsert = true }
+                    Log.d("RegLog", "Starting upload to Supabase: $fullPath (${photoBytes.size} bytes)")
 
-                    val downloadUrl = "${configManager.supabaseUrl}/storage/v1/object/public/$bucketName/$fullPath"
-                    return@withContext Result.success(downloadUrl)
+                    var lastException: Exception? = null
 
-                } catch (e: Exception) {
-                    lastException = e
-                    kotlinx.coroutines.delay((attempt + 1) * 1000L)
+                    // Ретраи внутри таймаута
+                    for (attempt in 1..2) {
+                        try {
+                            Log.d("RegLog", "Upload attempt #$attempt...")
+
+                            supabase.storage.from(bucketName).upload(
+                                path = fullPath,
+                                data = photoBytes
+                            ) {
+                                upsert = true
+                            }
+
+                            // Если дошли сюда — успех
+                            val downloadUrl = "${configManager.supabaseUrl}/storage/v1/object/public/$bucketName/$fullPath"
+                            Log.d("RegLog", "Upload successful: $downloadUrl")
+                            return@withTimeout Result.success(downloadUrl)
+
+                        } catch (e: Exception) {
+                            // Если корутина была отменена (например, юзер закрыл экран),
+                            // нужно пробросить CancellationException дальше
+                            if (e is CancellationException) throw e
+
+                            lastException = e
+                            Log.w("RegLog", "Attempt #$attempt failed: ${e.message}")
+
+                            if (attempt < 2) {
+                                delay(1000L * attempt) // Прогрессирующая задержка (1с, потом ошибка)
+                            }
+                        }
+                    }
+
+                    // Если циклы кончились и не вышли через return
+                    Result.failure(lastException ?: Exception("Unknown upload error"))
                 }
+            } catch (e: TimeoutCancellationException) {
+                Log.e("RegLog", "Upload timed out after 45s")
+                Result.failure(Exception("Сервер долго не отвечает. Проверьте соединение или VPN."))
+            } catch (e: CancellationException) {
+                // Важно: не перехватывать отмену корутины как ошибку результата
+                throw e
+            } catch (e: Exception) {
+                Log.e("RegLog", "Fatal upload error: ${e.javaClass.simpleName} - ${e.message}")
+                Result.failure(e)
             }
-            Result.failure(lastException ?: Exception("Upload failed"))
         }
     }
 
@@ -458,7 +492,7 @@ class UserRepository(
             try {
                 withTimeout(15000L) {
                     val credential = GoogleAuthProvider.getCredential(idToken, null)
-                    val result = FirebaseAuth.getInstance().signInWithCredential(credential).await()
+                    val result = auth.signInWithCredential(credential).await()
                     val user = result.user ?: return@withTimeout AuthResult.Error("User is null")
 
                     val doc = usersCollection.document(user.uid).get().await()

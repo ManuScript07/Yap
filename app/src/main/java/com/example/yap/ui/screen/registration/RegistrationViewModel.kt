@@ -2,14 +2,18 @@ package com.example.yap.ui.screen.registration
 
 import android.app.Application
 import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.yap.ui.main.YapApp
 import com.example.yap.util.extension.compressToByteArray
-import com.google.firebase.auth.FirebaseAuth
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 
 class RegistrationViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -31,64 +35,70 @@ class RegistrationViewModel(application: Application) : AndroidViewModel(applica
             _registrationState.value = RegistrationState.Loading
 
             try {
-                val currentUser = FirebaseAuth.getInstance().currentUser
-                if (currentUser == null) {
-                    _registrationState.value = RegistrationState.Error("Пользователь не найден")
-                    return@launch
-                }
+                // 1. Уходим с главного потока сразу для всех тяжелых операций
+                val result = withContext(Dispatchers.IO) {
+                    val currentUser = repository.getCurrentUser()
+                        ?: return@withContext Result.failure(Exception("Пользователь не найден"))
 
-                val userId = currentUser.uid
-                val email = currentUser.email
+                    val userId = currentUser.uid
 
-                var avatarUrl: String? = null
+                    // 2. Запускаем загрузку фото и генерацию кода ПАРАЛЛЕЛЬНО (если это возможно)
+                    // Но так как код нужен для регистрации, оставим его здесь
 
-                // 1. Сжимаем и загружаем фото, если оно есть
-                if (photoUri != null) {
-                    val context = getApplication<Application>().applicationContext
-                    val photoBytes = photoUri.compressToByteArray(context)
+                    var avatarUrl: String? = null
+                    if (photoUri != null) {
+                        val context = getApplication<Application>().applicationContext
+                        Log.d("RegLog", "Starting compression...")
+                        // Сжатие теперь в Dispatchers.IO — UI не зависнет
+                        val photoBytes = photoUri.compressToByteArray(context)
+                            ?: throw Exception("Ошибка обработки фото")
 
-                    if (photoBytes != null) {
+
+                        Log.d("RegLog", "Complete compression...")
+                        Log.d("RegLog", "Size to upload: ${photoBytes.size}")
+                        Log.d("RegLog", "Starting avatar upload...")
                         val uploadResult = repository.uploadAvatar(photoBytes, userId)
-                        if (uploadResult.isSuccess) {
-                            avatarUrl = uploadResult.getOrNull()
-                        } else {
-                            // Если фото не загрузилось, можно либо прервать регу, либо продолжить без фото.
-                            // Для надежности прервем, чтобы юзер попробовал снова.
-                            _registrationState.value = RegistrationState.Error("Не удалось загрузить фото")
-                            return@launch
-                        }
+                        avatarUrl = uploadResult.getOrNull()
+                            ?: throw Exception("Не удалось загрузить фото")
+                        Log.d("RegLog", "Avatar uploaded: $avatarUrl")
                     }
+
+                    val userCode = repository.generateUniqueUserCode().getOrThrow()
+                    Log.d("RegLog", "Code generated: $userCode")
+
+                    val userData = mapOf(
+                        "name" to name,
+                        "username" to username,
+                        "userCode" to userCode,
+                        "dobTimestamp" to dob,
+                        "showOnlyDay" to showOnlyDay,
+                        "bio" to bio,
+                        "avatarUrl" to avatarUrl
+                    )
+
+                    Log.d("RegLog", "Transaction started...")
+
+                    // 3. Выполняем запись с таймаутом
+                    withTimeout(15000) { // 15 секунд на всё про всё
+                        repository.completeUserRegistration(userId, currentUser.email, userData)
+
+                    }
+
+
+
                 }
+                Log.d("RegLog", "Transaction Cpmplite")
 
-                val userCodeResult = repository.generateUniqueUserCode()
-                if (userCodeResult.isFailure) {
-                    _registrationState.value = RegistrationState.Error("Ошибка генерации кода пользователя")
-                    return@launch
-                }
-                val userCode = userCodeResult.getOrThrow()
-
-                // 2. Формируем данные профиля
-                val userData = mapOf(
-                    "name" to name,
-                    "username" to username,
-                    "userCode" to userCode,
-                    "dobTimestamp" to dob,
-                    "showOnlyDay" to showOnlyDay,
-                    "bio" to bio,
-                    "avatarUrl" to avatarUrl
-                )
-
-                // 3. Пишем в Firestore
-                val saveResult = repository.completeUserRegistration(userId, email, userData)
-
-                if (saveResult.isSuccess) {
+                if (result.isSuccess) {
                     _registrationState.value = RegistrationState.Success
                 } else {
-                    _registrationState.value = RegistrationState.Error(saveResult.exceptionOrNull()?.message ?: "Ошибка сохранения")
+                    _registrationState.value = RegistrationState.Error(result.exceptionOrNull()?.message ?: "Ошибка")
                 }
 
+            } catch (e: TimeoutCancellationException) {
+                _registrationState.value = RegistrationState.Error("Слишком долгое ожидание. Проверьте интернет.")
             } catch (e: Exception) {
-                _registrationState.value = RegistrationState.Error(e.localizedMessage ?: "Неизвестная ошибка")
+                _registrationState.value = RegistrationState.Error(e.localizedMessage ?: "Ошибка")
             }
         }
     }

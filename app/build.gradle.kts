@@ -63,6 +63,7 @@ dependencies {
     // Ktor Client (обязателен, так как Supabase-kt работает на нем)
     // Версия Ktor должна быть 3.0.0 или выше для Supabase 3.x
     implementation("io.ktor:ktor-client-android:3.0.0")
+    implementation("io.ktor:ktor-client-okhttp:3.0.0") // Версия должна совпадать с твоим Ktor
 
     implementation("androidx.credentials:credentials:1.2.2")
     // Дополнение для работы с Google ID
