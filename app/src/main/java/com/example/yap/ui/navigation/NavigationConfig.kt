@@ -21,6 +21,7 @@ object AppDestinations {
 
     const val NOTIFICATIONS = "home/notifications"
     const val USER_PROFILE_ROUTE = "user_profile/{userId}"
+    const val SEARCH_FRIENDS = "friends/search"
 
     fun createProfileRoute(userId: String): String {
         return "user_profile/$userId"

@@ -52,6 +52,7 @@ import com.example.yap.ui.screen.ChatsScreen
 import com.example.yap.ui.screen.friends.FriendsScreen
 import com.example.yap.ui.screen.MapScreen
 import com.example.yap.ui.screen.ProfileScreen
+import com.example.yap.ui.screen.addUser.SearchFriendsScreen
 import com.example.yap.ui.screen.home.HomeScreen
 import com.example.yap.ui.screen.home.HomeViewModel
 import com.example.yap.ui.screen.notification.NotificationsScreen
@@ -289,8 +290,30 @@ fun NavigationApp(splashViewModel: SplashViewModel = viewModel()) {
                                         )
                                     },
                                     homeViewModel = sharedViewModel,
+                                    onNavigateToAddFriend = {
+                                        safeNavigate(
+                                            controller = navControllers[screen],
+                                            route = AppDestinations.SEARCH_FRIENDS,
+                                            lockState = navLockTime
+                                        )
+                                    },
                                 )
                             }
+
+                            composable(AppDestinations.SEARCH_FRIENDS) {
+                                SearchFriendsScreen(
+                                    onBack = { safePopBackStack(navControllers[screen]) },
+                                    onNavigateToProfile = { userId ->
+                                        safeNavigate(
+                                            controller = navControllers[screen],
+                                            route = AppDestinations.createProfileRoute(userId),
+                                            lockState = navLockTime
+                                        )
+                                    }
+                                )
+                            }
+
+
                             userProfileComposable(navControllers[screen])
                         }
 

@@ -57,7 +57,6 @@ fun FriendActionsPopup(
     val baseScale = LocalBaseScale.current
     val density = LocalDensity.current
 
-    // Оставляем тот же офсет, чтобы попап выплывал со стороны иконки
     val offsetX = remember(density, baseScale) {
         with(density) { ((-110).dp * baseScale).toPx().toInt() }
     }
@@ -72,7 +71,6 @@ fun FriendActionsPopup(
             offset = IntOffset(x = offsetX, y = 0),
             properties = PopupProperties(focusable = true)
         ) {
-            // Увеличиваем высоту до 112dp (56 * 2), так как теперь две строки
             Box(
                 modifier = Modifier.size(
                     width = 248.dp * baseScale,
@@ -89,7 +87,7 @@ fun FriendActionsPopup(
                 ) {
                     Surface(
                         shape = RoundedCornerShape(18.dp * baseScale),
-                        color = LocalAdditionColors.current.popupColor,
+                        color = LocalAdditionColors.current.searchSurfaceColor,
                         modifier = Modifier.fillMaxSize()
                     ) {
                         Column(modifier = Modifier.fillMaxSize()) {

@@ -71,7 +71,10 @@ val LightAdditionColors = AdditionalColors(
     borderFieldColor = Color(0xFF1E2940),
     fieldBackColor = Color(0xFFEFF1F8),
     searchTextColor = Color(0xFF49454F),
-    searchSurfaceColor = Color(0xFFDFDFF7)
+    searchSurfaceColor = Color(0xFFDFDFF7),
+    surfaceDialogColor = Color(0xFFF8F9FB),
+    crossColor = Color(0xFF646464),
+    checkBackgroundColor = Color(0xFF5555A2)
 )
 
 val LocalAdditionColors = staticCompositionLocalOf {

@@ -37,5 +37,8 @@ data class AdditionalColors(
     val fieldBackColor: Color,
     val purpleButtonColor: Color,
     val searchTextColor: Color,
-    val searchSurfaceColor: Color
+    val searchSurfaceColor: Color,
+    val surfaceDialogColor: Color,
+    val crossColor: Color,
+    val checkBackgroundColor: Color
 )

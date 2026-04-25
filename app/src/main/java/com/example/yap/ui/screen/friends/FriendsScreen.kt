@@ -4,6 +4,7 @@ import android.content.Intent
 import android.widget.Toast
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -83,6 +84,7 @@ fun FriendsScreen(
     viewModel: FriendsViewModel = viewModel(),
     homeViewModel: HomeViewModel,
     onNavigateToProfile: (String) -> Unit,
+    onNavigateToAddFriend: () -> Unit,
 ) {
     SystemBarsIconsColor(true)
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -98,6 +100,10 @@ fun FriendsScreen(
     val guardedNavigateToProfile = rememberLambda<String> { userId ->
         onNavigateToProfile(userId)
     }
+    val guardedNavigateToAddFriends = rememberLambda<Unit> {
+        onNavigateToAddFriend()
+    }
+
 
     val onMuteFriend = remember(viewModel) { { id: String -> viewModel.toggleMute(id) } }
 
@@ -183,7 +189,9 @@ fun FriendsScreen(
                 )
 
                 Card(
-                    modifier = Modifier.size(65.dp * baseScale),
+                    modifier = Modifier
+                        .size(65.dp * baseScale)
+                        .clickable { guardedNavigateToAddFriends(Unit) },
                     shape = RoundedCornerShape(12.dp * baseScale),
                     colors = CardDefaults.cardColors(containerColor = LocalAdditionColors.current.purpleButtonColor),
                 ) {

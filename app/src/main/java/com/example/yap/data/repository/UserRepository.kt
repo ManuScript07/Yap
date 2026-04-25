@@ -65,6 +65,8 @@ class UserRepository(
     private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private val fetchMutex = Mutex()
+    private val invitesCollection = firestore.collection("user_codes")
+    private val inviteCodeCache = mutableMapOf<String, String?>()
 
     // Кэш для потока профиля
 
@@ -218,6 +220,45 @@ class UserRepository(
         // 6. Возвращаем результат
         return uniqueIds.mapNotNull { profileCache.value[it] }
     }
+
+    suspend fun findUserIdByInviteCode(code: String): String? {
+        val sanitizedCode = code.lowercase().trim()
+        val tag = "UserRepository_Invite"
+
+        // 1. Проверка RAM кэша (используем containsKey, так как значение может быть null)
+        if (inviteCodeCache.containsKey(sanitizedCode)) {
+            val cachedId = inviteCodeCache[sanitizedCode]
+            Log.d(tag, "🚀 RAM Hit: Код $sanitizedCode уже проверялся. Результат: ${cachedId ?: "НЕ НАЙДЕН"}")
+            return cachedId
+        }
+
+        return try {
+            Log.d(tag, "🌐 Network/Disk: Запрашиваем Firestore для кода: $sanitizedCode")
+
+            // Получаем документ (Snapshot возвращается даже если документа нет)
+            val snapshot = invitesCollection.document(sanitizedCode).get().await()
+
+            // Если документа нет, getString вернет null
+            val ownerId = snapshot.getString("ownerId")
+
+            // 2. Сохраняем результат в кэш (включая null, если код не найден)
+            inviteCodeCache[sanitizedCode] = ownerId
+
+            if (ownerId != null) {
+                Log.d(tag, "✅ Успешно: Код $sanitizedCode принадлежит $ownerId")
+            } else {
+                Log.w(tag, "⚠️ Код $sanitizedCode не существует (Negative Cache сохранен)")
+            }
+
+            ownerId
+        } catch (e: Exception) {
+            // ВАЖНО: В случае ошибки сети (Exception) мы НЕ записываем результат в кэш,
+            // чтобы пользователь мог попробовать снова, когда связь восстановится.
+            Log.e(tag, "❌ Ошибка сети при поиске кода $sanitizedCode: ${e.message}")
+            null
+        }
+    }
+
 
 
     // Выносим маппинг, чтобы не дублировать логику
