@@ -1,10 +1,6 @@
 package com.example.yap.ui.screen.notification
 
 
-import android.annotation.SuppressLint
-import android.content.Context
-import android.location.Location
-import android.util.Log
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.LinearEasing
@@ -86,10 +82,11 @@ import com.example.yap.ui.theme.LocalAdditionColors
 import com.example.yap.ui.theme.LocalBaseScale
 import com.example.yap.util.compose.SystemBarsIconsColor
 import com.example.yap.util.compose.rememberLambda
+import com.example.yap.util.extension.SystemStatusPill
 import com.example.yap.util.extension.shimmerEffect
+import com.example.yap.util.fetchLocationAndSendDirectYap
 import com.example.yap.util.formatTime
 import com.example.yap.util.openMap
-import com.google.android.gms.location.LocationServices
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
@@ -266,327 +263,230 @@ fun NotificationsScreen(
 }
 
 
-@SuppressLint("MissingPermission")
-fun fetchLocationAndSendDirectYap(
-    context: Context,
-    isLocationEnabled: Boolean,
-    onLocationReady: (Double?, Double?) -> Unit
-) {
-    if (!isLocationEnabled) {
-        Log.d("API1", "Тумблер ВЫКЛЮЧЕН. Координаты: null")
-        onLocationReady(null, null)
-        return
-    }
-
-    val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
-
-    fusedLocationClient.lastLocation.addOnSuccessListener { location: Location? ->
-        if (location != null) {
-            Log.d("API1", "Тумблер ВКЛЮЧЕН. Координаты: ${location.latitude}")
-            onLocationReady(location.latitude, location.longitude)
-        } else {
-            onLocationReady(null, null)
-        }
-    }.addOnFailureListener {
-        onLocationReady(null, null)
-    }
-}
-
-
-
-
-@Composable
-fun BoxScope.SystemStatusPill(
-    statusResource: Int?,
-    statusMessage: String?,
-    statusId: Long
-) {
-    // 1. Создаем "хранилище" для последнего валидного сообщения
-    // Оно НЕ обнуляется, когда statusResource становится null
-    var lastValidMessage by remember { mutableStateOf("") }
-    var lastValidIconIsSuccess by remember { mutableStateOf(true) }
-
-    val currentMessage = statusResource?.let { stringResource(it) } ?: statusMessage
-
-    // Обновляем хранилище только если пришло что-то реальное
-    LaunchedEffect(statusId) {
-        if (currentMessage != null) {
-            lastValidMessage = currentMessage
-            lastValidIconIsSuccess = (statusResource == R.string.yap_sent_success)
-        }
-    }
-
-    AnimatedVisibility(
-        visible = statusResource != null || statusMessage != null,
-        // Смещаем анимацию появления еще ниже, а улетание делаем симметричным
-        enter = slideInVertically(initialOffsetY = { -it * 3 }) + fadeIn(),
-        exit = slideOutVertically(targetOffsetY = { -it * 3 }) + fadeOut(),
-        modifier = Modifier
-            .align(Alignment.TopCenter)
-            .padding(top = 80.dp) // Чуть ниже от края
-            .zIndex(100f)
-    ) {
-        // Черный полупрозрачный фон
-        val pillColor = Color.Black.copy(alpha = 0.8f)
-
-        Surface(
-            shape = CircleShape,
-            color = pillColor,
-            shadowElevation = 4.dp,
-            modifier = Modifier.padding(horizontal = 24.dp)
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    painter = painterResource(
-                        if (lastValidIconIsSuccess) R.drawable.baseline_check_circle_24
-                        else R.drawable.baseline_cancel_24
-                    ),
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(20.dp)
-                )
-
-                Spacer(Modifier.width(10.dp))
-
-                Text(
-                    text = lastValidMessage,
-                    color = Color.White,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1
-                )
-            }
-        }
-    }
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
-        @Composable
-        fun VoiceDetailsSheet(
-            state: NotificationsUiState,
-            onDismiss: () -> Unit,
-            onTogglePlay: (String) -> Unit,
-            onRequestTranscription: (String) -> Unit,
-            onSeek: (Float) -> Unit,
-            currentProgressMs: Int = 0,
-            totalDurationMs: Int = 12000,
-            onPrepare: (String) -> Unit,
-        ) {
-            val sheetState = rememberModalBottomSheetState()
-            val notification = state.selectedNotification ?: return
+@Composable
+fun VoiceDetailsSheet(
+    state: NotificationsUiState,
+    onDismiss: () -> Unit,
+    onTogglePlay: (String) -> Unit,
+    onRequestTranscription: (String) -> Unit,
+    onSeek: (Float) -> Unit,
+    currentProgressMs: Int = 0,
+    totalDurationMs: Int = 12000,
+    onPrepare: (String) -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState()
+    val notification = state.selectedNotification ?: return
 
-            val baseScale = LocalBaseScale.current
+    val baseScale = LocalBaseScale.current
 
-            var isDragging by remember { mutableStateOf(false) }
+    var isDragging by remember { mutableStateOf(false) }
 
-            var localSliderValue by remember { mutableFloatStateOf(0f) }
+    var localSliderValue by remember { mutableFloatStateOf(0f) }
 
-            val targetProgress = if (totalDurationMs > 0) currentProgressMs.toFloat() / totalDurationMs else 0f
+    val targetProgress = if (totalDurationMs > 0) currentProgressMs.toFloat() / totalDurationMs else 0f
 
-            val animatedProgress by animateFloatAsState(
-                targetValue = if (isDragging) localSliderValue else targetProgress,
-                animationSpec = if (isDragging) snap() else tween(200, easing = LinearEasing),
-                label = "SliderSmooth"
+    val animatedProgress by animateFloatAsState(
+        targetValue = if (isDragging) localSliderValue else targetProgress,
+        animationSpec = if (isDragging) snap() else tween(200, easing = LinearEasing),
+        label = "SliderSmooth"
+    )
+
+    LaunchedEffect(targetProgress) {
+        if (!isDragging) {
+            localSliderValue = targetProgress
+        }
+    }
+
+    LaunchedEffect(notification.audioUrl) {
+        notification.audioUrl?.let { url ->
+            onPrepare(url)
+        }
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        dragHandle = { BottomSheetDefaults.DragHandle() },
+        containerColor = LocalAdditionColors.current.purpleBackColor
+    ) {
+        Column(
+    modifier = Modifier
+        .fillMaxWidth()
+        .padding(horizontal = 30.dp * baseScale)
+        .navigationBarsPadding(),
+    horizontalAlignment = Alignment.Start
+) {
+    when {
+        notification.messageText != null -> {
+            Text(
+                text = stringResource(R.string.transcription),
+                fontSize = 24.sp * baseScale,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface
             )
 
-            LaunchedEffect(targetProgress) {
-                if (!isDragging) {
-                    localSliderValue = targetProgress
-                }
-            }
+            Spacer(Modifier.height(20.dp * baseScale))
 
-            LaunchedEffect(notification.audioUrl) {
-                notification.audioUrl?.let { url ->
-                    onPrepare(url)
-                }
-            }
-
-            ModalBottomSheet(
-                onDismissRequest = onDismiss,
-                sheetState = sheetState,
-                dragHandle = { BottomSheetDefaults.DragHandle() },
-                containerColor = LocalAdditionColors.current.purpleBackColor
-            ) {
-                Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 30.dp * baseScale)
-                .navigationBarsPadding(),
-            horizontalAlignment = Alignment.Start
-        ) {
-            when {
-                notification.messageText != null -> {
-                    Text(
-                        text = stringResource(R.string.transcription),
-                        fontSize = 24.sp * baseScale,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-
-                    Spacer(Modifier.height(20.dp * baseScale))
-
-                    Text(
-                        text = notification.messageText.trim(),
-                        fontSize = 18.sp * baseScale,
-                        color = LocalAdditionColors.current.secondTextColor,
-                        lineHeight = 20.sp * baseScale,
-                        textAlign = TextAlign.Start
-                    )
-                }
-                notification.isTranscribing -> {
-                    Text(
-                        text = stringResource(R.string.transcription),
-                        fontSize = 24.sp * baseScale,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(Modifier.height(24.dp * baseScale))
-                    TranscriptionShimmer(baseScale)
-                }
-                else -> {
-                    val interactionSource = remember { MutableInteractionSource() }
-                    Text(
-                        text = stringResource(R.string.to_decipher),
-                        fontSize = 24.sp * baseScale,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(12.dp * baseScale))
-                            .background(LocalAdditionColors.current.purpleLightColor.copy(alpha = 0.8f))
-                            .padding(horizontal = 8.dp * baseScale, vertical = 8.dp * baseScale)
-                            .clickable(
-                                interactionSource = interactionSource,
-                                indication = null
-                            ) {
-                                notification.audioUrl?.let { onRequestTranscription(it) }
-                            }
-                    )
-                }
-            }
-
-
+            Text(
+                text = notification.messageText.trim(),
+                fontSize = 18.sp * baseScale,
+                color = LocalAdditionColors.current.secondTextColor,
+                lineHeight = 20.sp * baseScale,
+                textAlign = TextAlign.Start
+            )
+        }
+        notification.isTranscribing -> {
+            Text(
+                text = stringResource(R.string.transcription),
+                fontSize = 24.sp * baseScale,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
             Spacer(Modifier.height(24.dp * baseScale))
-
-            // ПЛЕЕР
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
+            TranscriptionShimmer(baseScale)
+        }
+        else -> {
+            val interactionSource = remember { MutableInteractionSource() }
+            Text(
+                text = stringResource(R.string.to_decipher),
+                fontSize = 24.sp * baseScale,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(72.dp * baseScale) // Высота по самому высокому элементу (Play)
-            ) {
-                // 1. Анимация размеров (Play — высокая, Pause — квадратная)
-                val buttonWidth by animateDpAsState(if (state.isPlaying) 54.dp else 48.dp, label = "w")
-                val buttonCornerRadius by animateDpAsState(if (state.isPlaying) 8.dp else 24.dp, label = "r")
+                    .clip(RoundedCornerShape(12.dp * baseScale))
+                    .background(LocalAdditionColors.current.purpleLightColor.copy(alpha = 0.8f))
+                    .padding(horizontal = 8.dp * baseScale, vertical = 8.dp * baseScale)
+                    .clickable(
+                        interactionSource = interactionSource,
+                        indication = null
+                    ) {
+                        notification.audioUrl?.let { onRequestTranscription(it) }
+                    }
+            )
+        }
+    }
 
-                val buttonColor by animateColorAsState(
-                    targetValue = if (state.isPlaying)
-                        LocalAdditionColors.current.purpleLightColor
-                    else
-                        LocalAdditionColors.current.purpleSurfaceColor
+
+    Spacer(Modifier.height(24.dp * baseScale))
+
+    // ПЛЕЕР
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(72.dp * baseScale) // Высота по самому высокому элементу (Play)
+    ) {
+        // 1. Анимация размеров (Play — высокая, Pause — квадратная)
+        val buttonWidth by animateDpAsState(if (state.isPlaying) 54.dp else 48.dp, label = "w")
+        val buttonCornerRadius by animateDpAsState(if (state.isPlaying) 8.dp else 24.dp, label = "r")
+
+        val buttonColor by animateColorAsState(
+            targetValue = if (state.isPlaying)
+                LocalAdditionColors.current.purpleLightColor
+            else
+                LocalAdditionColors.current.purpleSurfaceColor
+        )
+
+        val contentColor by animateColorAsState(
+            targetValue = if (state.isPlaying)
+                LocalAdditionColors.current.purpleSurfaceColor
+            else
+                Color.White
+        )
+
+        // Кнопка Play/Pause
+        Box(
+            modifier = Modifier
+                .width(buttonWidth * baseScale)
+                .height(54.dp * baseScale)
+                .clip(RoundedCornerShape(buttonCornerRadius * baseScale))
+                .background(buttonColor)
+                .clickable { notification.audioUrl?.let { onTogglePlay(it) } },
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                painter = painterResource(
+                    if (state.isPlaying) R.drawable.baseline_pause_32 else R.drawable.baseline_play_arrow_32
+                ),
+                contentDescription = null,
+                tint = contentColor,
+                modifier = Modifier.size(32.dp * baseScale)
+            )
+        }
+
+        Spacer(Modifier.width(10.dp * baseScale))
+
+        Slider(
+            value = if (isDragging) localSliderValue else animatedProgress,
+            onValueChange = {
+                isDragging = true
+                localSliderValue = it
+            },
+            onValueChangeFinished = {
+                isDragging = false
+                onSeek(localSliderValue * totalDurationMs)
+            },
+            modifier = Modifier
+                .weight(1f)
+                .height(54.dp * baseScale),
+            // Кастомный ползунок (вертикальная палочка)
+            thumb = {
+                Box(
+                    Modifier
+                        .width(4.dp * baseScale)
+                        .height(56.dp * baseScale)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(LocalAdditionColors.current.purpleSurfaceColor)
                 )
+            },
+            // Кастомный трек (высокая плашка)
+            track = {
+                val currentFraction = if (isDragging) localSliderValue else animatedProgress
 
-                val contentColor by animateColorAsState(
-                    targetValue = if (state.isPlaying)
-                        LocalAdditionColors.current.purpleSurfaceColor
-                    else
-                        Color.White
-                )
-
-                // Кнопка Play/Pause
                 Box(
                     modifier = Modifier
-                        .width(buttonWidth * baseScale)
+                        .fillMaxWidth()
                         .height(54.dp * baseScale)
-                        .clip(RoundedCornerShape(buttonCornerRadius * baseScale))
-                        .background(buttonColor)
-                        .clickable { notification.audioUrl?.let { onTogglePlay(it) } },
-                    contentAlignment = Alignment.Center
+                        .clip(RoundedCornerShape(14.dp * baseScale))
+                        .background(LocalAdditionColors.current.purpleLightColor.copy(alpha = 0.5f))
                 ) {
-                    Icon(
-                        painter = painterResource(
-                            if (state.isPlaying) R.drawable.baseline_pause_32 else R.drawable.baseline_play_arrow_32
-                        ),
-                        contentDescription = null,
-                        tint = contentColor,
-                        modifier = Modifier.size(32.dp * baseScale)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(currentFraction.coerceIn(0f, 1f))
+                            .fillMaxHeight()
+                            .background(LocalAdditionColors.current.purpleSurfaceColor)
                     )
                 }
-
-                Spacer(Modifier.width(10.dp * baseScale))
-
-                Slider(
-                    value = if (isDragging) localSliderValue else animatedProgress,
-                    onValueChange = {
-                        isDragging = true
-                        localSliderValue = it
-                    },
-                    onValueChangeFinished = {
-                        isDragging = false
-                        onSeek(localSliderValue * totalDurationMs)
-                    },
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(54.dp * baseScale),
-                    // Кастомный ползунок (вертикальная палочка)
-                    thumb = {
-                        Box(
-                            Modifier
-                                .width(4.dp * baseScale)
-                                .height(56.dp * baseScale)
-                                .clip(RoundedCornerShape(2.dp))
-                                .background(LocalAdditionColors.current.purpleSurfaceColor)
-                        )
-                    },
-                    // Кастомный трек (высокая плашка)
-                    track = {
-                        val currentFraction = if (isDragging) localSliderValue else animatedProgress
-
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(54.dp * baseScale)
-                                .clip(RoundedCornerShape(14.dp * baseScale))
-                                .background(LocalAdditionColors.current.purpleLightColor.copy(alpha = 0.5f))
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth(currentFraction.coerceIn(0f, 1f))
-                                    .fillMaxHeight()
-                                    .background(LocalAdditionColors.current.purpleSurfaceColor)
-                            )
-                        }
-                    }
-                )
-
-                Spacer(Modifier.width(10.dp * baseScale))
-
-                val displayTimeMs = if (isDragging) {
-                    (localSliderValue * totalDurationMs).toInt()
-                } else if (state.isPlaying || currentProgressMs > 0) {
-                    currentProgressMs
-                } else {
-                    totalDurationMs
-                }
-
-                Text(
-                    text = formatTime(displayTimeMs),
-                    fontSize = 15.sp * baseScale,
-                    fontWeight = FontWeight.Bold,
-                    color = LocalAdditionColors.current.purpleSurfaceColor,
-                    modifier = Modifier
-                        .height(54.dp * baseScale)
-                        .background(
-                            LocalAdditionColors.current.purpleLightColor,
-                            RoundedCornerShape(8.dp * baseScale)
-                        )
-                        .padding(horizontal = 12.dp * baseScale)
-                        .wrapContentHeight(Alignment.CenterVertically)
-                )
             }
-            Spacer(Modifier.height(32.dp * baseScale))
+        )
+
+        Spacer(Modifier.width(10.dp * baseScale))
+
+        val displayTimeMs = if (isDragging) {
+            (localSliderValue * totalDurationMs).toInt()
+        } else if (state.isPlaying || currentProgressMs > 0) {
+            currentProgressMs
+        } else {
+            totalDurationMs
+        }
+
+        Text(
+            text = formatTime(displayTimeMs),
+            fontSize = 15.sp * baseScale,
+            fontWeight = FontWeight.Bold,
+            color = LocalAdditionColors.current.purpleSurfaceColor,
+            modifier = Modifier
+                .height(54.dp * baseScale)
+                .background(
+                    LocalAdditionColors.current.purpleLightColor,
+                    RoundedCornerShape(8.dp * baseScale)
+                )
+                .padding(horizontal = 12.dp * baseScale)
+                .wrapContentHeight(Alignment.CenterVertically)
+        )
+    }
+        Spacer(Modifier.height(32.dp * baseScale))
         }
     }
 }

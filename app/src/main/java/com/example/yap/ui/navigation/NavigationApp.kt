@@ -49,7 +49,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.yap.ui.screen.ChatsScreen
-import com.example.yap.ui.screen.FriendsScreen
+import com.example.yap.ui.screen.friends.FriendsScreen
 import com.example.yap.ui.screen.MapScreen
 import com.example.yap.ui.screen.ProfileScreen
 import com.example.yap.ui.screen.home.HomeScreen
@@ -266,7 +266,9 @@ fun NavigationApp(splashViewModel: SplashViewModel = viewModel()) {
 
                         Screen.Chats -> {
                             composable(Screen.Chats.route) {
-                                ChatsScreen()
+                                ChatsScreen(
+
+                                )
                             }
                         }
 
@@ -278,8 +280,18 @@ fun NavigationApp(splashViewModel: SplashViewModel = viewModel()) {
 
                         Screen.Friends -> {
                             composable(Screen.Friends.route) {
-                                FriendsScreen()
+                                FriendsScreen(
+                                    onNavigateToProfile = { userId ->
+                                        safeNavigate(
+                                            controller = navControllers[screen],
+                                            route = AppDestinations.createProfileRoute(userId),
+                                            lockState = navLockTime
+                                        )
+                                    },
+                                    homeViewModel = sharedViewModel,
+                                )
                             }
+                            userProfileComposable(navControllers[screen])
                         }
 
                         Screen.Profile -> {

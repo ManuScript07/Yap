@@ -1,8 +1,7 @@
 package com.example.yap.ui.navigation
 
 import com.example.yap.R
-//    object HomeDetails : Screen("home/details")
-//    object HomeDeepDetails: Screen("home/details/deepDetails")
+
 
 sealed class Screen(val route: String,
                     val unselectedIcon: Int,

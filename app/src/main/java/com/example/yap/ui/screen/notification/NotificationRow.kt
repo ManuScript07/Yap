@@ -131,8 +131,8 @@ fun NotificationRow(
                 item = item,
                 baseScale = baseScale,
                 onLocationClick = memoizedLocationClick,
-                onYapClick = memoizedYapClick, // Теперь типы совпадают (String) -> Unit
-                onYapSend = memoizedYapSend,   // Теперь типы совпадают (String) -> Unit
+                onYapClick = memoizedYapClick,
+                onYapSend = memoizedYapSend,
                 onNavigateToProfile = memoizedNavigate,
                 onListenClick = memoizedListenClick
             )
@@ -160,8 +160,6 @@ private fun NotificationCardContent(
     } else {
         item.messageText ?: ""
     }
-
-    val context = LocalContext.current
 
     // 1. Создаем правильный запрос с жестким кэшированием
 
@@ -229,13 +227,6 @@ private fun NotificationCardContent(
                     )
                 }
 
-//                item.audioUrl?.let {
-//                    NotificationActionText(
-//                        text = stringResource(R.string.listen_voice),
-//                        baseScale = baseScale,
-//                        onClick = onListenClick
-//                    )
-//                }
 
                 if (item.hasLocation) {
                     NotificationActionText(
@@ -266,7 +257,6 @@ private fun NotificationCardContent(
                     user = item.user,
                     onYapClick = onYapClick,
                     onLongYapClick = onYapSend,
-//                    baseScale = baseScale
                 )
             }
         }

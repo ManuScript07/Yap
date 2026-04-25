@@ -224,6 +224,7 @@ class UserRepository(
             id = doc.id,
             name = doc.getString("name") ?: "Unknown",
             username = doc.getString("username") ?: "",
+            userCode = doc.getString("userCode") ?: "",
             avatarUrl = doc.getString("avatarUrl"), // Теперь берем ссылку из базы!
             bio = doc.getString("bio") ?: "",
             dobTimestamp = doc.getLong("dobTimestamp"),
@@ -232,7 +233,8 @@ class UserRepository(
             isYapActive = doc.getBoolean("isYapActive") ?: false,
             isMuted = doc.getBoolean("isMuted") ?: false,
             quickList = doc.get("quickList") as? List<String> ?: emptyList(),
-            mutedUsers = doc.get("mutedUsers") as? List<String> ?: emptyList()
+            mutedUsers = doc.get("mutedUsers") as? List<String> ?: emptyList(),
+            friends = doc.get("friends") as? List<String> ?: emptyList(),
         )
     }
 
@@ -263,6 +265,32 @@ class UserRepository(
             Log.e("UserRepository", "ОШИБКА МУТА для $targetUserId: ${e.message}", e)
         }
     }
+
+    suspend fun removeFriend(friendId: String) {
+        val uid = currentUserId ?: throw IllegalStateException("Пользователь не авторизован")
+
+        try {
+            val batch = firestore.batch()
+
+            val currentUserRef = usersCollection.document(uid)
+            val friendRef = usersCollection.document(friendId)
+
+            // 1. Удаляем друга у себя
+            batch.update(currentUserRef, "friends", FieldValue.arrayRemove(friendId))
+
+            // 2. Удаляем себя у друга
+            batch.update(friendRef, "friends", FieldValue.arrayRemove(uid))
+
+            // Выполняем обе операции одновременно
+            batch.commit().await()
+            Log.d("UserRepository", "Друг $friendId успешно удален у обоих пользователей")
+
+        } catch (e: Exception) {
+            Log.e("UserRepository", "Ошибка при удалении друга (Батч)", e)
+            throw e // Пробрасываем ошибку во ViewModel для отката UI
+        }
+    }
+
 
 
     // 1. Выносим поток в ленивое свойство (Property), чтобы он не пересоздавался при каждом вызове функции
@@ -341,32 +369,6 @@ class UserRepository(
     }
 
 
-    suspend fun signInAnonymously(): Boolean {
-        return try {
-            val result = FirebaseAuth.getInstance().signInAnonymously().await()
-            val uid = result.user?.uid
-
-            if (uid != null) {
-                // Проверяем, есть ли такой профиль в базе
-                val doc = usersCollection.document(uid).get().await()
-                if (!doc.exists()) {
-                    // Если нет — создаем начальные данные
-                    val initialData = mapOf(
-                        "name" to "User_${uid.take(4)}",
-                        "quickList" to emptyList<String>(),
-                        "mutedUsers" to emptyList<String>()
-                    )
-                    usersCollection.document(uid).set(initialData).await()
-                }
-                true
-            } else false
-        } catch (e: Exception) {
-            Log.e("UserRepository", "Anonymous auth failed", e)
-            false
-        }
-    }
-
-
 
     suspend fun completeUserRegistration(
         userId: String,
@@ -375,19 +377,76 @@ class UserRepository(
     ): Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
-                val docRef = usersCollection.document(userId)
+                // Берем userCode из данных, которые пришли из ViewModel
+                val userCode = userData["userCode"] as? String
+                    ?: return@withContext Result.failure(Exception("UserCode is missing"))
 
-                // Дополняем данные системными полями
-                val finalData = userData.toMutableMap().apply {
-                    put("email", email ?: "")
-                    put("quickList", emptyList<String>())
-                    put("mutedUsers", emptyList<String>())
-                    put("createdAt", FieldValue.serverTimestamp()) // Используем время сервера
-                }
+                val userDocRef = usersCollection.document(userId)
 
-                docRef.set(finalData).await()
+                // Используем firestore, который у тебя уже есть в конструкторе
+                val codeRegistryRef = firestore.collection("user_codes").document(userCode)
+
+                firestore.runTransaction { transaction ->
+                    // 1. Проверяем реестр кодов
+                    val codeSnapshot = transaction.get(codeRegistryRef)
+                    if (codeSnapshot.exists()) {
+                        throw Exception("Этот код уже занят. Попробуйте другой.")
+                    }
+
+                    // 2. Подготовка данных пользователя
+                    val finalUserData = userData.toMutableMap().apply {
+                        put("email", email ?: "")
+                        put("quickList", emptyList<String>())
+                        put("mutedUsers", emptyList<String>())
+                        put("friends", emptyList<String>())
+                        put("createdAt", FieldValue.serverTimestamp())
+                    }
+
+                    // 3. Атомарная запись в две коллекции
+                    transaction.set(userDocRef, finalUserData)
+                    transaction.set(codeRegistryRef, mapOf("ownerId" to userId))
+                }.await()
+
                 Result.success(Unit)
             } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+    }
+
+    suspend fun generateUniqueUserCode(): Result<String> {
+        return withContext(Dispatchers.IO) {
+            val chars = "abcdefghijklmnopqrstuvwxyz0123456789"
+            val codeRegistry = firestore.collection("user_codes")
+            var attempts = 0
+            val maxAttempts = 5
+
+            try {
+                while (attempts < maxAttempts) {
+                    // 1. Генерируем 8-значный код
+                    val candidateCode = (1..8)
+                        .map { chars.random() }
+                        .joinToString("")
+
+                    // 2. Проверяем наличие документа в реестре кодов по его ID
+                    // Это самая быстрая и дешевая операция (get document by ID)
+                    val docSnapshot = codeRegistry.document(candidateCode)
+                        .get(Source.SERVER) // Форсируем сервер, чтобы исключить коллизии
+                        .await()
+
+                    if (!docSnapshot.exists()) {
+                        // Код свободен
+                        Log.d("UserRepository", "Generated unique code: $candidateCode (attempts: ${attempts + 1})")
+                        return@withContext Result.success(candidateCode)
+                    }
+
+                    attempts++
+                    Log.w("UserRepository", "Collision detected for code: $candidateCode. Retrying...")
+                }
+
+                Result.failure(Exception("Превышено количество попыток генерации уникального кода"))
+            } catch (e: Exception) {
+                Log.e("UserRepository", "Error generating user code: ${e.message}")
                 Result.failure(e)
             }
         }
@@ -417,4 +476,6 @@ class UserRepository(
             }
         }
     }
+
+
 }

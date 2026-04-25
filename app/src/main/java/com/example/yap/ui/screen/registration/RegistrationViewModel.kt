@@ -60,10 +60,18 @@ class RegistrationViewModel(application: Application) : AndroidViewModel(applica
                     }
                 }
 
+                val userCodeResult = repository.generateUniqueUserCode()
+                if (userCodeResult.isFailure) {
+                    _registrationState.value = RegistrationState.Error("Ошибка генерации кода пользователя")
+                    return@launch
+                }
+                val userCode = userCodeResult.getOrThrow()
+
                 // 2. Формируем данные профиля
                 val userData = mapOf(
                     "name" to name,
                     "username" to username,
+                    "userCode" to userCode,
                     "dobTimestamp" to dob,
                     "showOnlyDay" to showOnlyDay,
                     "bio" to bio,
@@ -91,4 +99,5 @@ class RegistrationViewModel(application: Application) : AndroidViewModel(applica
         object Success : RegistrationState()
         data class Error(val message: String) : RegistrationState()
     }
+
 }

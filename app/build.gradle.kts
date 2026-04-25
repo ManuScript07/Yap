@@ -123,6 +123,7 @@ dependencies {
     implementation(libs.androidx.compose.foundation)
     implementation(libs.googleid)
     implementation(libs.androidx.compose.remote.creation.core)
+    implementation(libs.androidx.foundation)
 
 
     // Тесты и дебаг

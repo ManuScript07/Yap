@@ -45,6 +45,18 @@
     <string name="ok">OK</string>
     <string name="cancel">Отмена</string>
     <string name="complete">Завершить</string>
+    <string name="code_copied">Код скопирован</string>
+    <string name="share_text">Добавляй меня в Yap! Код: %1$s</string>
+    <string name="your_invite_code">Ваш код приглашения</string>
+    <string name="search_friends">Поиск друзей</string>
+    <string name="friends">Друзья</string>
+    <string name="turn_on_notif">Включить звук</string>
+    <string name="turn_off_notif">Выключить звук</string>
+    <string name="delete_friend">Удалить друга</string>
+    <string name="delete">Удалить</string>
+    <string name="delete_friend_title">Удалить друга</string>
+    <string name="delete_friend_desc">Вы уверены, что хотите удалить этого друга?</string>
+"
 
 
 

@@ -5,6 +5,7 @@ data class UserItem(
     val name: String = "",
     val username: String = "",
     val avatarUrl: String? = null,
+    val userCode: String = "",
     val bio: String = "",
     val dobTimestamp: Long? = null,
     val showOnlyDay: Boolean = false,
@@ -13,5 +14,6 @@ data class UserItem(
     val isMuted: Boolean = false,
     val createdAt: Long? = null,
     val quickList: List<String> = emptyList(),
-    val mutedUsers: List<String> = emptyList()
+    val mutedUsers: List<String> = emptyList(),
+    val friends: List<String> = emptyList(),
 )

@@ -193,7 +193,6 @@ class NotificationsViewModel(
 
     fun toggleUserQuickList(userFromNotification: UserItem, isCurrentlyInList: Boolean) {
         viewModelScope.launch {
-            // Если уже в списке — удаляем (false), если нет — добавляем (true)
             userRepository.toggleQuickList(userFromNotification.id, add = !isCurrentlyInList)
         }
     }

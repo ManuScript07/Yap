@@ -94,7 +94,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -118,7 +117,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.TextUnit
@@ -130,13 +128,10 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import coil.compose.AsyncImage
-import coil.request.CachePolicy
-import coil.request.ImageRequest
 import com.example.yap.R
 import com.example.yap.data.model.UserItem
+import com.example.yap.ui.components.BaseUserListItem
 import com.example.yap.ui.components.MainYapButton
-import com.example.yap.ui.components.YapActionButton
 import com.example.yap.ui.theme.LocalAdditionColors
 import com.example.yap.ui.theme.LocalBaseScale
 import com.example.yap.util.LocationHelper
@@ -463,76 +458,23 @@ fun UsersBottomSheet(
 @Composable
 fun UserListItem(
     user: UserItem,
-    onYapClick: (String) -> Unit,
     onUserClick: (String) -> Unit,
+    onYapClick: (String) -> Unit,
     onRemoveClick: (String) -> Unit
 ) {
-    var showMenu by rememberSaveable { mutableStateOf(false) }
-    val baseScale = LocalBaseScale.current
-
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = ripple(bounded = true), // Эффект от края до края
-                onClick = { onUserClick(user.id) }
-            )
-            .padding(horizontal = 16.dp, vertical = 6.dp * baseScale),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        AsyncImage(
-            model = user.avatarUrl ?: R.drawable.avatar_1,
-            contentDescription = "Avatar",
-            modifier = Modifier
-                .size(54.dp * baseScale)
-                .clip(CircleShape),
-            contentScale = ContentScale.Crop,
-            // Опционально: можно добавить плейсхолдер, пока грузится сеть
-            placeholder = painterResource(R.drawable.avatar_1),
-            error = painterResource(R.drawable.avatar_1),
-            fallback = painterResource(R.drawable.avatar_1)
-        )
-
-        Spacer(modifier = Modifier.width(14.dp*baseScale))
-
-        Text(
-            text = user.name,
-            modifier = Modifier.weight(1f),
-            fontSize = 18.sp * baseScale,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onPrimaryContainer,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-
-        YapActionButton(
-            user = user,
-            onYapClick = onYapClick
-        )
-        Spacer(modifier = Modifier.width(8.dp * baseScale))
-
-        Box(contentAlignment = Alignment.Center) {
-            IconButton(
-                onClick = { showMenu = true },
-                modifier = Modifier.size(32.dp * baseScale)
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.more_vert),
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.size(24.dp * baseScale)
-                )
-            }
-
+    BaseUserListItem(
+        user = user,
+        modifier = Modifier.padding(horizontal = 16.dp),
+        onUserClick = onUserClick,
+        onYapClick = onYapClick,
+        actionPopup = { isVisible, onDismiss ->
             DeleteUserPopup(
-                isVisible = showMenu,
-                onDismiss = { showMenu = false },
-                onDeleteClick = { onRemoveClick(user.id) },
+                isVisible = isVisible,
+                onDismiss = onDismiss,
+                onDeleteClick = { onRemoveClick(user.id) }
             )
         }
-    }
+    )
 }
 
 

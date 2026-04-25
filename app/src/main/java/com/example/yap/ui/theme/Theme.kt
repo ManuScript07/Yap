@@ -63,14 +63,15 @@ val LightAdditionColors = AdditionalColors(
     deleteColor = Color(0xFFE57373),
     purpleBackColor = Color(0xFFB9B9EB),
     purpleSurfaceColor = Color(0xFF6750A4),
+    purpleButtonColor = Color(0xFF46469A),
     purpleLightColor = Color(0xFFE8DEF8),
     purpleLightBackColor = Color(0xFFECE6F0),
     surfacePhotoColor = Color(0xFFD7DAEB),
     lightGreyColor = Color(0xFFCDCDCD),
     borderFieldColor = Color(0xFF1E2940),
-    fieldBackColor = Color(0xFFEFF1F8)
-
-
+    fieldBackColor = Color(0xFFEFF1F8),
+    searchTextColor = Color(0xFF49454F),
+    searchSurfaceColor = Color(0xFFDFDFF7)
 )
 
 val LocalAdditionColors = staticCompositionLocalOf {
