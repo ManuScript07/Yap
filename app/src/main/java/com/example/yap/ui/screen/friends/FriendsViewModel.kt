@@ -20,6 +20,7 @@ class FriendsViewModel(
 
     private val app = application as YapApp
     private val userRepository = app.userRepository
+    private val friendRequestRepository = app.friendsRequestRepository
 
     private val _state = MutableStateFlow(FriendsUiState())
     val state = _state.asStateFlow()
@@ -27,8 +28,11 @@ class FriendsViewModel(
 
     private var muteJobs = mutableMapOf<String, Job>()
 
+
+
     init {
         observeFriends()
+        observeIncomingRequests()
     }
 
     private fun observeFriends() {
@@ -188,6 +192,20 @@ class FriendsViewModel(
                     )
                 }
                 // Здесь можно бросить Event (SharedFlow) для показа Toast "Ошибка сети"
+            }
+        }
+    }
+
+    private fun observeIncomingRequests() {
+        val currentUserId = userRepository.currentUserId ?: return
+
+        viewModelScope.launch {
+            // Подписываемся на поток заявок из репозитория
+            friendRequestRepository.observeIncomingRequests(currentUserId)
+                .collect { requests ->
+                _state.update {
+                    it.copy(incomingRequests = requests.size)
+                }
             }
         }
     }

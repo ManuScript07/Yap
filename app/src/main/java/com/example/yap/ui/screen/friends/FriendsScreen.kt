@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -70,6 +71,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.yap.R
 import com.example.yap.data.model.UserItem
 import com.example.yap.ui.components.BaseUserListItem
+import com.example.yap.ui.components.NotificationBadge
 import com.example.yap.ui.screen.home.HomeViewModel
 import com.example.yap.ui.screen.home.YapType
 import com.example.yap.ui.theme.LocalAdditionColors
@@ -188,21 +190,32 @@ fun FriendsScreen(
                     }
                 )
 
-                Card(
-                    modifier = Modifier
-                        .size(65.dp * baseScale)
-                        .clickable { guardedNavigateToAddFriends(Unit) },
-                    shape = RoundedCornerShape(12.dp * baseScale),
-                    colors = CardDefaults.cardColors(containerColor = LocalAdditionColors.current.purpleButtonColor),
-                ) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Icon(
-                            painter = painterResource(R.drawable.outline_person_add_32),
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(32.dp * baseScale)
-                        )
+                Box(modifier = Modifier.size(65.dp * baseScale)) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clickable { guardedNavigateToAddFriends(Unit) },
+                        shape = RoundedCornerShape(12.dp * baseScale),
+                        colors = CardDefaults.cardColors(containerColor = LocalAdditionColors.current.purpleButtonColor),
+                    ) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.outline_person_add_32),
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(32.dp * baseScale)
+                            )
+                        }
                     }
+                    NotificationBadge(
+                        count = state.incomingRequests,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .offset(x = 4.dp, y = (-4).dp)
+                    )
                 }
             }
 

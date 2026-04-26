@@ -1,6 +1,7 @@
 package com.example.yap.ui.screen.friends
 
 import androidx.compose.runtime.Immutable
+import com.example.yap.data.model.FriendRequestEntity
 import com.example.yap.data.model.UserItem
 
 @Immutable
@@ -17,5 +18,6 @@ data class FriendsUiState(
     val remoteSearchResult: UserItem? = null, // Найденный по коду (еще не друг)
     val searchQuery: String = "",
     val isLoading: Boolean = false,
-    val isSearchingRemote: Boolean = false
+    val isSearchingRemote: Boolean = false,
+    val incomingRequests: Int = 0
 )
