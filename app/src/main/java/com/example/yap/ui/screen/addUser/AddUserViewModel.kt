@@ -118,17 +118,28 @@ class AddUserViewModel(application: Application) : AndroidViewModel(application)
 
             if (userItem != null) {
 
+                val targetId = userItem.id
+
                 // ЭКОНОМИЯ: Сначала проверяем самые "дешевые" условия (себя и кэш друзей)
                 val isSelf = userItem.id == userRepository.currentUserId
                 val isAlreadyFriend = currentUser?.friends?.contains(userItem.id) == true
+
+                val hasIncoming = _state.value.incomingRequests.any { it.senderId == targetId }
+
+                val isAlreadySentByMe = friendRequestRepository.sessionSentRequests.value.contains(targetId)
                 // 3. Определяем статус отношений
                 val status = when {
                     isSelf -> AddFriendStatus.ALREADY_FRIEND // Или отдельный статус CANT_ADD_SELF
                     isAlreadyFriend -> AddFriendStatus.ALREADY_FRIEND
+                    hasIncoming -> {
+                        // Особый случай: вместо "Добавить", можно показать "Принять" прямо в поиске
+                        AddFriendStatus.PENDING
+                    }
+                    isAlreadySentByMe -> AddFriendStatus.PENDING
                     else -> {
                         // Если это не мы и не наш друг, проверяем, нет ли уже висящей заявки
                         // Эта функция внутри использует RAM-кэш и легкий запрос в сеть
-                        val isPending = friendRequestRepository.checkIsRequestPending(userItem.id)
+                        val isPending = friendRequestRepository.checkIsRequestPending(targetId)
                         if (isPending) AddFriendStatus.PENDING else AddFriendStatus.CAN_ADD
                     }
                 }
@@ -155,6 +166,14 @@ class AddUserViewModel(application: Application) : AndroidViewModel(application)
         val currentResult = _state.value.remoteSearchResult ?: return
 
         if (currentResult.status != AddFriendStatus.CAN_ADD) return
+
+        val hasIncoming = _state.value.incomingRequests.any { it.senderId == receiverId }
+        if (hasIncoming) {
+            viewModelScope.launch {
+                _events.emit(AddUserEvent.ShowStatus(resId = R.string.error_generic, isSuccess = false))
+            }
+            return
+        }
 
         val senderName = currentUser?.name ?: "User"
         val senderAvatar = currentUser?.avatarUrl

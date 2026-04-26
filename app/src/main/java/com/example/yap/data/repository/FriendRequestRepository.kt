@@ -33,7 +33,7 @@ class FriendRequestRepository(
 ) {
     private val requestsCollection = firestore.collection("friend_requests")
     private val usersCollection = firestore.collection("users")
-    private val sessionSentRequests = MutableStateFlow<Set<String>>(emptySet())
+    val sessionSentRequests = MutableStateFlow<Set<String>>(emptySet())
 
 
     private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -93,6 +93,16 @@ class FriendRequestRepository(
         }
 
         return try {
+
+            if (checkIsRequestPending(receiverId)) return Result.failure(Exception("already_sent"))
+
+            val cross = requestsCollection
+                .whereEqualTo("senderId", receiverId)
+                .whereEqualTo("receiverId", currentUserId)
+                .whereEqualTo("status", "pending").limit(1).get().await()
+
+            if (!cross.isEmpty) return Result.failure(Exception("cross_request"))
+
             val documentRef = requestsCollection.document()
             val request = FriendRequestEntity(
                 id = documentRef.id,
