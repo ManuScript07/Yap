@@ -6,6 +6,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import com.google.gson.Gson
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -18,10 +19,17 @@ import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.update
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 
 class FriendRequestRepository(
     private val firestore: FirebaseFirestore,
-    private val auth: FirebaseAuth
+    private val auth: FirebaseAuth,
+    private val client: OkHttpClient,
+    private val gson: Gson
 ) {
     private val requestsCollection = firestore.collection("friend_requests")
     private val usersCollection = firestore.collection("users")
@@ -29,7 +37,10 @@ class FriendRequestRepository(
 
 
     private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+
     private val incomingRequestsCache = ConcurrentHashMap<String, Flow<List<FriendRequestEntity>>>()
+
 
     /**
      * Проверяет, отправляли ли мы уже заявку этому пользователю.
@@ -99,6 +110,8 @@ class FriendRequestRepository(
             // Сразу добавляем в кэш
             sessionSentRequests.update { it + receiverId }
 
+            sendFriendRequestPush(receiverId, senderName)
+
             Result.success(documentRef.id)
         } catch (e: Exception) {
             Log.e("FriendRequestRepo", "Ошибка отправки заявки: ${e.message}")
@@ -106,7 +119,50 @@ class FriendRequestRepository(
         }
     }
 
+    private suspend fun sendFriendRequestPush(receiverId: String, senderName: String) {
+        withContext(Dispatchers.IO) {
+            try {
+                val receiverDoc = usersCollection.document(receiverId).get().await()
+
+                // ВАЖНО: Мы ИГНОРИРУЕМ проверку mutedUsers. Заявки доходят всегда.
+
+                val fcmToken = receiverDoc.getString("fcmToken")
+                if (fcmToken.isNullOrEmpty()) {
+                    Log.e("PUSH_REQUEST", "У пользователя $receiverId нет токена. Пуш заявки не отправлен.")
+                    return@withContext
+                }
+
+                // Формируем payload с указанием ТИПА уведомления
+                val jsonMap = mapOf(
+                    "fcmToken" to fcmToken,
+                    "senderName" to senderName,
+                    "type" to "FRIEND_REQUEST" // Сервер поймет, что это заявка
+                )
+                // Предполагается, что gson и client (OkHttpClient) доступны в этом классе,
+                // так же как они были доступны в ChatRepo
+                val jsonString = gson.toJson(jsonMap)
+
+                val requestBody = jsonString.toRequestBody("application/json; charset=utf-8".toMediaType())
+                val request = Request.Builder()
+                    .url("https://yap-server.onrender.com/send-notification")
+                    .post(requestBody)
+                    .build()
+
+                client.newCall(request).execute().use { response ->
+                    if (response.isSuccessful) {
+                        Log.d("PUSH_REQUEST", "Пуш-уведомление о заявке успешно улетело на сервер.")
+                    } else {
+                        Log.e("PUSH_REQUEST", "Ошибка Render: ${response.code} ${response.message}")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("PUSH_REQUEST", "Сбой при отправке пуша заявки", e)
+            }
+        }
+    }
+
     private fun createIncomingRequestsFlow(currentUserId: String): Flow<List<FriendRequestEntity>> = callbackFlow {
+        Log.i("FIREBASE_NET", "🛰️ СОЗДАНИЕ реального SnapshotListener для заявок (UID: $currentUserId)")
         val query = requestsCollection
             .whereEqualTo("receiverId", currentUserId)
             .whereEqualTo("status", "pending")
@@ -114,23 +170,30 @@ class FriendRequestRepository(
 
         val subscription = query.addSnapshotListener { snapshot, error ->
             if (error != null) {
+                Log.e("FIREBASE_NET", "❌ Ошибка Firestore в заявках", error)
                 Log.e("FriendRequestRepo", "Ошибка подписки. Проверь композитный индекс в Firebase!", error)
                 return@addSnapshotListener
             }
 
             snapshot?.let { querySnapshot ->
+                val isFromCache = querySnapshot.metadata.hasPendingWrites() || querySnapshot.metadata.isFromCache
                 val requests = querySnapshot.documents.mapNotNull { doc ->
                     doc.toObject(FriendRequestEntity::class.java)?.copy(id = doc.id)
                 }
+                Log.d("FIREBASE_NET", "📥 Пришли данные заявок. Кол-во: ${requests.size} (Из кэша: $isFromCache)")
                 trySend(requests)
             }
         }
 
-        awaitClose { subscription.remove() }
+        awaitClose {
+            Log.w("FIREBASE_NET", "🔌 ЗАКРЫТИЕ SnapshotListener для заявок (UID: $currentUserId)")
+            subscription.remove()
+        }
     }
 
     fun observeIncomingRequests(currentUserId: String): Flow<List<FriendRequestEntity>> {
         return incomingRequestsCache.getOrPut(currentUserId) {
+            Log.d("REQS_DEBUG", "Создание нового SharedFlow в кэше репозитория для $currentUserId")
             createIncomingRequestsFlow(currentUserId)
                 .shareIn(
                     scope = repositoryScope,

@@ -193,12 +193,24 @@ class AddUserViewModel(application: Application) : AndroidViewModel(application)
 
 
     private fun observeIncomingRequests() {
-        val currentUserId = auth.currentUser?.uid ?: return
+        val currentUserId = auth.currentUser?.uid ?: run {
+            Log.e("REQS_DEBUG", "observeIncomingRequests: Пользователь не авторизован")
+            return
+        }
+
+        if (observeJob?.isActive == true) {
+            Log.d("REQS_DEBUG", "Перезапуск подписки: отмена предыдущего observeJob")
+        }
 
         observeJob?.cancel() // Отменяем предыдущую подписку, если она была
         observeJob = viewModelScope.launch {
+            Log.d("REQS_DEBUG", "Запуск новой подписки на входящие заявки для $currentUserId")
             friendRequestRepository.observeIncomingRequests(currentUserId).collect { requests ->
+                Log.d("REQS_DEBUG", "Получены входящие заявки: ${requests.size} шт.")
                 _state.update { it.copy(incomingRequests = requests) }
+                if (requests.isNotEmpty()) {
+                    Log.v("REQS_DEBUG", "ID заявок: ${requests.map { it.id }}")
+                }
             }
         }
     }

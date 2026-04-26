@@ -16,10 +16,21 @@ import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import com.example.yap.data.repository.FriendRequestRepository
 import com.google.firebase.auth.FirebaseAuth
+import com.google.gson.Gson
 import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.storage.Storage
+import okhttp3.OkHttpClient
 
 class YapApp : Application(), ImageLoaderFactory {
+
+    val gson by lazy { Gson() }
+    val okHttpClient by lazy {
+        OkHttpClient.Builder()
+            .connectTimeout(20, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(20, java.util.concurrent.TimeUnit.SECONDS)
+            .writeTimeout(20, java.util.concurrent.TimeUnit.SECONDS)
+            .build()
+    }
 
     val configManager by lazy { RemoteConfigManager() }
 
@@ -35,13 +46,8 @@ class YapApp : Application(), ImageLoaderFactory {
             supabaseKey = configManager.supabaseAnonKey
         ) {
             install(Storage)
-            // Применяем настройки OkHttp ко всем запросам приложения
             httpEngine = io.ktor.client.engine.okhttp.OkHttp.create {
-                config {
-                    connectTimeout(20, java.util.concurrent.TimeUnit.SECONDS)
-                    readTimeout(20, java.util.concurrent.TimeUnit.SECONDS)
-                    writeTimeout(20, java.util.concurrent.TimeUnit.SECONDS)
-                }
+                preconfigured = okHttpClient
             }
         }
     }
@@ -61,14 +67,18 @@ class YapApp : Application(), ImageLoaderFactory {
         ChatRepository(
             firestore = firestore,
             configManager = configManager,
-            supabase = supabaseClient
+            supabase = supabaseClient,
+            client = okHttpClient,
+            gson = gson
         )
     }
 
     val friendsRequestRepository by lazy {
         FriendRequestRepository(
             firestore = firestore,
-            auth = firebaseAuth
+            auth = firebaseAuth,
+            client = okHttpClient,
+            gson = gson
         )
     }
     val transcriptionService by lazy{ GroqTranscriptionService(configManager) }

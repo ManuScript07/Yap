@@ -2,6 +2,7 @@ package com.example.yap.ui.navigation
 
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -59,6 +60,7 @@ import com.example.yap.ui.screen.notification.NotificationsScreen
 import com.example.yap.ui.screen.splash.SplashViewModel
 import com.example.yap.ui.screen.user_profile.UserProfileScreen
 import com.example.yap.ui.theme.LocalAdditionColors
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.yield
 
 
@@ -126,21 +128,32 @@ fun NavigationApp(splashViewModel: SplashViewModel = viewModel()) {
 
 
     LaunchedEffect(currentPendingRoute) {
-        if (currentPendingRoute == AppDestinations.NOTIFICATIONS) {
-            currentTab = Screen.Home
+        val route = currentPendingRoute ?: return@LaunchedEffect
 
-            // Даем Compose время переключить вкладку
-            yield()
-
-            val navController = navControllers[Screen.Home]
-            if (navController?.currentDestination?.route != AppDestinations.NOTIFICATIONS) {
-                navController?.navigate(AppDestinations.NOTIFICATIONS) {
-                    launchSingleTop = true
+        when (route) {
+            AppDestinations.NOTIFICATIONS -> {
+                currentTab = Screen.Home
+                yield()
+                val navController = navControllers[Screen.Home]
+                // Безопасная навигация
+                navigateSafely(navController, route) {
+                    splashViewModel.onRouteConsumed()
                 }
             }
 
-            // ОБЯЗАТЕЛЬНО: Очищаем роут после перехода!
-            splashViewModel.onRouteConsumed()
+            AppDestinations.SEARCH_FRIENDS -> {
+                currentTab = Screen.Friends
+
+                // Даем время на смену вкладки
+                delay(200)
+
+                val navController = navControllers[Screen.Friends]
+
+                // Безопасная навигация
+                navigateSafely(navController, route) {
+                    splashViewModel.onRouteConsumed()
+                }
+            }
         }
     }
 
@@ -396,6 +409,34 @@ fun safeNavigate(
 fun safePopBackStack(controller: NavHostController?) {
     if (controller?.previousBackStackEntry != null) {
         controller.popBackStack()
+    }
+}
+
+
+private fun navigateSafely(
+    navController: NavHostController?,
+    route: String,
+    onSuccess: () -> Unit
+) {
+    try {
+        // КЛЮЧЕВОЙ МОМЕНТ:
+        // Вместо .graph используем backQueue или currentBackStackEntry.
+        // Если граф не установлен, currentBackStackEntry будет null, и мы просто не пойдем дальше.
+        val hasGraph = navController?.currentBackStackEntry != null
+
+        if (hasGraph) {
+            if (navController?.currentDestination?.route != route) {
+                navController?.navigate(route) {
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            }
+            onSuccess()
+        } else {
+            Log.w("NAV_DEBUG", "Контроллер для $route еще не готов (нет BackStackEntry)")
+        }
+    } catch (e: Exception) {
+        Log.e("NAV_DEBUG", "Ошибка навигации на $route: ${e.message}")
     }
 }
 

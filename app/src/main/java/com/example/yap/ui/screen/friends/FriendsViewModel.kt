@@ -33,6 +33,7 @@ class FriendsViewModel(
 
     private fun observeFriends() {
         viewModelScope.launch {
+            Log.d("FRIENDS_DEBUG", "--- Запуск observeFriends ---")
             _state.update { it.copy(isLoading = true) }
 
             // Подписываемся на наш профиль
@@ -40,6 +41,7 @@ class FriendsViewModel(
 //                .distinctUntilChangedBy { it?.friends } // Сработает только если изменился состав друзей
                 .collect { myProfile ->
                     if (myProfile == null) {
+                        Log.w("FRIENDS_DEBUG", "Профиль пуст (null)")
                         _state.update { it.copy(isLoading = false) }
                         return@collect
                     }
@@ -47,11 +49,14 @@ class FriendsViewModel(
                     try {
                         // 1. Берем список ID именно друзей (не быстрый список)
                         val friendIds = myProfile.friends
+                        Log.d("FRIENDS_DEBUG", "Получен профиль. Друзей в списке: ${friendIds.size}")
 
                         // 2. Загружаем детали профилей через твой эффективный getUsersByIds
                         // (который, как мы помним, использует кэш L1/L2 и сеть)
+                        val startTime = System.currentTimeMillis()
                         val users = userRepository.getUsersByIds(friendIds)
-
+                        val duration = System.currentTimeMillis() - startTime
+                        Log.d("FRIENDS_DEBUG", "Загружены детали профилей за ${duration}ms. Кол-во: ${users.size}")
                         // 3. Маппим в UI-модели с актуальными статусами мута и квик-листа
                         val friendModels = users.map { user ->
                             val isInQuickList = myProfile.quickList.contains(user.id)
@@ -68,6 +73,7 @@ class FriendsViewModel(
 
                         // 4. Обновляем стейт
                         _state.update { currentState ->
+                            Log.d("FRIENDS_DEBUG", "Обновление UI стейта: ${friendModels.size} друзей")
                             currentState.copy(
                                 isLoading = false,
                                 myUserCode = myProfile.userCode,
@@ -77,6 +83,7 @@ class FriendsViewModel(
                         }
                     } catch (e: Exception) {
                         Log.e("FriendsVM", "Ошибка при загрузке друзей: ${e.message}")
+                        Log.e("FRIENDS_DEBUG", "Критическая ошибка в observeFriends", e)
                         _state.update { it.copy(isLoading = false) }
                     }
                 }

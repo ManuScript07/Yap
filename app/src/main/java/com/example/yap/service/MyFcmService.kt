@@ -27,8 +27,14 @@ class MyFcmService : FirebaseMessagingService() {
 
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
 
+        val targetScreen = remoteMessage.data["target_screen"]
+        val type = remoteMessage.data["type"]
+
         remoteMessage.notification?.let {
-            showNotification(it.title, it.body)
+            showNotification(
+                title = it.title,
+                message = it.body,
+                targetScreen = targetScreen)
         }
     }
 
@@ -45,7 +51,7 @@ class MyFcmService : FirebaseMessagingService() {
         }
     }
 
-    private fun showNotification(title: String?, message: String?) {
+    private fun showNotification(title: String?, message: String?, targetScreen: String?) {
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val channelId = "notifications_channel"
 
@@ -59,12 +65,14 @@ class MyFcmService : FirebaseMessagingService() {
             // КЛЮЧЕВОЕ ИЗМЕНЕНИЕ 3: Обязательно задаем Action
             action = Intent.ACTION_VIEW
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            putExtra("target_screen", AppDestinations.NOTIFICATIONS)
+            val destination = targetScreen ?: AppDestinations.NOTIFICATIONS
+            putExtra("target_screen", destination)
+            Log.d("FCM_SERVICE", "Push created with destination: $destination")
         }
 
         val pendingIntent = PendingIntent.getActivity(
             this,
-            0,
+            System.currentTimeMillis().toInt(),
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )

@@ -61,6 +61,7 @@
     <string name="search_code">Искать %1$s</string>
     <string name="search_result">Результат поиска</string>
     <string name="no_result">Пользователь не найден</string>
+    <string name="no_new_applications">У вас нет новых заявок</string>
 "
 
 

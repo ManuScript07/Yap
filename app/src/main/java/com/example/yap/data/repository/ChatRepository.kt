@@ -33,15 +33,16 @@ import java.util.concurrent.ConcurrentHashMap
 class ChatRepository(
     private val configManager: RemoteConfigManager,
     private val firestore: FirebaseFirestore,
-    private val supabase: SupabaseClient
+    private val supabase: SupabaseClient,
+    private val client: OkHttpClient,
+    private val gson: Gson
 ) {
 
 
     private val messagesCollection = firestore.collection("messages")
     private val usersCollection = firestore.collection("users")
 
-    private val client = OkHttpClient()
-    private val gson = Gson()
+
     // при выходе из аккаунта очистить
     private val messagesCache = ConcurrentHashMap<String, Flow<List<MessageEntity>>>()
 

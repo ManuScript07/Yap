@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -56,8 +57,11 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun checkIntent(intent: Intent?) {
-        intent?.getStringExtra("target_screen")?.let { route ->
-            viewModel.navigateTo(route)
+        val target = intent?.getStringExtra("target_screen")
+        Log.d("FCM_DEBUG", "MainActivity: Получен target_screen = $target")
+
+        if (!target.isNullOrEmpty()) {
+            viewModel.navigateTo(target)
         }
     }
 

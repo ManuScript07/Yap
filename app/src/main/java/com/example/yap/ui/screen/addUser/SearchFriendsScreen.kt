@@ -175,24 +175,26 @@ fun SearchFriendsScreen(
                     if (state.incomingRequests.isEmpty()) {
                         item {
                             Box(
-                                modifier = Modifier.fillMaxWidth().padding(top = 16.dp * baseScale),
+                                modifier = Modifier.fillMaxWidth().padding(top = 32.dp * baseScale),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = "У вас нет новых заявок", // Замени на ресурс
-                                    fontSize = 16.sp * baseScale,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    text = stringResource(R.string.no_new_applications),
+                                    fontSize = 20.sp * baseScale,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    textAlign = TextAlign.Center,
                                 )
                             }
                         }
                     } else {
                         items(
                             items = state.incomingRequests,
-                            key = { it.id } // Важно для правильной работы анимации удаления
+                            key = { it.id }
                         ) { request ->
                             val userForUi = remember(request) {
                                 UserItem(
-                                    id = request.senderId, // Чтобы при клике открылся профиль отправителя
+                                    id = request.senderId,
                                     name = request.senderName,
                                     avatarUrl = request.senderAvatarUrl,
                                 )
