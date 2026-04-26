@@ -229,7 +229,8 @@ fun NotificationsScreen(
         SystemStatusPill(
             statusResource = homeState.systemStatusResource,
             statusMessage = homeState.systemStatusMessage,
-            statusId = homeState.statusId
+            statusId = homeState.statusId,
+            isSuccess = homeState.isStatusSuccess
         )
     }
     if (state.selectedNotification != null) {

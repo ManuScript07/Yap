@@ -3,6 +3,7 @@ package com.example.yap.ui.screen.addUser
 import android.app.Application
 import android.util.Log
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
@@ -20,7 +21,11 @@ import kotlinx.coroutines.launch
 
 
 sealed class AddUserEvent {
-    data class ShowStatus(val message: String? = null, val resId: Int? = null) : AddUserEvent()
+    data class ShowStatus(
+        val message: String? = null,
+        val resId: Int? = null,
+        val isSuccess: Boolean = false
+    ) : AddUserEvent()
 }
 
 class AddUserViewModel(application: Application) : AndroidViewModel(application) {
@@ -36,7 +41,7 @@ class AddUserViewModel(application: Application) : AndroidViewModel(application)
 
     private val _events = MutableSharedFlow<AddUserEvent>()
     val events = _events.asSharedFlow()
-    var currentStatusId by mutableStateOf(0L)
+    var currentStatusId by mutableLongStateOf(0L)
         private set
 
 
@@ -153,22 +158,23 @@ class AddUserViewModel(application: Application) : AndroidViewModel(application)
             result.onSuccess {
                 // Генерируем новый ID события для Pill
                 currentStatusId = System.currentTimeMillis()
-                _events.emit(AddUserEvent.ShowStatus(resId = R.string.request_sent_success))
-                result.onFailure { exception ->
-                    // Если произошла ошибка (нет сети), откатываем статус обратно к CAN_ADD,
-                    // чтобы пользователь мог попробовать еще раз.
-                    _state.update {
-                        it.copy(remoteSearchResult = currentResult.copy(status = AddFriendStatus.CAN_ADD))
-                    }
-                    currentStatusId = System.currentTimeMillis()
-                    // Анализируем ошибку для более точного уведомления
-                    val errorRes = if (exception.message?.contains("permission") == true) {
-                        R.string.error_already_sent // или другое по смыслу
-                    } else {
-                        R.string.no_internet
-                    }
-                    _events.emit(AddUserEvent.ShowStatus(resId = errorRes))
+                _events.emit(AddUserEvent.ShowStatus(
+                    resId = R.string.request_sent_success,
+                    isSuccess = true))
+            }.onFailure { exception ->
+                // Если произошла ошибка (нет сети), откатываем статус обратно к CAN_ADD,
+                // чтобы пользователь мог попробовать еще раз.
+                _state.update {
+                    it.copy(remoteSearchResult = currentResult.copy(status = AddFriendStatus.CAN_ADD))
                 }
+                currentStatusId = System.currentTimeMillis()
+                // Анализируем ошибку для более точного уведомления
+                val errorRes = if (exception.message?.contains("permission") == true) {
+                    R.string.error_already_sent // или другое по смыслу
+                } else {
+                    R.string.no_internet
+                }
+                _events.emit(AddUserEvent.ShowStatus(resId = errorRes, isSuccess = false))
             }
         }
     }

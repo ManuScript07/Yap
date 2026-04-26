@@ -172,7 +172,7 @@ class FriendsViewModel(
         viewModelScope.launch {
             try {
                 userRepository.removeFriend(friendId)
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 // ROLLBACK: Если произошла ошибка, возвращаем список как было
                 _state.update { currentState ->
                     currentState.copy(

@@ -36,7 +36,8 @@ import com.example.yap.R
 fun BoxScope.SystemStatusPill(
     statusResource: Int?,
     statusMessage: String?,
-    statusId: Long
+    statusId: Long,
+    isSuccess: Boolean
 ) {
     // 1. Создаем "хранилище" для последнего валидного сообщения
     // Оно НЕ обнуляется, когда statusResource становится null
@@ -49,7 +50,7 @@ fun BoxScope.SystemStatusPill(
     LaunchedEffect(statusId) {
         if (currentMessage != null) {
             lastValidMessage = currentMessage
-            lastValidIconIsSuccess = (statusResource == R.string.yap_sent_success)
+            lastValidIconIsSuccess = isSuccess
         }
     }
 

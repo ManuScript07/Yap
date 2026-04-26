@@ -301,26 +301,28 @@ class HomeViewModel(
         }
     }
 
-    fun showStatus(@StringRes resId: Int? = null, message: String? = null, durationMs: Long = 2000) {
+    fun showStatus(
+        @StringRes resId: Int? = null,
+        message: String? = null,
+        isSuccess: Boolean = false,
+        durationMs: Long = 2000
+    ) {
         statusJob?.cancel()
         statusJob = viewModelScope.launch {
-            // 1. Сначала принудительно обнуляем
             _state.update { it.copy(systemStatusResource = null, systemStatusMessage = null) }
 
-            // 2. Даем Compose время понять, что надо начать анимацию выхода (exit)
-            // 50-100мс достаточно, чтобы AnimatedVisibility начал закрываться
+
             delay(50)
 
-            // 3. Ставим новые данные
             _state.update { it.copy(
                 systemStatusResource = resId,
                 systemStatusMessage = message,
+                isStatusSuccess = isSuccess,
                 statusId = System.currentTimeMillis()
             ) }
 
             delay(durationMs)
 
-            // 4. Убираем
             _state.update { it.copy(systemStatusResource = null, systemStatusMessage = null) }
         }
     }
@@ -546,7 +548,11 @@ class HomeViewModel(
                 resetYapButton()
 
                 if (shouldShowSuccess) {
-                    showStatus(resId = R.string.yap_sent_success, durationMs = 3000)
+                    showStatus(
+                        resId = R.string.yap_sent_success,
+                        durationMs = 3000,
+                        isSuccess = true
+                    )
                 }
 
                 _state.update { it.copy(

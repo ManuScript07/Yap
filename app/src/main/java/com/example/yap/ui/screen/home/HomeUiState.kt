@@ -23,6 +23,7 @@ data class HomeUiState(
     val systemStatusMessage: String? = null,
     val showSuccessAlert: Boolean = false,
     val statusId: Long = 0L,
+    val isStatusSuccess: Boolean = true,
 
     val userGeneratedContent: String? = null,
     val voiceAudioUri: String? = null,

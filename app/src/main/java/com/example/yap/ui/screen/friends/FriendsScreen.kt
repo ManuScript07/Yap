@@ -264,7 +264,8 @@ fun FriendsScreen(
         SystemStatusPill(
             statusResource = homeState.systemStatusResource,
             statusMessage = homeState.systemStatusMessage,
-            statusId = homeState.statusId
+            statusId = homeState.statusId,
+            isSuccess = homeState.isStatusSuccess
         )
     }
 }

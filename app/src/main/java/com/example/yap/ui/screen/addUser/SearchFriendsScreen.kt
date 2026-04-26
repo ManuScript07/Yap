@@ -54,6 +54,7 @@ import com.example.yap.ui.theme.LocalBaseScale
 import com.example.yap.util.compose.SystemBarsIconsColor
 import com.example.yap.util.compose.rememberLambda
 import com.example.yap.util.extension.SystemStatusPill
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -105,6 +106,7 @@ fun SearchFriendsScreen(
     var statusMessage by remember { mutableStateOf<String?>(null) }
     var statusResId by remember { mutableStateOf<Int?>(null) }
     var statusId by remember { mutableLongStateOf(0L) }
+    var isStatusSuccess by remember { mutableStateOf(true) }
 
 
     LaunchedEffect(Unit) {
@@ -113,7 +115,13 @@ fun SearchFriendsScreen(
                 is AddUserEvent.ShowStatus -> {
                     statusMessage = event.message
                     statusResId = event.resId
+                    isStatusSuccess = event.isSuccess
                     statusId = viewModel.currentStatusId
+
+                    delay(3000)
+
+                    statusMessage = null
+                    statusResId = null
                 }
             }
         }
@@ -247,7 +255,8 @@ fun SearchFriendsScreen(
         SystemStatusPill(
             statusResource = statusResId,
             statusMessage = statusMessage,
-            statusId = statusId
+            statusId = statusId,
+            isSuccess = isStatusSuccess
         )
     }
 }
