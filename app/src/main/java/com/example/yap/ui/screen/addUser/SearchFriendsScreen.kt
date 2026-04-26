@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -47,6 +48,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.yap.R
+import com.example.yap.data.model.UserItem
 import com.example.yap.ui.components.BaseTopAppBar
 import com.example.yap.ui.screen.friends.SearchField
 import com.example.yap.ui.theme.LocalAdditionColors
@@ -75,11 +77,11 @@ fun SearchFriendsScreen(
     }
 
     val onAcceptRequest = remember(viewModel) {
-        { id: String -> /* viewModel.acceptRequest(id) */ }
+        { id: String, senderId: String -> viewModel.acceptRequest(id, senderId) }
     }
 
     val onDeclineRequest = remember(viewModel) {
-        { id: String -> /* viewModel.declineRequest(id) */ }
+        { id: String -> viewModel.declineRequest(id)}
     }
 
     val onSendRequest = remember(viewModel) {
@@ -170,6 +172,46 @@ fun SearchFriendsScreen(
                             modifier = Modifier.padding(vertical = 8.dp * baseScale)
                         )
                     }
+                    if (state.incomingRequests.isEmpty()) {
+                        item {
+                            Box(
+                                modifier = Modifier.fillMaxWidth().padding(top = 16.dp * baseScale),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "У вас нет новых заявок", // Замени на ресурс
+                                    fontSize = 16.sp * baseScale,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    } else {
+                        items(
+                            items = state.incomingRequests,
+                            key = { it.id } // Важно для правильной работы анимации удаления
+                        ) { request ->
+                            val userForUi = remember(request) {
+                                UserItem(
+                                    id = request.senderId, // Чтобы при клике открылся профиль отправителя
+                                    name = request.senderName,
+                                    avatarUrl = request.senderAvatarUrl,
+                                )
+                            }
+                            AnimatedVisibility(
+                                visible = true,
+                                enter = fadeIn(),
+                                exit = fadeOut() + shrinkVertically()
+                            ) {
+                                FriendRequestItem(
+                                    user = userForUi,
+                                    baseScale = baseScale,
+                                    onUserClick = { userId -> guardedNavigateToProfile(userId) },
+                                    onAccept = { onAcceptRequest(request.id, request.senderId) },
+                                    onDecline = { onDeclineRequest(request.id) },
+                                )
+                            }
+                        }
+                    }
                 }
             } else {
                 Column(
@@ -186,7 +228,6 @@ fun SearchFriendsScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(vertical = 8.dp * baseScale)
-                                // Добавляем легкий фон и скругление
                                 .clip(RoundedCornerShape(8.dp * baseScale))
                                 .background(LocalAdditionColors.current.purpleLightBackColor)
                                 .clickable { onExecuteSearch() }

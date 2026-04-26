@@ -1,5 +1,6 @@
 package com.example.yap.ui.screen.addUser
 
+import com.example.yap.data.model.FriendRequestEntity
 import com.example.yap.data.model.UserItem
 
 enum class AddFriendStatus {
@@ -18,5 +19,6 @@ data class AddUserUiState(
     val isValidCode: Boolean = false,
     val formattedCodeForUI: String = "",
     val remoteSearchResult: FoundUser? = null,
-    val isSearchPerformed: Boolean = false
+    val isSearchPerformed: Boolean = false,
+    val incomingRequests: List<FriendRequestEntity> = emptyList()
 )

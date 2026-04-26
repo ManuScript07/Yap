@@ -144,6 +144,7 @@ class ChatRepository(
             } catch (e: Exception) {
                 lastException = e
                 Log.w("ChatRepository", "Попытка ${attempt + 1} не удалась: ${e.message}")
+                Log.e("ChatRepository", "Ошибка Supabase: ${e.stackTraceToString()}")
                 // Ждем перед следующей попыткой (1с, 2с...)
                 kotlinx.coroutines.delay((attempt + 1) * 1000L)
             }

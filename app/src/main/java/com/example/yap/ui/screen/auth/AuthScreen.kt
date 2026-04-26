@@ -36,7 +36,10 @@ import androidx.compose.ui.unit.sp
 import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
+import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.credentials.exceptions.GetCredentialException
+import androidx.credentials.exceptions.GetCredentialInterruptedException
+import androidx.credentials.exceptions.GetCredentialUnknownException
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.wear.compose.material.Text
@@ -181,22 +184,38 @@ suspend fun startGoogleSignIn(context: Context): String? {
         .build()
 
     return try {
+        Log.d("AuthDebug", "Запуск диалога CredentialManager...")
         val result = credentialManager.getCredential(context, request)
         val credential = result.credential
 
         if (credential is CustomCredential &&
             credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
             val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
+            Log.d("AuthDebug", "ID Token успешно получен")
             googleIdTokenCredential.idToken
         } else {
+            Log.w("AuthDebug", "Получен неизвестный тип креативности: ${credential.type}")
             null
         }
     } catch (e: GetCredentialException) {
         // Важно: если пользователь просто закрыл диалог (отмена)
-        Log.e("Auth", "User cancelled or failed: ${e.message}")
+        when (e) {
+            is GetCredentialCancellationException -> {
+                Log.e("AuthDebug", "Пользователь закрыл диалог (отмена)")
+            }
+            is GetCredentialInterruptedException -> {
+                Log.e("AuthDebug", "Процесс прерван (Interrupted): ${e.message}")
+            }
+            is GetCredentialUnknownException -> {
+                Log.e("AuthDebug", "Неизвестная ошибка (возможно, неверный SHA-1 или настройки в Console): ${e.message}")
+            }
+            else -> {
+                Log.e("AuthDebug", "Ошибка CredentialManager: [${e::class.java.simpleName}] ${e.message}")
+            }
+        }
         null
     } catch (e: Exception) {
-        Log.e("Auth", "Unexpected error: ${e.message}")
+        Log.e("AuthDebug", "Критическая ошибка: ${e.stackTraceToString()}")
         null
     }
 }

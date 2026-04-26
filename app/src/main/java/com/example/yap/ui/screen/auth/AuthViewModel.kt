@@ -2,6 +2,7 @@ package com.example.yap.ui.screen.auth
 
 import android.app.Application
 import android.content.Context
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.yap.data.repository.AuthResult
@@ -20,13 +21,16 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
     fun handleGoogleSignIn(context: Context) {
         viewModelScope.launch {
+            Log.i("AuthDebug", "Клик: Старт handleGoogleSignIn. Текущее состояние: ${_authState.value}")
             _authState.value = AuthState.Loading
 
             try {
                 val idToken = startGoogleSignIn(context)
                 if (idToken != null) {
+                    Log.i("AuthDebug", "Token получен, идем в репозиторий...")
                     // Теперь репозиторий возвращает AuthResult (как мы обсуждали ранее)
                     val result = repository.signInWithGoogle(idToken)
+                    Log.i("AuthDebug", "Результат репозитория: $result")
 
                     when (result) {
                         is AuthResult.SuccessExistingUser -> {
@@ -40,9 +44,11 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                         }
                     }
                 } else {
+                    Log.w("AuthDebug", "Token == null. Возвращаемся в Idle.")
                     _authState.value = AuthState.Idle
                 }
             } catch (e: Exception) {
+                Log.e("AuthDebug", "Ошибка в ViewModel: ${e.message}")
                 _authState.value = AuthState.Error("Ошибка: ${e.localizedMessage}")
             }
         }

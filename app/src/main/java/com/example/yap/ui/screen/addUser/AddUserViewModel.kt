@@ -11,10 +11,13 @@ import androidx.lifecycle.viewModelScope
 import com.example.yap.R
 import com.example.yap.data.model.UserItem
 import com.example.yap.ui.main.YapApp
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -35,8 +38,11 @@ class AddUserViewModel(application: Application) : AndroidViewModel(application)
 
 
     private val app = application as YapApp
+
     private val userRepository = app.userRepository
     private val friendRequestRepository = app.friendsRequestRepository
+
+    private val auth = app.firebaseAuth
 
 
     private val _events = MutableSharedFlow<AddUserEvent>()
@@ -46,6 +52,10 @@ class AddUserViewModel(application: Application) : AndroidViewModel(application)
 
 
     private var currentUser: UserItem? = null
+    private var observeJob: Job? = null
+    private val processingIds = MutableStateFlow<Set<String>>(emptySet())
+
+
 
 
     init {
@@ -55,6 +65,8 @@ class AddUserViewModel(application: Application) : AndroidViewModel(application)
                 currentUser = userRepository.getUsersByIds(listOf(uid)).firstOrNull()
             }
         }
+
+        observeIncomingRequests()
     }
 
     fun onQueryChange(newQuery: String) {
@@ -142,35 +154,34 @@ class AddUserViewModel(application: Application) : AndroidViewModel(application)
     fun sendFriendRequest(receiverId: String) {
         val currentResult = _state.value.remoteSearchResult ?: return
 
-        // Двойная проверка: отправляем только если кнопка активна (CAN_ADD)
         if (currentResult.status != AddFriendStatus.CAN_ADD) return
 
+        val senderName = currentUser?.name ?: "User"
+        val senderAvatar = currentUser?.avatarUrl
+
         viewModelScope.launch {
-            // 1. Оптимистичное обновление UI: сразу делаем кнопку неактивной (PENDING)
-            // Это дает пользователю мгновенный отклик, пока запрос летит по сети
             _state.update {
                 it.copy(remoteSearchResult = currentResult.copy(status = AddFriendStatus.PENDING))
             }
 
-            // 2. Выполняем сетевой запрос
-            val result = friendRequestRepository.sendRequest(receiverId)
+            val result = friendRequestRepository.sendRequest(
+                receiverId = receiverId,
+                senderName = senderName,
+                senderAvatar = senderAvatar
+            )
 
             result.onSuccess {
-                // Генерируем новый ID события для Pill
                 currentStatusId = System.currentTimeMillis()
                 _events.emit(AddUserEvent.ShowStatus(
                     resId = R.string.request_sent_success,
                     isSuccess = true))
             }.onFailure { exception ->
-                // Если произошла ошибка (нет сети), откатываем статус обратно к CAN_ADD,
-                // чтобы пользователь мог попробовать еще раз.
                 _state.update {
                     it.copy(remoteSearchResult = currentResult.copy(status = AddFriendStatus.CAN_ADD))
                 }
                 currentStatusId = System.currentTimeMillis()
-                // Анализируем ошибку для более точного уведомления
                 val errorRes = if (exception.message?.contains("permission") == true) {
-                    R.string.error_already_sent // или другое по смыслу
+                    R.string.error_already_sent
                 } else {
                     R.string.no_internet
                 }
@@ -178,4 +189,56 @@ class AddUserViewModel(application: Application) : AndroidViewModel(application)
             }
         }
     }
+
+
+
+    private fun observeIncomingRequests() {
+        val currentUserId = auth.currentUser?.uid ?: return
+
+        observeJob?.cancel() // Отменяем предыдущую подписку, если она была
+        observeJob = viewModelScope.launch {
+            friendRequestRepository.observeIncomingRequests(currentUserId).collect { requests ->
+                _state.update { it.copy(incomingRequests = requests) }
+            }
+        }
+    }
+
+    fun acceptRequest(requestId: String, senderId: String) {
+        // Если мы уже обрабатываем этот ID, просто игнорируем клик
+        if (processingIds.value.contains(requestId)) return
+
+        viewModelScope.launch {
+            processingIds.update { it + requestId } // Блокируем
+
+            val result = friendRequestRepository.acceptRequest(requestId, senderId)
+
+            if (result.isSuccess) {
+                currentStatusId = System.currentTimeMillis()
+                _events.emit(AddUserEvent.ShowStatus(resId = R.string.request_accepted, isSuccess = true))
+            } else {
+                currentStatusId = System.currentTimeMillis()
+                _events.emit(AddUserEvent.ShowStatus(resId = R.string.error_generic, isSuccess = false))
+            }
+
+            processingIds.update { it - requestId } // Разблокируем (хотя заявка уже исчезнет из UI)
+        }
+    }
+
+    fun declineRequest(requestId: String) {
+        if (processingIds.value.contains(requestId)) return
+
+        viewModelScope.launch {
+            processingIds.update { it + requestId }
+
+            val result = friendRequestRepository.declineRequest(requestId)
+
+            if (result.isSuccess) {
+                currentStatusId = System.currentTimeMillis()
+                _events.emit(AddUserEvent.ShowStatus(resId = R.string.request_declined, isSuccess = true))
+            }
+
+            processingIds.update { it - requestId }
+        }
+    }
+
 }

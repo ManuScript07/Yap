@@ -69,5 +69,8 @@
     <string name="add_friends">Добавить друзей</string>
     <string name="request_sent_success">Заявка отправлена</string>
     <string name="error_already_sent">Невозможно отправить</string>
+    <string name="request_accepted">Заявка принята</string>
+    <string name="error_generic">Ошибка</string>
+    <string name="request_declined">Заявка отклонена</string>
 </resources>
 
