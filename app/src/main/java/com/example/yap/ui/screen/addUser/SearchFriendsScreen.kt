@@ -1,7 +1,10 @@
 package com.example.yap.ui.screen.addUser
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -163,7 +166,7 @@ fun SearchFriendsScreen(
                     ),
                     verticalArrangement = Arrangement.spacedBy(4.dp * baseScale)
                 ) {
-                    item {
+                    item(key = "header_requests") {
                         Text(
                             text = stringResource(R.string.friends_requests),
                             fontSize = 20.sp * baseScale,
@@ -173,9 +176,12 @@ fun SearchFriendsScreen(
                         )
                     }
                     if (state.incomingRequests.isEmpty()) {
-                        item {
+                        item(key = "empty_state") {
                             Box(
-                                modifier = Modifier.fillMaxWidth().padding(top = 32.dp * baseScale),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 32.dp * baseScale)
+                                    .animateItem(),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
@@ -199,21 +205,25 @@ fun SearchFriendsScreen(
                                     avatarUrl = request.senderAvatarUrl,
                                 )
                             }
-                            AnimatedVisibility(
-                                visible = true,
-                                enter = fadeIn(),
-                                exit = fadeOut() + shrinkVertically()
-                            ) {
-                                FriendRequestItem(
-                                    user = userForUi,
-                                    baseScale = baseScale,
-                                    onUserClick = { userId -> guardedNavigateToProfile(userId) },
-                                    onAccept = { onAcceptRequest(request.id, request.senderId) },
-                                    onDecline = { onDeclineRequest(request.id) },
-                                )
-                            }
+
+                            FriendRequestItem(
+                                modifier = Modifier.animateItem(
+                                    fadeInSpec = tween(300),
+                                    placementSpec = spring(
+                                        dampingRatio = Spring.DampingRatioNoBouncy,
+                                        stiffness = Spring.StiffnessMediumLow
+                                    ),
+                                    fadeOutSpec = tween(300)
+                                ),
+                                user = userForUi,
+                                baseScale = baseScale,
+                                onUserClick = { userId -> guardedNavigateToProfile(userId) },
+                                onAccept = { onAcceptRequest(request.id, request.senderId) },
+                                onDecline = { onDeclineRequest(request.id) },
+                            )
                         }
                     }
+
                 }
             } else {
                 Column(

@@ -73,5 +73,8 @@
     <string name="request_accepted">Заявка принята</string>
     <string name="error_generic">Ошибка</string>
     <string name="request_declined">Заявка отклонена</string>
+    <string name="no_friends_yet">Ещё нет друзей?</string>
+    <string name="use_search_or_press">Воспользуйся поиском\nили нажми</string>
+    <string name="add">Добавить</string>
 </resources>
 

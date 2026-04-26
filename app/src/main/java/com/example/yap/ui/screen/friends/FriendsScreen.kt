@@ -2,7 +2,10 @@ package com.example.yap.ui.screen.friends
 
 import android.content.Intent
 import android.widget.Toast
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -19,6 +22,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -29,6 +33,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.TextSelectionColors
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -37,7 +43,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.LocalTextStyle
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
@@ -49,18 +55,22 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.LineHeightStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -259,11 +269,31 @@ fun FriendsScreen(
                     }
                 }
 
+                else if (!state.isLoading && state.filteredFriends.isEmpty()) {
+                    item {
+                        EmptyFriendsCard(
+                            baseScale = baseScale,
+                            onAddClick = { guardedNavigateToAddFriends(Unit) },
+                            modifier = Modifier
+                                .padding(top = 12.dp * baseScale)
+                                .animateItem()
+                        )
+                    }
+                }
+
                 items(
                     items = state.filteredFriends,
                     key = { it.user.id }
                 ) { itemModel ->
                     FriendListItem(
+                        modifier = Modifier.animateItem(
+                            fadeInSpec = tween(400),
+                            placementSpec = spring(
+                                dampingRatio = Spring.DampingRatioLowBouncy,
+                                stiffness = Spring.StiffnessLow
+                            ),
+                            fadeOutSpec = tween(300)
+                        ),
                         model = itemModel,
                         onYapClick = { onYapClick(itemModel) },
                         onYapSend = { onYapSend(itemModel.user) },
@@ -382,6 +412,7 @@ fun CodeCard(
 
 @Composable
 fun FriendListItem(
+    modifier: Modifier = Modifier,
     model: FriendItemModel,
     onUserClick: (String) -> Unit,
     onYapClick: (String) -> Unit,
@@ -390,6 +421,7 @@ fun FriendListItem(
     onRemoveClick: () -> Unit
 ) {
     BaseUserListItem(
+        modifier = modifier,
         user = model.user,
         onUserClick = onUserClick,
         onYapClick = onYapClick,
@@ -489,4 +521,81 @@ fun SearchField(
             )
         }
     )
+}
+
+@Composable
+fun EmptyFriendsCard(
+    baseScale: Float,
+    onAddClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val startGradient = MaterialTheme.colorScheme.primary
+    val centerGradient = LocalAdditionColors.current.centerGradientColor
+    val endGradient = LocalAdditionColors.current.pinkForGradientColor
+
+
+    val gradientBrush = remember {
+        Brush.linearGradient(
+            colors = listOf(
+                startGradient,
+                centerGradient,
+                endGradient
+            )
+        )
+    }
+
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(200.dp * baseScale),
+        shape = RoundedCornerShape(20.dp * baseScale),
+        color = Color.Transparent
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(brush = gradientBrush),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = stringResource(R.string.no_friends_yet),
+                fontSize = 32.sp * baseScale,
+                fontWeight = FontWeight.Black,
+                fontStyle = FontStyle.Italic,
+                color = Color.Black,
+                lineHeight = 24.sp * baseScale
+            )
+
+            Spacer(modifier = Modifier.height(14.dp * baseScale))
+
+            Text(
+                text = stringResource(R.string.use_search_or_press),
+                fontSize = 20.sp * baseScale,
+                fontWeight = FontWeight.Bold,
+                color = Color.Black,
+                textAlign = TextAlign.Center,
+                lineHeight = 24.sp * baseScale
+            )
+
+            Spacer(modifier = Modifier.height(20.dp * baseScale))
+
+            Button(
+                modifier = Modifier
+                    .width(180.dp * baseScale)
+                    .height(44.dp * baseScale),
+                onClick = onAddClick,
+                colors = ButtonDefaults.buttonColors(containerColor = Color.Black),
+                shape = RoundedCornerShape(50),
+                contentPadding = PaddingValues(horizontal = 32.dp * baseScale, vertical = 8.dp * baseScale)
+            ) {
+                Text(
+                    text = stringResource(R.string.add),
+                    color = MaterialTheme.colorScheme.background,
+                    fontSize = 20.sp * baseScale,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
 }
