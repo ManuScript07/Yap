@@ -55,9 +55,9 @@ fun FoundUserItem(
                 .background(backgroundColor)
                 .combinedClickable(
                     interactionSource = interactionSource,
-                    indication = rippleIndication,
+                    indication = if (isCanAdd) rippleIndication else null,
                     onClick = {
-                        if (isCanAdd) onAddClick() else onUserClick(foundUser.user.id)
+                        if (isCanAdd) onAddClick()
                     },
                 ),
             contentAlignment = Alignment.Center

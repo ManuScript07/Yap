@@ -14,6 +14,7 @@ import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
+import com.example.yap.data.repository.FriendRequestRepository
 import com.google.firebase.auth.FirebaseAuth
 import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.storage.Storage
@@ -61,6 +62,13 @@ class YapApp : Application(), ImageLoaderFactory {
             firestore = firestore,
             configManager = configManager,
             supabase = supabaseClient
+        )
+    }
+
+    val friendsRequestRepository by lazy {
+        FriendRequestRepository(
+            firestore = firestore,
+            auth = firebaseAuth
         )
     }
     val transcriptionService by lazy{ GroqTranscriptionService(configManager) }
