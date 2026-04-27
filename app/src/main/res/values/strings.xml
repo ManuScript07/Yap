@@ -34,7 +34,7 @@
     <string name="dnt_user_other_photo">Не используйте чужие фотографии</string>
     <string name="your_name">Как вас зовут</string>
     <string name="input_your_name">Введите ваше имя</string>
-    <string name="user_name">Введите имя пользователя</string>
+    <string name="user_name">Имя пользователя</string>
     <string name="input_user_name">Введите имя пользователя</string>
     <string name="unique_nick">Уникальный никнейм профиля</string>
     <string name="how_old">Сколько вам лет</string>
@@ -62,10 +62,16 @@
     <string name="search_result">Результат поиска</string>
     <string name="no_result">Пользователь не найден</string>
     <string name="no_new_applications">У вас нет новых заявок</string>
+    <string name="remove_from_list">Убрать из списка</string>
+    <string name="add_to_list">Добавить в список</string>
+    <string name="your_birthday">День рождения</string>
+    <plurals name="friends_count">
+        <item quantity="one">%1$d друг</item>
+        <item quantity="few">%1$d друга</item>
+        <item quantity="many">%1$d друзей</item>
+        <item quantity="other">%1$d друзей</item>
+    </plurals>
 "
-
-
-
     <string name="default_web_client_id">590396163030-vhbut7nnhjrig2pd09j3baq0ro1ganlo.apps.googleusercontent.com</string>
     <string name="add_friends">Добавить друзей</string>
     <string name="request_sent_success">Заявка отправлена</string>

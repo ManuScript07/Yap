@@ -52,13 +52,12 @@ import androidx.navigation.navArgument
 import com.example.yap.ui.screen.ChatsScreen
 import com.example.yap.ui.screen.friends.FriendsScreen
 import com.example.yap.ui.screen.MapScreen
-import com.example.yap.ui.screen.ProfileScreen
 import com.example.yap.ui.screen.addUser.SearchFriendsScreen
 import com.example.yap.ui.screen.home.HomeScreen
 import com.example.yap.ui.screen.home.HomeViewModel
 import com.example.yap.ui.screen.notification.NotificationsScreen
 import com.example.yap.ui.screen.splash.SplashViewModel
-import com.example.yap.ui.screen.user_profile.UserProfileScreen
+import com.example.yap.ui.screen.userProfile.UserProfileScreen
 import com.example.yap.ui.theme.LocalAdditionColors
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.yield
@@ -275,7 +274,9 @@ fun NavigationApp(splashViewModel: SplashViewModel = viewModel()) {
                                     homeViewModel = sharedViewModel
                                 )
                             }
-                            userProfileComposable(navControllers[screen])
+                            userProfileComposable(
+                                navController = navControllers[screen],
+                                homeViewModel = sharedViewModel)
                         }
 
                         Screen.Chats -> {
@@ -327,7 +328,9 @@ fun NavigationApp(splashViewModel: SplashViewModel = viewModel()) {
                             }
 
 
-                            userProfileComposable(navControllers[screen])
+                            userProfileComposable(
+                                navController = navControllers[screen],
+                                homeViewModel = sharedViewModel)
                         }
 
                         Screen.Profile -> {
@@ -344,6 +347,10 @@ fun NavigationApp(splashViewModel: SplashViewModel = viewModel()) {
     }
 }
 
+@Composable
+fun ProfileScreen() {
+    TODO("Not yet implemented")
+}
 
 
 @Composable
@@ -379,7 +386,9 @@ fun TabNavHost(
 }
 
 
-fun NavGraphBuilder.userProfileComposable(navController: NavHostController?) {
+fun NavGraphBuilder.userProfileComposable(
+    navController: NavHostController?,
+    homeViewModel: HomeViewModel) {
     composable(
         route = AppDestinations.USER_PROFILE_ROUTE,
         arguments = listOf(navArgument("userId") { type = NavType.StringType })
@@ -387,7 +396,8 @@ fun NavGraphBuilder.userProfileComposable(navController: NavHostController?) {
         val userId = backStackEntry.arguments?.getString("userId") ?: return@composable
         UserProfileScreen(
             userId = userId,
-            onBackClick = { safePopBackStack(navController) }
+            onBack = { safePopBackStack(navController) },
+            homeViewModel = homeViewModel
         )
     }
 }

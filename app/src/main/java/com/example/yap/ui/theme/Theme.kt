@@ -74,7 +74,9 @@ val LightAdditionColors = AdditionalColors(
     searchSurfaceColor = Color(0xFFDFDFF7),
     surfaceDialogColor = Color(0xFFF8F9FB),
     crossColor = Color(0xFF646464),
-    checkBackgroundColor = Color(0xFF5555A2)
+    checkBackgroundColor = Color(0xFF5555A2),
+    descriptionSurfaceColor = Color(0xFFCBD9F7),
+    toggleButtonColor = Color(0xFF252569)
 )
 
 val LocalAdditionColors = staticCompositionLocalOf {

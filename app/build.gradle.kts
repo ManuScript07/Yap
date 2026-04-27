@@ -125,6 +125,7 @@ dependencies {
     implementation(libs.googleid)
     implementation(libs.androidx.compose.remote.creation.core)
     implementation(libs.androidx.foundation)
+    implementation(libs.androidx.compose.runtime)
 
 
     // Тесты и дебаг
