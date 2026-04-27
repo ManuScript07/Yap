@@ -62,6 +62,7 @@ import com.example.yap.ui.screen.MapScreen
 import com.example.yap.ui.screen.addUser.SearchFriendsScreen
 import com.example.yap.ui.screen.home.HomeScreen
 import com.example.yap.ui.screen.home.HomeViewModel
+import com.example.yap.ui.screen.myProfileScreen.MyProfileScreen
 import com.example.yap.ui.screen.notification.NotificationsScreen
 import com.example.yap.ui.screen.splash.SplashViewModel
 import com.example.yap.ui.screen.userFriends.UserFriendsScreen
@@ -368,7 +369,10 @@ fun NavigationApp(splashViewModel: SplashViewModel = viewModel()) {
 
                         Screen.Profile -> {
                             composable(Screen.Profile.route) {
-                                ProfileScreen()
+                                // Здесь мы вызываем полноценный экран профиля
+                                MyProfileScreen(
+                                    homeViewModel = sharedViewModel
+                                )
                             }
                         }
 
@@ -380,13 +384,6 @@ fun NavigationApp(splashViewModel: SplashViewModel = viewModel()) {
     }
 }
 
-@Composable
-fun ProfileScreen() {
-    Box(modifier = Modifier.fillMaxSize()){
-        Text("Profile")
-    }
-    TODO("Not yet implemented")
-}
 
 
 @Composable
@@ -473,7 +470,8 @@ fun NavGraphBuilder.userProfileComposable(
                     route = AppDestinations.createProfileRoute(targetId),
                     lockState = navLockTime
                 )
-            }
+            },
+            homeViewModel = homeViewModel
         )
     }
 }

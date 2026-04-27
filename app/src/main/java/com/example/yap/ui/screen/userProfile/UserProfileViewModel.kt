@@ -147,7 +147,7 @@ class UserProfileViewModel(
 
             result.onSuccess {
                 // 3. Успех: меняем статус на ALREADY_FRIEND (или создай SENT, если нужно)
-                _state.update { it.copy(addFriendStatus = AddFriendStatus.ALREADY_FRIEND) }
+                _state.update { it.copy(addFriendStatus = AddFriendStatus.PENDING) }
                 onResult(R.string.request_sent_success, true)
             }.onFailure { exception ->
                 // 4. Ошибка: возвращаем CAN_ADD, чтобы можно было попробовать снова

@@ -99,7 +99,6 @@ fun UserProfileScreen(
     val context = LocalContext.current
     val baseScale = LocalBaseScale.current
 
-    // --- ОПТИМИЗИРОВАННЫЕ ЛЯМБДЫ ЧЕРЕЗ REMEMBER ---
 
     val onBackClick = remember { { onBack() } }
 
@@ -110,10 +109,9 @@ fun UserProfileScreen(
 
     val onShareProfile = {
         val userId = state.user?.id ?: ""
-        val userCode = state.user?.userCode ?: "" // Твой код пользователя
+        val userCode = state.user?.userCode ?: ""
         val deepLinkUrl = "https://yap.app/profile/$userId"
 
-        // Подставляем оба параметра в строковый ресурс
         val shareMessage = context.getString(R.string.share_profile_message, userCode, deepLinkUrl)
 
         val sendIntent: Intent = Intent().apply {
@@ -141,7 +139,7 @@ fun UserProfileScreen(
                     }
                 )
             }
-            Unit // Гарантируем возврат Unit для соответствия onClick
+            Unit
         }
     }
 
@@ -165,7 +163,6 @@ fun UserProfileScreen(
     }
 
 
-    // --- ЦВЕТА И РЕСУРСЫ ---
     val startGradient = MaterialTheme.colorScheme.primary
     val centerGradient = LocalAdditionColors.current.centerGradientColor
     val endGradient = LocalAdditionColors.current.pinkForGradientColor
@@ -246,13 +243,9 @@ fun UserProfileScreen(
                                     fontWeight = FontWeight.Medium,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
-                                Text(
-                                    text = "В сети",
-                                    fontSize = 16.sp * baseScale,
-                                    color = LocalAdditionColors.current.secondTextColor
-                                )
 
-                                Spacer(modifier = Modifier.height(10.dp * baseScale))
+
+                                Spacer(modifier = Modifier.height(16.dp * baseScale))
 
                                 // Кнопки действий
                                 Row(
@@ -273,9 +266,9 @@ fun UserProfileScreen(
                                         ),
                                         shape = RoundedCornerShape(20.dp * baseScale),
                                         modifier = Modifier
-                                            .weight(1f) // ВАЖНО: Занимает весь остаток ширины экрана
+                                            .weight(1f)
                                             .height(58.dp * baseScale),
-                                        contentPadding = PaddingValues(horizontal = 8.dp * baseScale) // Минимальные отступы внутри
+                                        contentPadding = PaddingValues(horizontal = 8.dp * baseScale)
                                     ) {
                                         Text(
                                             text = if (state.isUserInQuickList)
@@ -415,7 +408,11 @@ fun UserProfileScreen(
                                             text = stringResource(text),
                                             color = contentColor,
                                             fontSize = 20.sp * baseScale,
-                                            fontWeight = FontWeight.Bold
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            softWrap = false,
+                                            modifier = Modifier.weight(1f, fill = false)
                                         )
                                     }
                                 }

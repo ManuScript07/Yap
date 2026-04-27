@@ -89,5 +89,6 @@
     <string name="sending">Отправлено</string>
     <string name="already_friends">В друзьях</string>
     <string name="no_friends">нет друзей</string>
+    <string name="no_common_friends">У вас нет общих друзей</string>
 </resources>
 

@@ -19,9 +19,8 @@ fun UserFriendListItem(
     baseScale: Float,
     onUserClick: (String) -> Unit,
     onAddClick: () -> Unit,
-    onYapClick: (String) -> Unit,
-    onToggleQuickList: (FoundUser) -> Unit,
-    onYapLongClick: (String) -> Unit,
+    onYapClick: () -> Unit,
+    onLongYapClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
 
@@ -39,8 +38,8 @@ fun UserFriendListItem(
                 // Если друг — кнопка Япа
                 YapActionButton(
                     user = foundUser.user,
-                    onYapClick = onYapClick,
-                    onLongYapClick = onYapLongClick
+                    onYapClick = { onYapClick() },
+                    onLongYapClick = { onLongYapClick() }
                 )
             } else {
                 AddFriendActionButton(

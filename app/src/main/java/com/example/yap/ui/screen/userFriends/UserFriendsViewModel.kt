@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.yap.R
 import com.example.yap.data.model.UserItem
 import com.example.yap.ui.main.YapApp
 import com.example.yap.ui.screen.addUser.AddFriendStatus
@@ -14,6 +15,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -27,6 +29,8 @@ class UserFriendsViewModel(
     private val friendRequestRepository = app.friendsRequestRepository
     private val _state = MutableStateFlow(UserFriendsUiState())
     val state = _state.asStateFlow()
+
+    private val initialPendingIds = MutableStateFlow<Set<String>>(emptySet())
 
     init {
         observeUserFriends()
@@ -46,63 +50,72 @@ class UserFriendsViewModel(
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true) }
 
-            // 1. Получаем целевого пользователя разово
-            val targetUser = userRepository.getUsersByIds(listOf(targetUserId)).firstOrNull()
+            try {
+                // 1. Получаем целевого пользователя
+                val targetUser = userRepository.getUsersByIds(listOf(targetUserId)).firstOrNull()
 
-            if (targetUser == null) {
-                _state.update { it.copy(isLoading = false) }
-                return@launch
-            }
+                if (targetUser == null) {
+                    _state.update { it.copy(isLoading = false) }
+                    return@launch
+                }
+                _state.update { it.copy(targetUserName = targetUser.name) }
 
-            _state.update { it.copy(targetUserName = targetUser.name) }
+                // 2. Фоновая загрузка старых заявок (защищенная)
+                launch {
+                    try {
+                        val pendingFromDb = friendRequestRepository.getAllSentPendingRequests()
+                        initialPendingIds.value = pendingFromDb
+                    } catch (e: Exception) {
+                        Log.e("UserFriendsVM", "Error fetching DB requests: ${e.message}")
+                    }
+                }
 
-            // 2. Используем combine, чтобы следить и за моим профилем, и за сессионными заявками
-            // Это гарантирует, что кнопка мгновенно станет неактивной (PENDING) после нажатия
-            combine(
-                userRepository.observeMyProfile(),
-                friendRequestRepository.sessionSentRequests // Следим за списком ID, кому мы отправили запрос в этой сессии
-            ) { myProfile, sentRequests ->
-                if (myProfile == null) return@combine
+                // 3. БЕЗОПАСНЫЙ сбор данных
+                // Проверяем на null каждый поток перед передачей в combine
+                val myProfileFlow = userRepository.observeMyProfile() ?: flowOf(null)
+                val sessionRequestsFlow = friendRequestRepository.sessionSentRequests // это StateFlow, он не null
 
-                try {
-                    // 3. Грузим детали друзей (из кэша)
+                combine(
+                    myProfileFlow,
+                    sessionRequestsFlow,
+                    initialPendingIds
+                ) { myProfile, sessionSent, dbSent ->
+                    if (myProfile == null) return@combine emptyList<FoundUser>()
+
+                    val currentUserId = userRepository.currentUserId
                     val friendsDetails = userRepository.getUsersByIds(targetUser.friends)
 
-                    // 4. Маппим с полноценной логикой статуса
-                    val models = friendsDetails.map { friend ->
+                    friendsDetails
+                        .filter { it.id != currentUserId }
+                        .map { friend ->
                         val isFriend = myProfile.friends.contains(friend.id)
                         val isSelf = friend.id == userRepository.currentUserId
-                        val isSentByMeInSession = sentRequests.contains(friend.id)
+                        val isPending = sessionSent.contains(friend.id) || dbSent.contains(friend.id)
                         val isInQuickList = myProfile.quickList.contains(friend.id)
-                        val updatedUser = friend.copy(isYapActive = isInQuickList)
 
-                        // Вычисляем статус аналогично поиску и профилю
                         val status = when {
-                            isSelf -> AddFriendStatus.ALREADY_FRIEND
-                            isFriend -> AddFriendStatus.ALREADY_FRIEND
-                            isSentByMeInSession -> AddFriendStatus.PENDING
+                            isSelf || isFriend -> AddFriendStatus.ALREADY_FRIEND
+                            isPending -> AddFriendStatus.PENDING
                             else -> AddFriendStatus.CAN_ADD
-
                         }
 
-                        val mutualCount = friend.friends.intersect(myProfile.friends.toSet()).size
-
                         FoundUser(
-                            user = updatedUser,
+                            user = friend.copy(isYapActive = isInQuickList),
                             status = status,
-                            mutualFriendsCount = mutualCount,
+                            mutualFriendsCount = friend.friends.intersect(myProfile.friends.toSet()).size,
                             isInQuickList = isInQuickList
                         )
                     }
-
+                }.collect { updatedFriends ->
                     _state.update {
-                        it.copy(isLoading = false, friends = models)
+                        it.copy(isLoading = false, friends = updatedFriends)
                     }
-                } catch (e: Exception) {
-                    Log.e("UserFriendsVM", "Error mapping: ${e.message}")
-                    _state.update { it.copy(isLoading = false) }
                 }
-            }.collect()
+
+            } catch (e: Exception) {
+                Log.e("UserFriendsVM", "Critical error in observeUserFriends: ${e.message}")
+                _state.update { it.copy(isLoading = false) }
+            }
         }
     }
 
@@ -112,11 +125,38 @@ class UserFriendsViewModel(
         }
     }
 
-    fun sendFriendRequest(userId: String) {
-        // Логика отправки заявки
+    fun sendFriendRequest(friend: UserItem, onResult: (Int, Boolean) -> Unit) {
+        // 1. Проверяем сессионный кэш (чтобы не спамить запросами)
+        if (friendRequestRepository.sessionSentRequests.value.contains(friend.id)) return
+
+        viewModelScope.launch {
+            // Получаем текущий профиль из потока
+            val sender = userRepository.observeMyProfile().firstOrNull()
+
+            // ФИКС: Безопасная проверка отправителя
+            if (sender == null) {
+                onResult(R.string.error_generic, false)
+                return@launch
+            }
+
+            // Теперь sender гарантированно не null (smart cast к UserItem)
+            val result = friendRequestRepository.sendRequest(
+                receiverId = friend.id,
+                senderName = sender.name,
+                senderAvatar = sender.avatarUrl
+            )
+
+            result.onSuccess {
+                onResult(R.string.request_sent_success, true)
+            }.onFailure { exception ->
+                val errorRes = when {
+                    exception.message?.contains("already_sent") == true -> R.string.error_already_sent
+                    else -> R.string.no_internet
+                }
+                onResult(errorRes, false)
+            }
+        }
     }
 
-    fun sendYap(userId: String) {
-        // Логика отправки япа
-    }
+
 }

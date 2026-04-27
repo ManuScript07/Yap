@@ -213,6 +213,28 @@ class FriendRequestRepository(
         }
     }
 
+    suspend fun getAllSentPendingRequests(): Set<String> {
+        val currentUserId = auth.currentUser?.uid ?: return emptySet()
+        return try {
+            val snapshot = requestsCollection
+                .whereEqualTo("senderId", currentUserId)
+                .whereEqualTo("status", "pending")
+                .get()
+                .await()
+
+            val dbIds = snapshot.documents.mapNotNull { it.getString("receiverId") }.toSet()
+
+            // Синхронизируем RAM кэш с полученными данными из БД
+            if (dbIds.isNotEmpty()) {
+                sessionSentRequests.update { it + dbIds }
+            }
+            dbIds
+        } catch (e: Exception) {
+            Log.e("FriendRequestRepo", "Ошибка получения всех исходящих: ${e.message}")
+            emptySet()
+        }
+    }
+
     // 2. Отклонение заявки (Самое дешевое - просто удалить документ)
     suspend fun declineRequest(requestId: String): Result<Unit> {
         return try {
