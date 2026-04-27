@@ -312,25 +312,28 @@ class UserRepository(
     suspend fun removeFriend(friendId: String) {
         val uid = currentUserId ?: throw IllegalStateException("Пользователь не авторизован")
 
+        // 1. Сначала удаляем друга у себя (это приоритет №1)
         try {
-            val batch = firestore.batch()
-
-            val currentUserRef = usersCollection.document(uid)
-            val friendRef = usersCollection.document(friendId)
-
-            // 1. Удаляем друга у себя
-            batch.update(currentUserRef, "friends", FieldValue.arrayRemove(friendId))
-
-            // 2. Удаляем себя у друга
-            batch.update(friendRef, "friends", FieldValue.arrayRemove(uid))
-
-            // Выполняем обе операции одновременно
-            batch.commit().await()
-            Log.d("UserRepository", "Друг $friendId успешно удален у обоих пользователей")
-
+            usersCollection.document(uid)
+                .update("friends", FieldValue.arrayRemove(friendId))
+                .await()
+            Log.d("UserRepository", "Друг $friendId удален из твоего списка")
         } catch (e: Exception) {
-            Log.e("UserRepository", "Ошибка при удалении друга (Батч)", e)
-            throw e // Пробрасываем ошибку во ViewModel для отката UI
+            Log.e("UserRepository", "Не удалось удалить друга из своего списка", e)
+            throw e // Пробрасываем выше, чтобы ViewModel сделала Rollback
+        }
+
+        // 2. Пытаемся удалить себя у друга (приоритет №2)
+        // Делаем это в отдельном try-catch, чтобы не ломать основной процесс
+        try {
+            usersCollection.document(friendId)
+                .update("friends", FieldValue.arrayRemove(uid))
+                .await()
+            Log.d("UserRepository", "Ты успешно удален из списка пользователя $friendId")
+        } catch (e: Exception) {
+            // Мы не пробрасываем эту ошибку дальше!
+            // Если здесь упало (например, нет прав), для пользователя удаление всё равно прошло успешно.
+            Log.w("UserRepository", "Не удалось удалить себя у друга (возможно, нет прав или связи)", e)
         }
     }
 
