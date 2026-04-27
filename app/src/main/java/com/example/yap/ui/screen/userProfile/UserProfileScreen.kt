@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -30,9 +29,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -53,7 +50,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -62,9 +58,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.example.yap.R
-import com.example.yap.data.model.UserItem
 import com.example.yap.ui.components.FullScreenAvatarViewer
-import com.example.yap.ui.components.YapActionButton
 import com.example.yap.ui.screen.home.HomeViewModel
 import com.example.yap.ui.screen.home.YapType
 import com.example.yap.ui.theme.LocalAdditionColors
@@ -73,6 +67,8 @@ import com.example.yap.util.compose.SystemBarsIconsColor
 import com.example.yap.util.extension.SystemStatusPill
 import com.example.yap.util.fetchLocationAndSendDirectYap
 import com.example.yap.util.formatBirthday
+import androidx.compose.ui.platform.LocalResources
+import com.example.yap.ui.screen.addUser.AddFriendStatus
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -289,7 +285,7 @@ fun UserProfileScreen(
 
                                     val friendsCount = user.friends.size
 
-                                    val friendsText = LocalContext.current.resources.getQuantityString(
+                                    val friendsText = LocalResources.current.getQuantityString(
                                         R.plurals.friends_count,
                                         friendsCount,
                                         friendsCount
@@ -317,26 +313,53 @@ fun UserProfileScreen(
                                         )
                                     }
 
+                                    val addFriendStatus = state.addFriendStatus
+                                    val isCanAdd = addFriendStatus == AddFriendStatus.CAN_ADD && !state.isFriend
+
+                                    val (icon, text, contentColor) = when (addFriendStatus) {
+                                        AddFriendStatus.PENDING -> Triple(
+                                            R.drawable.waiting,
+                                            R.string.sending,
+                                            LocalAdditionColors.current.secondTextColor // Серый цвет во время отправки
+                                        )
+                                        AddFriendStatus.ALREADY_FRIEND -> Triple(
+                                            R.drawable.person_check_24,
+                                            R.string.already_friends,
+                                            LocalAdditionColors.current.secondTextColor // Серый цвет, если уже друзья
+                                        )
+                                        else -> Triple(
+                                            R.drawable.outline_person_add_32,
+                                            R.string.add,
+                                            Color.Black // Черный цвет, когда можно добавить
+                                        )
+                                    }
+
                                     Button(
                                         onClick = onAddFriendClick,
+                                        enabled = isCanAdd,
                                         colors = ButtonDefaults
                                             .buttonColors(
-                                                containerColor = LocalAdditionColors.current.darkYapButtonBackgroundColor),
+                                                containerColor = LocalAdditionColors.current.darkYapButtonBackgroundColor,
+                                                disabledContainerColor = LocalAdditionColors.current.disabledYabBackgroundColor
+
+                                            ),
                                         shape = RoundedCornerShape(50),
                                         modifier = Modifier
                                             .weight(1f)
                                             .height(52.dp * baseScale)
                                     ) {
+
+
                                         Icon(
-                                            painter = painterResource(id = R.drawable.outline_person_add_32),
+                                            painter = painterResource(id = icon),
                                             contentDescription = null,
-                                            tint = Color.Black,
+                                            tint = contentColor,
                                             modifier = Modifier.size(36.dp * baseScale)
                                         )
                                         Spacer(modifier = Modifier.width(14.dp))
                                         Text(
-                                            text = stringResource(R.string.add),
-                                            color = Color.Black,
+                                            text = stringResource(text),
+                                            color = contentColor,
                                             fontSize = 20.sp * baseScale,
                                             fontWeight = FontWeight.Bold
                                         )

@@ -82,5 +82,7 @@
     <string name="no_friends_yet">Ещё нет друзей?</string>
     <string name="use_search_or_press">Воспользуйся поиском\nили нажми</string>
     <string name="add">Добавить</string>
+    <string name="sending">Отправлено</string>
+    <string name="already_friends">В друзьях</string>
 </resources>
 

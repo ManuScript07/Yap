@@ -9,6 +9,7 @@ import com.example.yap.R
 import com.example.yap.data.model.UserItem
 import com.example.yap.data.repository.UserRepository
 import com.example.yap.ui.main.YapApp
+import com.example.yap.ui.screen.addUser.AddFriendStatus
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -63,19 +64,35 @@ class UserProfileViewModel(
                     return@launch
                 }
 
-                // 2. Слушаем наш профиль, чтобы понимать статус (в быстром списке ли он, в друзьях ли)
+                // 2. Слушаем наш профиль
                 userRepository.observeMyProfile().collectLatest { myProfile ->
                     if (myProfile != null) {
                         myUser = myProfile
                         val inQuickList = myProfile.quickList.contains(targetUserId)
                         val inFriends = myProfile.friends.contains(targetUserId)
 
+                        // --- ИНТЕГРАЦИЯ ЛОГИКИ СТАТУСА ---
+                        // Используем те же проверки, что и в поиске:
+                        val isAlreadySentByMe = friendRequestRepository.sessionSentRequests.value.contains(targetUserId)
+
+                        val status = when {
+                            inFriends -> AddFriendStatus.ALREADY_FRIEND
+                            isAlreadySentByMe -> AddFriendStatus.PENDING
+                            else -> {
+                                // Проверка через твой существующий метод в репозитории
+                                val isPending = friendRequestRepository.checkIsRequestPending(targetUserId)
+                                if (isPending) AddFriendStatus.PENDING else AddFriendStatus.CAN_ADD
+                            }
+                        }
+                        // ---------------------------------
+
                         _state.update {
                             it.copy(
                                 isLoading = false,
                                 user = targetUser,
                                 isUserInQuickList = inQuickList,
-                                isFriend = inFriends
+                                isFriend = inFriends,
+                                addFriendStatus = status // Присваиваем вычисленный статус
                             )
                         }
                     }
@@ -106,12 +123,15 @@ class UserProfileViewModel(
     }
 
     fun sendFriendRequest(onResult: (Int, Boolean) -> Unit) {
+        // 1. Проверки на возможность отправки
+        if (state.value.addFriendStatus != AddFriendStatus.CAN_ADD || state.value.isFriend) return
+
         val sender = myUser ?: return
 
-        // Если уже друзья — ничего не делаем
-        if (state.value.isFriend) return
-
         viewModelScope.launch {
+            // 2. Установка PENDING (блокирует кнопку визуально)
+            _state.update { it.copy(addFriendStatus = AddFriendStatus.PENDING) }
+
             val result = friendRequestRepository.sendRequest(
                 receiverId = targetUserId,
                 senderName = sender.name,
@@ -119,12 +139,18 @@ class UserProfileViewModel(
             )
 
             result.onSuccess {
+                // 3. Успех: меняем статус на ALREADY_FRIEND (или создай SENT, если нужно)
+                _state.update { it.copy(addFriendStatus = AddFriendStatus.ALREADY_FRIEND) }
                 onResult(R.string.request_sent_success, true)
             }.onFailure { exception ->
-                val errorRes = if (exception.message?.contains("permission") == true) {
-                    R.string.error_already_sent
-                } else {
-                    R.string.no_internet
+                // 4. Ошибка: возвращаем CAN_ADD, чтобы можно было попробовать снова
+                _state.update { it.copy(addFriendStatus = AddFriendStatus.CAN_ADD) }
+
+                val errorRes = when {
+                    exception.message?.contains("permission") == true -> R.string.error_already_sent
+                    // Здесь можно добавить проверку на "невозможно отправить"
+                    exception.message?.contains("not_found") == true -> R.string.error_generic
+                    else -> R.string.no_internet
                 }
                 onResult(errorRes, false)
             }
