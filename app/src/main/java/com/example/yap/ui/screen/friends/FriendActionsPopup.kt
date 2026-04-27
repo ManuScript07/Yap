@@ -133,7 +133,7 @@ fun FriendActionsPopup(
 }
 
 @Composable
-private fun ColumnScope.PopupActionRow(
+fun ColumnScope.PopupActionRow(
     iconRes: Int,
     text: String,
     baseScale: Float,

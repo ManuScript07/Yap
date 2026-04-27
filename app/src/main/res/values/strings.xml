@@ -71,6 +71,10 @@
         <item quantity="many">%1$d друзей</item>
         <item quantity="other">%1$d друзей</item>
     </plurals>
+
+    <string name="share">Поделиться</string>
+    <string name="share_profile_message">Давай япаться вместе! Код приглашения: %1$s \nИли ссылка: %2$s</string>
+
 "
     <string name="default_web_client_id">590396163030-vhbut7nnhjrig2pd09j3baq0ro1ganlo.apps.googleusercontent.com</string>
     <string name="add_friends">Добавить друзей</string>
@@ -84,5 +88,6 @@
     <string name="add">Добавить</string>
     <string name="sending">Отправлено</string>
     <string name="already_friends">В друзьях</string>
+    <string name="no_friends">нет друзей</string>
 </resources>
 

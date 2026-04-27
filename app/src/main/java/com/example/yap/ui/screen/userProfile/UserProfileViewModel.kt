@@ -10,12 +10,15 @@ import com.example.yap.data.model.UserItem
 import com.example.yap.data.repository.UserRepository
 import com.example.yap.ui.main.YapApp
 import com.example.yap.ui.screen.addUser.AddFriendStatus
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlin.coroutines.cancellation.CancellationException
 
 class UserProfileViewModel(
     application: Application,
@@ -26,6 +29,8 @@ class UserProfileViewModel(
     private val app = application as YapApp
     private val userRepository = app.userRepository
     private val friendRequestRepository = app.friendsRequestRepository
+
+    private var muteJob: Job? = null
 
 
     private val _state = MutableStateFlow(UserProfileUiState())
@@ -69,6 +74,7 @@ class UserProfileViewModel(
                     if (myProfile != null) {
                         myUser = myProfile
                         val inQuickList = myProfile.quickList.contains(targetUserId)
+                        val isUserMuted = myProfile.mutedUsers.contains(targetUserId)
                         val inFriends = myProfile.friends.contains(targetUserId)
 
                         // --- ИНТЕГРАЦИЯ ЛОГИКИ СТАТУСА ---
@@ -90,6 +96,7 @@ class UserProfileViewModel(
                             it.copy(
                                 isLoading = false,
                                 user = targetUser,
+                                isMuted = isUserMuted,
                                 isUserInQuickList = inQuickList,
                                 isFriend = inFriends,
                                 addFriendStatus = status // Присваиваем вычисленный статус
@@ -156,5 +163,52 @@ class UserProfileViewModel(
             }
         }
     }
+
+    fun toggleMute() {
+        val currentState = _state.value
+
+        val wasMuted = currentState.isMuted
+        _state.update { it.copy(isMuted = !wasMuted) }
+
+        muteJob?.cancel()
+        muteJob = viewModelScope.launch {
+            try {
+                delay(500)
+                userRepository.toggleMute(targetUserId, !wasMuted)
+            } catch (e: Exception) {
+                if (e !is CancellationException) {
+                    // Rollback при ошибке
+                    _state.update { it.copy(isMuted = wasMuted) }
+                }
+            }
+        }
+    }
+
+    fun removeFriend(onResult: (Boolean) -> Unit) {
+        // Optimistic Update: мгновенно делаем статус "CAN_ADD" и убираем из друзей
+        _state.update {
+            it.copy(
+                isFriend = false,
+                addFriendStatus = AddFriendStatus.CAN_ADD
+            )
+        }
+
+        viewModelScope.launch {
+            try {
+                userRepository.removeFriend(targetUserId)
+                onResult(true)
+            } catch (e: Exception) {
+                // Rollback при ошибке
+                _state.update {
+                    it.copy(
+                        isFriend = true,
+                        addFriendStatus = AddFriendStatus.ALREADY_FRIEND
+                    )
+                }
+                onResult(false)
+            }
+        }
+    }
+
 
 }

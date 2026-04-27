@@ -2,6 +2,8 @@ package com.example.yap.ui.navigation
 
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.Application
+import android.content.Intent
 import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.tween
@@ -25,6 +27,7 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableLongState
 import androidx.compose.runtime.collectAsState
@@ -35,12 +38,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
@@ -49,6 +55,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import androidx.navigation.navDeepLink
 import com.example.yap.ui.screen.ChatsScreen
 import com.example.yap.ui.screen.friends.FriendsScreen
 import com.example.yap.ui.screen.MapScreen
@@ -57,6 +64,8 @@ import com.example.yap.ui.screen.home.HomeScreen
 import com.example.yap.ui.screen.home.HomeViewModel
 import com.example.yap.ui.screen.notification.NotificationsScreen
 import com.example.yap.ui.screen.splash.SplashViewModel
+import com.example.yap.ui.screen.userFriends.UserFriendsScreen
+import com.example.yap.ui.screen.userFriends.UserFriendsViewModel
 import com.example.yap.ui.screen.userProfile.UserProfileScreen
 import com.example.yap.ui.theme.LocalAdditionColors
 import kotlinx.coroutines.delay
@@ -154,6 +163,27 @@ fun NavigationApp(splashViewModel: SplashViewModel = viewModel()) {
                 }
             }
         }
+    }
+
+    DisposableEffect(Unit) {
+        val activity = context as? Activity
+        val intentHandler = { intent: Intent ->
+            val data = intent.data // например, yap://profile/123
+            if (data != null && data.scheme == "yap") {
+                val userId = data.lastPathSegment
+                if (userId != null) {
+                    // Решаем, на какой вкладке открыть профиль.
+                    // Профессиональнее всего открывать на Home
+                    currentTab = Screen.Home
+                    navControllers[Screen.Home]?.navigate(AppDestinations.createProfileRoute(userId))
+                }
+            }
+        }
+
+        // Обрабатываем интент, если приложение было закрыто и открылось по ссылке
+        activity?.intent?.let { intentHandler(it) }
+
+        onDispose { }
     }
 
     Scaffold(
@@ -276,7 +306,9 @@ fun NavigationApp(splashViewModel: SplashViewModel = viewModel()) {
                             }
                             userProfileComposable(
                                 navController = navControllers[screen],
-                                homeViewModel = sharedViewModel)
+                                homeViewModel = sharedViewModel,
+                                navLockTime = navLockTime
+                            )
                         }
 
                         Screen.Chats -> {
@@ -330,7 +362,8 @@ fun NavigationApp(splashViewModel: SplashViewModel = viewModel()) {
 
                             userProfileComposable(
                                 navController = navControllers[screen],
-                                homeViewModel = sharedViewModel)
+                                homeViewModel = sharedViewModel,
+                                navLockTime = navLockTime)
                         }
 
                         Screen.Profile -> {
@@ -349,6 +382,9 @@ fun NavigationApp(splashViewModel: SplashViewModel = viewModel()) {
 
 @Composable
 fun ProfileScreen() {
+    Box(modifier = Modifier.fillMaxSize()){
+        Text("Profile")
+    }
     TODO("Not yet implemented")
 }
 
@@ -388,16 +424,56 @@ fun TabNavHost(
 
 fun NavGraphBuilder.userProfileComposable(
     navController: NavHostController?,
-    homeViewModel: HomeViewModel) {
+    homeViewModel: HomeViewModel,
+    navLockTime: MutableLongState // Добавляем lockState для safeNavigate
+) {
+    // ЭКРАН ПРОФИЛЯ
     composable(
         route = AppDestinations.USER_PROFILE_ROUTE,
-        arguments = listOf(navArgument("userId") { type = NavType.StringType })
+        arguments = listOf(navArgument("userId") { type = NavType.StringType }),
+        deepLinks = listOf(
+            navDeepLink { uriPattern = "https://yap.app/profile/{userId}" },
+            navDeepLink { uriPattern = "yap://profile/{userId}" } // Для надежности
+        )
     ) { backStackEntry ->
         val userId = backStackEntry.arguments?.getString("userId") ?: return@composable
         UserProfileScreen(
             userId = userId,
             onBack = { safePopBackStack(navController) },
-            homeViewModel = homeViewModel
+            homeViewModel = homeViewModel,
+            onNavigateToFriendsList = { targetUserId ->
+                safeNavigate(
+                    controller = navController,
+                    route = AppDestinations.createUserFriendsListRoute(targetUserId),
+                    lockState = navLockTime
+                )
+            }
+        )
+    }
+
+    // ЭКРАН СПИСКА ДРУЗЕЙ
+    composable(
+        route = AppDestinations.USER_FRIENDS_LIST,
+        arguments = listOf(navArgument("userId") { type = NavType.StringType })
+    ) { backStackEntry ->
+        val userId = backStackEntry.arguments?.getString("userId") ?: return@composable
+        val context = LocalContext.current
+
+        // Создаем ViewModel с фабрикой
+        val friendsVm: UserFriendsViewModel = viewModel(
+            factory = UserFriendsViewModel.provideFactory(context.applicationContext as Application, userId)
+        )
+
+        UserFriendsScreen(
+            viewModel = friendsVm,
+            onBack = { safePopBackStack(navController) },
+            onNavigateToProfile = { targetId ->
+                safeNavigate(
+                    controller = navController,
+                    route = AppDestinations.createProfileRoute(targetId),
+                    lockState = navLockTime
+                )
+            }
         )
     }
 }

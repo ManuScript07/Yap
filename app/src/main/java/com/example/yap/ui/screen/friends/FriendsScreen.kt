@@ -263,7 +263,7 @@ fun FriendsScreen(
                         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                             CircularProgressIndicator(
                                 modifier = Modifier.padding(16.dp),
-                                color = MaterialTheme.colorScheme.onSurface
+                                color = LocalAdditionColors.current.toggleButtonColor
                             )
                         }
                     }

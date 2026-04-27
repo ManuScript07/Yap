@@ -20,6 +20,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.example.yap.R
+import com.example.yap.ui.components.AddFriendActionButton
 import com.example.yap.ui.theme.LocalAdditionColors
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -31,43 +32,16 @@ fun FoundUserItem(
     onAddClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val additionColors = LocalAdditionColors.current
-    val isCanAdd = foundUser.status == AddFriendStatus.CAN_ADD
-
-    val backgroundColor = if (isCanAdd) additionColors.darkYapButtonBackgroundColor
-    else additionColors.disabledYabBackgroundColor
-    val iconTint = if (isCanAdd) Color.Black else additionColors.secondTextColor
-
     BaseUserItemRow(
         user = foundUser.user,
         baseScale = baseScale,
         onUserClick = onUserClick,
         modifier = modifier
     ) {
-        val interactionSource = remember { MutableInteractionSource() }
-        val rippleIndication = ripple(bounded = true)
-
-        Box(
-            modifier = Modifier
-                .height(32.dp * baseScale)
-                .width(64.dp * baseScale)
-                .clip(RoundedCornerShape(16.dp * baseScale))
-                .background(backgroundColor)
-                .combinedClickable(
-                    interactionSource = interactionSource,
-                    indication = if (isCanAdd) rippleIndication else null,
-                    onClick = {
-                        if (isCanAdd) onAddClick()
-                    },
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                painter = painterResource(id = R.drawable.outline_person_add_32),
-                contentDescription = "Add Friend Icon",
-                tint = iconTint,
-                modifier = Modifier.size(32.dp * baseScale)
-            )
-        }
+        AddFriendActionButton(
+            status = foundUser.status,
+            baseScale = baseScale,
+            onAddClick = onAddClick
+        )
     }
 }

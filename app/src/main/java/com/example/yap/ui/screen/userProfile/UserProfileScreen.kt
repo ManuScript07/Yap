@@ -1,6 +1,8 @@
 package com.example.yap.ui.screen.userProfile
 
+import android.annotation.SuppressLint
 import android.app.Application
+import android.content.Intent
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -40,7 +42,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -69,7 +73,10 @@ import com.example.yap.util.fetchLocationAndSendDirectYap
 import com.example.yap.util.formatBirthday
 import androidx.compose.ui.platform.LocalResources
 import com.example.yap.ui.screen.addUser.AddFriendStatus
+import com.example.yap.ui.screen.friends.RemoveFriendDialog
+import com.example.yap.util.compose.rememberLambda
 
+@SuppressLint("LocalContextGetResourceValueCall")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun UserProfileScreen(
@@ -81,7 +88,8 @@ fun UserProfileScreen(
             application = LocalContext.current.applicationContext as Application,
             userId = userId
         )
-    )
+    ),
+    onNavigateToFriendsList: (String) -> Unit,
 ) {
 
     SystemBarsIconsColor(isLight = true)
@@ -96,6 +104,26 @@ fun UserProfileScreen(
     val onBackClick = remember { { onBack() } }
 
     val isLocationEnabled by remember { derivedStateOf { homeState.isLocationEnabled } }
+
+    var isMenuVisible by remember { mutableStateOf(false) }
+    var showRemoveDialog by remember { mutableStateOf(false) }
+
+    val onShareProfile = {
+        val userId = state.user?.id ?: ""
+        val userCode = state.user?.userCode ?: "" // Твой код пользователя
+        val deepLinkUrl = "https://yap.app/profile/$userId"
+
+        // Подставляем оба параметра в строковый ресурс
+        val shareMessage = context.getString(R.string.share_profile_message, userCode, deepLinkUrl)
+
+        val sendIntent: Intent = Intent().apply {
+            action = Intent.ACTION_SEND
+            putExtra(Intent.EXTRA_TEXT, shareMessage)
+            type = "text/plain"
+        }
+
+        context.startActivity(Intent.createChooser(sendIntent, null))
+    }
 
     val onYapSend = remember(state.user, homeViewModel, context, isLocationEnabled) {
         {
@@ -132,7 +160,10 @@ fun UserProfileScreen(
         }
     }
 
-    val onOpenMenu = remember { { /* Логика открытия меню */ } }
+    val guardedNavigateToFriendsList = rememberLambda<String> { targetUserId ->
+        onNavigateToFriendsList(targetUserId)
+    }
+
 
     // --- ЦВЕТА И РЕСУРСЫ ---
     val startGradient = MaterialTheme.colorScheme.primary
@@ -158,9 +189,24 @@ fun UserProfileScreen(
         Box(modifier = Modifier.fillMaxSize().background(backgroundColor)) {
 
             if (state.isLoading) {
-                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                CircularProgressIndicator(
+                    modifier = Modifier.align(Alignment.Center),
+                    color = LocalAdditionColors.current.toggleButtonColor)
             } else if (state.error != null) {
-                Text(state.error!!, modifier = Modifier.align(Alignment.Center))
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 20.dp * baseScale),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = state.error ?: stringResource(R.string.error_generic),
+                        fontSize = 20.sp * baseScale,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        textAlign = TextAlign.Center
+                    )
+                }
             } else {
                 val user = state.user!!
 
@@ -285,13 +331,21 @@ fun UserProfileScreen(
 
                                     val friendsCount = user.friends.size
 
-                                    val friendsText = LocalResources.current.getQuantityString(
-                                        R.plurals.friends_count,
-                                        friendsCount,
-                                        friendsCount
-                                    )
+                                    val friendsText = if (friendsCount == 0) {
+                                        stringResource(R.string.no_friends)
+                                    } else {
+                                        LocalResources.current.getQuantityString(
+                                            R.plurals.friends_count,
+                                            friendsCount,
+                                            friendsCount
+                                        )
+                                    }
                                     Button(
-                                        onClick = { /* логика */ },
+                                        onClick = {
+                                            if (user.friends.isNotEmpty()) {
+                                                guardedNavigateToFriendsList(userId)
+                                            }
+                                        },
                                         colors = ButtonDefaults.buttonColors(
                                             containerColor = LocalAdditionColors.current.checkBackgroundColor
                                         ),
@@ -406,9 +460,39 @@ fun UserProfileScreen(
 
             UserProfileTopBar(
                 onBack = onBackClick,
-                onMenuClick = onOpenMenu,
+                onMenuClick = { isMenuVisible = true },
                 baseScale = baseScale
             )
+
+            ProfileActionsPopup(
+                isVisible = isMenuVisible,
+                isFriend = state.isFriend,
+                isMuted = state.isMuted,
+                onDismiss = { isMenuVisible = false },
+                onMuteClick = { viewModel.toggleMute() },
+                onShareClick = onShareProfile,
+                onDeleteClick = { showRemoveDialog = true } // Открываем диалог подтверждения
+            )
+
+            if (showRemoveDialog) {
+                RemoveFriendDialog(
+                    friendId = state.user?.id, // Передаем ID, просто чтобы компонент не ругался
+                    onConfirm = {
+                        viewModel.removeFriend { isSuccess ->
+                            if (!isSuccess) {
+                                // Здесь можно вызвать homeViewModel.showStatus для ошибки
+                                homeViewModel.showStatus(
+                                    resId = R.string.error_generic,
+                                    isSuccess = false
+                                )
+                            }
+                        }
+                        showRemoveDialog = false
+                    },
+                    onDismiss = { showRemoveDialog = false }
+                )
+            }
+
         }
         // В самом конце экрана
         if (state.isAvatarViewerOpen && state.user != null) {

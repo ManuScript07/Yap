@@ -8,6 +8,7 @@ data class UserProfileUiState(
     val user: UserItem? = null,
     val isUserInQuickList: Boolean = false,
     val isFriend: Boolean = false,
+    val isMuted: Boolean = false,
     val error: String? = null,
     val isAvatarViewerOpen: Boolean = false,
     val addFriendStatus: AddFriendStatus = AddFriendStatus.CAN_ADD
