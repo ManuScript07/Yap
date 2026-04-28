@@ -173,9 +173,8 @@ suspend fun startGoogleSignIn(context: Context): String? {
     val credentialManager = CredentialManager.create(context)
 
     val googleIdOption = GetGoogleIdOption.Builder()
-        .setFilterByAuthorizedAccounts(false) // Позволяет выбрать любой аккаунт
+        .setFilterByAuthorizedAccounts(false)
         .setServerClientId(context.getString(R.string.default_web_client_id))
-        // Отключаем авто-выбор для кнопки "Войти", чтобы диалог всегда появлялся явно и быстро
         .setAutoSelectEnabled(false)
         .build()
 

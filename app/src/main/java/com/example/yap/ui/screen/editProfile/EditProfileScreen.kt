@@ -3,10 +3,8 @@ package com.example.yap.ui.screen.editProfile
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
@@ -54,8 +52,6 @@ fun EditProfileScreen(
             )
         }
     ) { paddingValues ->
-        Box(modifier = Modifier.padding(paddingValues).fillMaxSize()) {
-
             ProfileRegistrationScreen(
                 initialName = currentUser.name,
                 initialUsername = currentUser.username,
@@ -75,7 +71,9 @@ fun EditProfileScreen(
                         currentUser = currentUser
                     )
                 },
-                isEdit = true
+                isEdit = true,
+                externalPadding = paddingValues
+
             )
 
             if (state is EditProfileViewModel.EditState.Loading) {
@@ -92,4 +90,3 @@ fun EditProfileScreen(
             }
         }
     }
-}

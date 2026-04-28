@@ -43,8 +43,6 @@ class RegistrationViewModel(application: Application) : AndroidViewModel(applica
 
                     val userId = currentUser.uid
 
-                    // 2. Запускаем загрузку фото и генерацию кода ПАРАЛЛЕЛЬНО (если это возможно)
-                    // Но так как код нужен для регистрации, оставим его здесь
 
                     var avatarUrl: String? = null
                     if (photoUri != null) {
@@ -95,7 +93,7 @@ class RegistrationViewModel(application: Application) : AndroidViewModel(applica
                     _registrationState.value = RegistrationState.Error(result.exceptionOrNull()?.message ?: "Ошибка")
                 }
 
-            } catch (e: TimeoutCancellationException) {
+            } catch (_: TimeoutCancellationException) {
                 _registrationState.value = RegistrationState.Error("Слишком долгое ожидание. Проверьте интернет.")
             } catch (e: Exception) {
                 _registrationState.value = RegistrationState.Error(e.localizedMessage ?: "Ошибка")
