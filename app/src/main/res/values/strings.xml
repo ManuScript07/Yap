@@ -98,5 +98,9 @@
     <string name="logout_action">Выйти</string>
     <string name="edit_profile_title">Редактирование</string>
     <string name="apply">Применить</string>
+    <string name="support_title">Помощь и поддержка</string>
+    <string name="support_description" />
+    <string name="support_have_problems">Возникли проблемы?</string>
+    <string name="support_text">Напишите нам в соцсетях или ознакомьтесь с проектом на GitHub</string>
 </resources>
 

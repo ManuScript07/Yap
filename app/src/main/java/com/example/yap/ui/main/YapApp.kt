@@ -101,24 +101,18 @@ class YapApp : Application(), ImageLoaderFactory {
 
     override fun newImageLoader(): ImageLoader {
         return ImageLoader.Builder(this)
-            // 1. ГЛАВНАЯ МАГИЯ: Игнорируем `max-age=3600` от Supabase!
-            // Теперь Coil будет вечно хранить картинку, пока ее не вытеснят новые.
             .respectCacheHeaders(false)
-
-            // 2. Настраиваем мощный кэш на диске (для работы оффлайн)
             .diskCache {
                 DiskCache.Builder()
                     .directory(cacheDir.resolve("yap_image_cache"))
-                    .maxSizePercent(0.05) // Отдаем 5% свободного места на устройстве под кэш
+                    .maxSizePercent(0.05)
                     .build()
             }
-            // 3. Настраиваем кэш в оперативной памяти (чтобы список не мерцал при скролле)
             .memoryCache {
                 MemoryCache.Builder(this)
-                    .maxSizePercent(0.2) // 20% доступной памяти приложению
+                    .maxSizePercent(0.2)
                     .build()
             }
-            // 4. Включаем плавное появление картинок глобально
             .crossfade(true)
             .build()
     }

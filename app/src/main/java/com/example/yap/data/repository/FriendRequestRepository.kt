@@ -10,6 +10,7 @@ import com.google.gson.Gson
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -270,8 +271,17 @@ class FriendRequestRepository(
         }
     }
 
-    fun clearCache() {
+    fun clearCacheOnLogout() {
         incomingRequestsCache.clear()
+        sessionSentRequests.value = emptySet()
+
+        try {
+            repositoryScope.coroutineContext.cancelChildren()
+        } catch (e: Exception) {
+            Log.e("FriendRequestRepo", "Ошибка при отмене задач: ${e.message}")
+        }
+
+        Log.d("FriendRequestRepo", "Репозиторий заявок полностью очищен")
     }
 
 }

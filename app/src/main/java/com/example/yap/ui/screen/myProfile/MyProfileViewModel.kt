@@ -7,6 +7,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.yap.ui.main.YapApp
+import com.google.firebase.auth.FirebaseAuth
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
@@ -17,9 +19,25 @@ class MyProfileViewModel(
     application: Application
 ) : AndroidViewModel(application) {
 
-    // Получаем зависимости через Application (как в твоих предыдущих примерах)
+
+
+    sealed class LogoutState {
+        object Idle : LogoutState()
+        object Loading : LogoutState()
+        object Success : LogoutState()
+        data class Error(val message: String) : LogoutState()
+    }
+
+
     private val app = application as YapApp
     private val userRepository = app.userRepository
+    private val chatRepository = app.chatRepository
+    private val userPrefs = app.userPrefs
+
+    private val friendRequestRepository = app.friendsRequestRepository
+
+    private val _logoutState = MutableStateFlow<LogoutState>(LogoutState.Idle)
+    val logoutState = _logoutState.asStateFlow()
 
     private val _state = MutableStateFlow(MyProfileUiState())
     val state = _state.asStateFlow()
@@ -104,13 +122,35 @@ class MyProfileViewModel(
 
 
     fun logout() {
+        // Защита от двойного клика
+        if (_logoutState.value is LogoutState.Loading) return
+
         viewModelScope.launch {
+            _logoutState.value = LogoutState.Loading
+
             try {
+                chatRepository.clearCacheOnLogout()
+                friendRequestRepository.clearCacheOnLogout()
+                userRepository.clearCacheOnLogout()
+                userPrefs.clearOnLogout()
+
+                FirebaseAuth.getInstance().signOut()
+
+
+
+                delay(500)
+
+                _logoutState.value = LogoutState.Success
 
             } catch (e: Exception) {
                 Log.e("MyProfileVM", "Logout failed: ${e.message}")
+                _logoutState.value = LogoutState.Error("Ошибка при выходе: ${e.localizedMessage}")
             }
         }
+    }
+
+    fun resetLogoutState() {
+        _logoutState.value = LogoutState.Idle
     }
 
 }

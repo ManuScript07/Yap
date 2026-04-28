@@ -11,8 +11,6 @@ sealed class Screen(val route: String,
 
     object Home : Screen("главная", R.drawable.yap2, R.drawable.yap2, false)
 
-    object Chats : Screen("чатикс", R.drawable.outline_sms_24, R.drawable.baseline_chat_24)
-    object Map : Screen("карта", R.drawable.outline_map_24, R.drawable.baseline_map_24)
     object Friends : Screen("друны", R.drawable.outline_smile_24,R.drawable.friends_24)
     object Profile : Screen("акк", R.drawable.outline_person_24,R.drawable.baseline_person_24)
 }
@@ -24,6 +22,7 @@ object AppDestinations {
     const val SEARCH_FRIENDS = "friends/search"
     const val USER_FRIENDS_LIST = "user_friends_list/{userId}"
     const val EDIT_PROFILE = "profile/edit"
+    const val SUPPORT = "profile/support"
 
     fun createProfileRoute(userId: String): String {
         return "user_profile/$userId"

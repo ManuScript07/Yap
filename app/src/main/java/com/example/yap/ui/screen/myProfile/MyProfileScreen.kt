@@ -1,8 +1,10 @@
 package com.example.yap.ui.screen.myProfile
 
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.app.Application
 import android.content.Intent
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -36,6 +38,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -46,6 +49,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -59,6 +63,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.example.yap.R
 import com.example.yap.ui.components.FullScreenAvatarViewer
+import com.example.yap.ui.main.MainActivity
 import com.example.yap.ui.screen.home.HomeViewModel
 import com.example.yap.ui.screen.userProfile.ProfileInfoItem
 import com.example.yap.ui.theme.LocalAdditionColors
@@ -71,14 +76,13 @@ import com.example.yap.util.formatBirthday
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MyProfileScreen(
-    homeViewModel: HomeViewModel,
     viewModel: MyProfileViewModel = viewModel(
         factory = MyProfileViewModel.provideFactory(
             LocalContext.current.applicationContext as Application
         )
     ),
     onNavigateToEditProfile: () -> Unit,
-//    onSupportClick: () -> Unit,
+    onSupportClick: () -> Unit,
 ) {
     SystemBarsIconsColor(isLight = true)
 
@@ -110,6 +114,10 @@ fun MyProfileScreen(
         onNavigateToEditProfile()
     }
 
+    val guardedOnSupportClick = rememberLambda<Unit> {
+        onSupportClick()
+    }
+
     val startGradient = MaterialTheme.colorScheme.primary
     val centerGradient = LocalAdditionColors.current.centerGradientColor
     val endGradient = LocalAdditionColors.current.pinkForGradientColor
@@ -126,6 +134,30 @@ fun MyProfileScreen(
 
     val backgroundColor = LocalAdditionColors.current.speedBottomDialog
     val cardColor = LocalAdditionColors.current.descriptionSurfaceColor
+
+    val logoutState by viewModel.logoutState.collectAsState()
+
+    LaunchedEffect(logoutState) {
+        when (logoutState) {
+            is MyProfileViewModel.LogoutState.Success -> {
+                viewModel.resetLogoutState()
+
+                // Идеальный паттерн для Compose: очищаем весь стек навигации
+                // и перезапускаем приложение с чистого листа
+                val intent = Intent(context, MainActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                }
+                context.startActivity(intent)
+                (context as? Activity)?.finish()
+            }
+            is MyProfileViewModel.LogoutState.Error -> {
+                val errorMessage = (logoutState as MyProfileViewModel.LogoutState.Error).message
+                Toast.makeText(context, errorMessage, Toast.LENGTH_SHORT).show()
+                viewModel.resetLogoutState()
+            }
+            else -> {}
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Box(modifier = Modifier.fillMaxSize().background(backgroundColor)) {
@@ -290,7 +322,7 @@ fun MyProfileScreen(
                                 ) {
                                     // Кнопка Поддержка
                                     Button(
-                                        onClick = {} /*onSupportClick*/,
+                                        onClick = { guardedOnSupportClick(Unit) },
                                         colors = ButtonDefaults.buttonColors(
                                             containerColor = LocalAdditionColors.current.checkBackgroundColor
                                         ),
@@ -401,6 +433,20 @@ fun MyProfileScreen(
                 baseScale = baseScale
             )
         }
+        if (logoutState is MyProfileViewModel.LogoutState.Loading) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.6f))
+                    .pointerInput(Unit) {},
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+
     }
 }
 

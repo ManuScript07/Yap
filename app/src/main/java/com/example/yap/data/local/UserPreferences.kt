@@ -23,9 +23,11 @@ class UserPreferences(private val context: Context) {
         val VOICE_CACHE_MAP = stringPreferencesKey("voice_cache_map")
         val TRANSCRIPTIONS_CACHE = stringPreferencesKey("transcriptions_cache")
         val LAST_FCM_TOKEN = stringPreferencesKey("last_fcm_token")
+        val LAST_FCM_TOKEN_USER_ID = stringPreferencesKey("last_fcm_token_user_id")
     }
 
 
+    val lastUserIdWithFcmToken: Flow<String?> = context.dataStore.data.map { it[Keys.LAST_FCM_TOKEN_USER_ID] }
 
     val energyData: Flow<Pair<Int?, Long?>> = context.dataStore.data.map { prefs ->
         Pair(prefs[Keys.CURRENT_STARS], prefs[Keys.LAST_EXIT_TIME])
@@ -127,5 +129,29 @@ class UserPreferences(private val context: Context) {
             prefs[Keys.LAST_FCM_TOKEN] = token
         }
     }
+
+    suspend fun clearOnLogout() {
+        context.dataStore.edit { prefs ->
+            val fcmToken = prefs[Keys.LAST_FCM_TOKEN]
+
+            // Полностью удаляем все данные
+            prefs.clear()
+
+            // Возвращаем токен на место
+            if (fcmToken != null) {
+                prefs[Keys.LAST_FCM_TOKEN] = fcmToken
+            }
+
+            Log.d("UserPrefs", "DataStore cleared (except FCM token)")
+        }
+    }
+
+    suspend fun updateLastFcmToken(token: String, userId: String) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.LAST_FCM_TOKEN] = token
+            prefs[Keys.LAST_FCM_TOKEN_USER_ID] = userId
+        }
+    }
+
 
 }

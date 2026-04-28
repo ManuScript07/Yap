@@ -53,9 +53,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.navigation.navDeepLink
-import com.example.yap.ui.screen.ChatsScreen
 import com.example.yap.ui.screen.friends.FriendsScreen
-import com.example.yap.ui.screen.MapScreen
 import com.example.yap.ui.screen.addUser.SearchFriendsScreen
 import com.example.yap.ui.screen.editProfile.EditProfileScreen
 import com.example.yap.ui.screen.home.HomeScreen
@@ -64,6 +62,7 @@ import com.example.yap.ui.screen.myProfile.MyProfileScreen
 import com.example.yap.ui.screen.myProfile.MyProfileViewModel
 import com.example.yap.ui.screen.notification.NotificationsScreen
 import com.example.yap.ui.screen.splash.SplashViewModel
+import com.example.yap.ui.screen.support.SupportScreen
 import com.example.yap.ui.screen.userFriends.UserFriendsScreen
 import com.example.yap.ui.screen.userFriends.UserFriendsViewModel
 import com.example.yap.ui.screen.userProfile.UserProfileScreen
@@ -77,7 +76,7 @@ import kotlinx.coroutines.yield
 fun NavigationApp(splashViewModel: SplashViewModel = viewModel()) {
 
 
-    val bottomItems = listOf(Screen.Chats, Screen.Map, Screen.Home, Screen.Friends, Screen.Profile) // Порядок
+    val bottomItems = listOf(Screen.Friends, Screen.Home, Screen.Profile) // Порядок
 
     // NavController для каждой вкладки
     val navControllers: Map<Screen, NavHostController> = bottomItems.associateWith { rememberNavController() }
@@ -93,8 +92,6 @@ fun NavigationApp(splashViewModel: SplashViewModel = viewModel()) {
        restore = { route ->
             when (route) {
                 Screen.Home.route -> Screen.Home
-                Screen.Chats.route -> Screen.Chats
-                Screen.Map.route -> Screen.Map
                 Screen.Friends.route -> Screen.Friends
                 Screen.Profile.route -> Screen.Profile
                 else -> Screen.Home
@@ -311,19 +308,6 @@ fun NavigationApp(splashViewModel: SplashViewModel = viewModel()) {
                             )
                         }
 
-                        Screen.Chats -> {
-                            composable(Screen.Chats.route) {
-                                ChatsScreen(
-
-                                )
-                            }
-                        }
-
-                        Screen.Map -> {
-                            composable(Screen.Map.route) {
-                                MapScreen()
-                            }
-                        }
 
                         Screen.Friends -> {
                             composable(Screen.Friends.route) {
@@ -369,13 +353,15 @@ fun NavigationApp(splashViewModel: SplashViewModel = viewModel()) {
                         Screen.Profile -> {
                             composable(Screen.Profile.route) {
                                 MyProfileScreen(
-                                    homeViewModel = sharedViewModel,
                                     onNavigateToEditProfile = {
                                         safeNavigate(
                                             controller = navControllers[screen],
                                             route = AppDestinations.EDIT_PROFILE,
                                             lockState = navLockTime
                                         )
+                                    },
+                                    onSupportClick = {
+                                        safeNavigate(navControllers[screen], AppDestinations.SUPPORT, navLockTime)
                                     }
                                 )
                             }
@@ -392,6 +378,12 @@ fun NavigationApp(splashViewModel: SplashViewModel = viewModel()) {
                                         onBack = { safePopBackStack(navControllers[screen]) }
                                     )
                                 }
+                            }
+
+                            composable(AppDestinations.SUPPORT) {
+                                SupportScreen(
+                                    onBack = { safePopBackStack(navControllers[screen]) },
+                                )
                             }
                         }
 

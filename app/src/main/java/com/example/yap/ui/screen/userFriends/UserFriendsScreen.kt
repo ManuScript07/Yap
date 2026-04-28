@@ -147,12 +147,12 @@ fun UserFriendsScreen(
                     }
                 }
             }
-            SystemStatusPill(
-                statusResource = homeState.systemStatusResource,
-                statusMessage = homeState.systemStatusMessage,
-                statusId = homeState.statusId,
-                isSuccess = homeState.isStatusSuccess
-            )
         }
+        SystemStatusPill(
+            statusResource = homeState.systemStatusResource,
+            statusMessage = homeState.systemStatusMessage,
+            statusId = homeState.statusId,
+            isSuccess = homeState.isStatusSuccess
+        )
     }
 }

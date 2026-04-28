@@ -25,6 +25,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -93,19 +94,19 @@ class UserRepository(
         try {
             // 1. Получаем свежий токен от сервиса Google
             val token = FirebaseMessaging.getInstance().token.await()
-
-            // 2. Достаем последний сохраненный токен из DataStore (читаем первое значение из Flow)
+            val lastUserIdWithToken = userPrefs.lastUserIdWithFcmToken.first()
             val lastSavedToken = userPrefs.lastFcmToken.first()
 
+
             // 3. Сравниваем
-            if (token != lastSavedToken) {
+            if (token != lastSavedToken || userId != lastUserIdWithToken) {
                 // Обновляем в Firestore
                 usersCollection.document(userId)
                     .update("fcmToken", token)
                     .await()
 
                 // Сохраняем в DataStore, чтобы не частить с запросами
-                userPrefs.updateLastFcmToken(token)
+                userPrefs.updateLastFcmToken(token, userId)
 
                 Log.d("FCM_TEST", "Token updated in Cloud and Local: $token")
             }
@@ -566,6 +567,24 @@ class UserRepository(
         }
     }
 
+
+    fun clearCacheOnLogout() {
+        profileCache.value = emptyMap()
+        inviteCodeCache.clear()
+
+        try {
+            repositoryScope.coroutineContext.cancelChildren()
+        } catch (e: Exception) {
+            Log.e("UserRepository", "Error cancelling jobs: ${e.message}")
+        }
+
+
+        if (fetchMutex.isLocked) {
+
+        }
+
+        Log.d("UserRepository", "♻️ UserRepository кэш и задачи полностью очищены")
+    }
 
 
 

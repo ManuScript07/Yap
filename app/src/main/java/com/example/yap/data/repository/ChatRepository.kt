@@ -11,7 +11,6 @@ import kotlinx.coroutines.flow.callbackFlow
 import com.google.firebase.firestore.Query
 import com.google.gson.Gson
 import io.github.jan.supabase.SupabaseClient
-import io.github.jan.supabase.createSupabaseClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -20,8 +19,8 @@ import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.tasks.await
 import java.io.File
 import java.util.UUID
-import io.github.jan.supabase.storage.Storage
 import io.github.jan.supabase.storage.storage
+import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -224,8 +223,15 @@ class ChatRepository(
     }
 
     fun clearCacheOnLogout() {
-        firestore.terminate()
-        firestore.clearPersistence()
+        messagesCache.clear()
+
+        repositoryScope.coroutineContext.cancelChildren()
+        try {
+            firestore.terminate()
+            firestore.clearPersistence()
+        } catch (e: Exception) {
+            Log.e("ChatRepository", "Ошибка очистки Firestore: ${e.message}")
+        }
     }
 
 

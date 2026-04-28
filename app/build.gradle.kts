@@ -32,6 +32,7 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
+//            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -51,7 +52,6 @@ android {
 }
 
 dependencies {
-
     implementation("io.coil-kt:coil-compose:2.5.0")
 
     // BOM позволяет не указывать версию для каждого отдельного модуля
@@ -126,6 +126,8 @@ dependencies {
     implementation(libs.androidx.compose.remote.creation.core)
     implementation(libs.androidx.foundation)
     implementation(libs.androidx.compose.runtime)
+    implementation(libs.google.firebase.crashlytics.buildtools)
+    implementation(libs.firebase.appcheck.debug)
 
 
     // Тесты и дебаг

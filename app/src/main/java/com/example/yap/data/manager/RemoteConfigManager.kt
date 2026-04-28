@@ -1,5 +1,6 @@
 package com.example.yap.data.manager
 
+import android.util.Log
 import com.example.yap.R
 import com.google.firebase.remoteconfig.FirebaseRemoteConfig
 import com.google.firebase.remoteconfig.FirebaseRemoteConfigSettings
@@ -23,8 +24,8 @@ class RemoteConfigManager {
         remoteConfig.fetchAndActivate()
             .addOnCompleteListener { task ->
                 if (task.isSuccessful) {
+                    Log.d("RemoteConfig", "Получено")
                     val updated = task.result
-                    // Логируем для отладки
                     println("Remote Config updated: $updated")
                 }
             }
@@ -42,4 +43,7 @@ class RemoteConfigManager {
     val supabaseAnonKey: String get() = remoteConfig.getString("supabase_anon_key")
 
     val groqApiKey: String get() = remoteConfig.getString("groq_api_key")
+    val telegramUrl: String get() = remoteConfig.getString("support_telegram")
+    val githubUrl: String get() = remoteConfig.getString("support_github")
+
 }
