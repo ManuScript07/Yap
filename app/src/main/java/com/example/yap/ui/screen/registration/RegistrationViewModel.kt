@@ -29,7 +29,8 @@ class RegistrationViewModel(application: Application) : AndroidViewModel(applica
         dob: Long?,
         showOnlyDay: Boolean,
         bio: String,
-        photoUri: Uri?
+        photoUri: Uri?,
+        isPhotoRemoved: Boolean
     ) {
         viewModelScope.launch {
             _registrationState.value = RegistrationState.Loading
@@ -67,19 +68,18 @@ class RegistrationViewModel(application: Application) : AndroidViewModel(applica
                     Log.d("RegLog", "Code generated: $userCode")
 
                     val userData = mapOf(
-                        "name" to name,
-                        "username" to username,
-                        "userCode" to userCode,
+                        "name" to name.trim(),
+                        "username" to username.trim(),
+                        "userCode" to userCode.trim(),
                         "dobTimestamp" to dob,
                         "showOnlyDay" to showOnlyDay,
-                        "bio" to bio,
+                        "bio" to bio.trim(),
                         "avatarUrl" to avatarUrl
                     )
 
                     Log.d("RegLog", "Transaction started...")
 
-                    // 3. Выполняем запись с таймаутом
-                    withTimeout(15000) { // 15 секунд на всё про всё
+                    withTimeout(15000) {
                         repository.completeUserRegistration(userId, currentUser.email, userData)
 
                     }

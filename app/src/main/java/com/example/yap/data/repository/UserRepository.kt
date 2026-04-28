@@ -492,6 +492,17 @@ class UserRepository(
         }
     }
 
+    suspend fun updateUserProfile(userId: String, updates: Map<String, Any?>): Result<Unit> {
+        return withContext(Dispatchers.IO) {
+            try {
+                usersCollection.document(userId).update(updates).await()
+                Result.success(Unit)
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+    }
+
     suspend fun generateUniqueUserCode(): Result<String> {
         return withContext(Dispatchers.IO) {
             val chars = "abcdefghijklmnopqrstuvwxyz0123456789"

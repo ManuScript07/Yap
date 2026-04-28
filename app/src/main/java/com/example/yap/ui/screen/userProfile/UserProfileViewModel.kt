@@ -57,6 +57,16 @@ class UserProfileViewModel(
 
     private fun loadUserProfile() {
         viewModelScope.launch {
+            val myId = userRepository.currentUserId
+            if (targetUserId == myId) {
+                _state.update {
+                    it.copy(
+                        isLoading = false,
+                        error = "Это ваш профиль. Используйте вкладку профиля для просмотра."
+                    )
+                }
+                return@launch
+            }
             _state.update { it.copy(isLoading = true, error = null) }
 
             try {

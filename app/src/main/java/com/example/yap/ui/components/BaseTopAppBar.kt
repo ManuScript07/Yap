@@ -33,6 +33,7 @@ fun BaseTopAppBar(
 ) {
     val baseScale = LocalBaseScale.current
 
+
     TopAppBar(
         title = {
             Text(

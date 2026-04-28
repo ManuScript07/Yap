@@ -235,12 +235,12 @@ fun UserProfileScreen(
                                     .padding(horizontal = 14.dp * baseScale),
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                Spacer(modifier = Modifier.height(80.dp * baseScale))
+                                Spacer(modifier = Modifier.height(84.dp * baseScale))
 
                                 Text(
                                     text = user.name,
-                                    fontSize = 32.sp * baseScale,
-                                    fontWeight = FontWeight.Medium,
+                                    fontSize = 24.sp * baseScale,
+                                    fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
 
@@ -262,7 +262,7 @@ fun UserProfileScreen(
                                     Button(
                                         onClick = { onToggleQuickList() },
                                         colors = ButtonDefaults.buttonColors(
-                                            containerColor = LocalAdditionColors.current.toggleButtonColor
+                                            containerColor = LocalAdditionColors.current.purpleButtonColor
                                         ),
                                         shape = RoundedCornerShape(20.dp * baseScale),
                                         modifier = Modifier
@@ -343,11 +343,9 @@ fun UserProfileScreen(
                                             containerColor = LocalAdditionColors.current.checkBackgroundColor
                                         ),
                                         shape = RoundedCornerShape(20.dp * baseScale),
-                                        // Убрали width(), добавили минимальную ширину, чтобы кнопка не была слишком узкой при 0-1 друге
                                         modifier = Modifier
                                             .widthIn(min = 120.dp * baseScale)
                                             .height(52.dp * baseScale),
-                                        // Добавляем внутренние отступы, чтобы текст не касался краев
                                         contentPadding = PaddingValues(horizontal = 20.dp * baseScale)
                                     ) {
                                         Text(
@@ -457,7 +455,11 @@ fun UserProfileScreen(
 
             UserProfileTopBar(
                 onBack = onBackClick,
-                onMenuClick = { isMenuVisible = true },
+                onMenuClick = if (state.error == null && !state.isLoading) {
+                    { isMenuVisible = true }
+                } else {
+                    null
+                },
                 baseScale = baseScale
             )
 
@@ -569,20 +571,19 @@ fun ProfileYapButton(
 @Composable
 fun UserProfileTopBar(
     onBack: () -> Unit,
-    onMenuClick: () -> Unit,
+    onMenuClick: (() -> Unit)? = null,
     baseScale: Float
 ) {
     TopAppBar(
-        title = { }, // Заголовок пустой, так как имя пользователя находится в карточке
+        title = { },
         navigationIcon = {
-            // Используем логику из твоего BaseTopAppBar (без стандартного риппла)
             Box(
                 modifier = Modifier
                     .minimumInteractiveComponentSize()
                     .clickable(
                         onClick = onBack,
                         interactionSource = remember { MutableInteractionSource() },
-                        indication = null // Убираем стандартный круг нажатия
+                        indication = null
                     ),
                 contentAlignment = Alignment.Center
             ) {
@@ -595,28 +596,29 @@ fun UserProfileTopBar(
             }
         },
         actions = {
-            // Кнопка меню в том же стиле
-            Box(
-                modifier = Modifier
-                    .minimumInteractiveComponentSize()
-                    .padding(end = 8.dp * baseScale)
-                    .clickable(
-                        onClick = onMenuClick,
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    painter = painterResource(id = R.drawable.more_vert),
-                    contentDescription = "Меню",
-                    modifier = Modifier.size(32.dp * baseScale),
-                    tint = Color.Black
-                )
+            if (onMenuClick != null) {
+                Box(
+                    modifier = Modifier
+                        .minimumInteractiveComponentSize()
+                        .padding(end = 8.dp * baseScale)
+                        .clickable(
+                            onClick = onMenuClick,
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.more_vert),
+                        contentDescription = "Меню",
+                        modifier = Modifier.size(32.dp * baseScale),
+                        tint = Color.Black
+                    )
+                }
             }
         },
         colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = Color.Transparent, // Важно: прозрачный фон
+            containerColor = Color.Transparent,
             scrolledContainerColor = Color.Transparent,
             navigationIconContentColor = Color.Black,
             actionIconContentColor = Color.Black

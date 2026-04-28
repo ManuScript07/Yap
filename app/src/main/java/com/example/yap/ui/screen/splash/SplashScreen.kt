@@ -89,10 +89,10 @@ fun AppEntryWithSplash(
                 Box(modifier = Modifier.fillMaxSize()) {
                     ProfileRegistrationScreen(
                         initialName = initialNameForRegistration,
-                        onComplete = { name, username, dob, showOnlyDay, bio, photoUri ->
+                        onComplete = { name, username, dob, showOnlyDay, bio, photoUri, isRemoved ->
                             // Запускаем процесс регистрации во ViewModel
                             registrationViewModel.completeRegistration(
-                                name, username, dob, showOnlyDay, bio, photoUri
+                                name, username, dob, showOnlyDay, bio, photoUri, isRemoved
                             )
                         }
                     )

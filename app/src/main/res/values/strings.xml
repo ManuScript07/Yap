@@ -90,5 +90,13 @@
     <string name="already_friends">В друзьях</string>
     <string name="no_friends">нет друзей</string>
     <string name="no_common_friends">У вас нет общих друзей</string>
+    <string name="edit_profile">Редактировать профиль</string>
+    <string name="support">Поддержка</string>
+    <string name="logout">Выйти</string>
+    <string name="logout_title">Вы действительно хотите выйти?</string>
+    <string name="logout_confirm_message">После выхода данные аккаунта сохранятся, но вам придётся повторно выполнить вход</string>
+    <string name="logout_action">Выйти</string>
+    <string name="edit_profile_title">Редактирование</string>
+    <string name="apply">Применить</string>
 </resources>
 

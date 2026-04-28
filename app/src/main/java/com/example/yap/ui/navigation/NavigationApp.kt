@@ -38,15 +38,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
@@ -60,9 +57,11 @@ import com.example.yap.ui.screen.ChatsScreen
 import com.example.yap.ui.screen.friends.FriendsScreen
 import com.example.yap.ui.screen.MapScreen
 import com.example.yap.ui.screen.addUser.SearchFriendsScreen
+import com.example.yap.ui.screen.editProfile.EditProfileScreen
 import com.example.yap.ui.screen.home.HomeScreen
 import com.example.yap.ui.screen.home.HomeViewModel
-import com.example.yap.ui.screen.myProfileScreen.MyProfileScreen
+import com.example.yap.ui.screen.myProfile.MyProfileScreen
+import com.example.yap.ui.screen.myProfile.MyProfileViewModel
 import com.example.yap.ui.screen.notification.NotificationsScreen
 import com.example.yap.ui.screen.splash.SplashViewModel
 import com.example.yap.ui.screen.userFriends.UserFriendsScreen
@@ -369,10 +368,30 @@ fun NavigationApp(splashViewModel: SplashViewModel = viewModel()) {
 
                         Screen.Profile -> {
                             composable(Screen.Profile.route) {
-                                // Здесь мы вызываем полноценный экран профиля
                                 MyProfileScreen(
-                                    homeViewModel = sharedViewModel
+                                    homeViewModel = sharedViewModel,
+                                    onNavigateToEditProfile = {
+                                        safeNavigate(
+                                            controller = navControllers[screen],
+                                            route = AppDestinations.EDIT_PROFILE,
+                                            lockState = navLockTime
+                                        )
+                                    }
                                 )
+                            }
+
+                            composable(AppDestinations.EDIT_PROFILE) {
+                                val profileViewModel: MyProfileViewModel = viewModel(
+                                    factory = MyProfileViewModel.provideFactory(LocalContext.current.applicationContext as Application)
+                                )
+                                val profileState by profileViewModel.state.collectAsState()
+
+                                profileState.user?.let { currentUser ->
+                                    EditProfileScreen(
+                                        currentUser = currentUser,
+                                        onBack = { safePopBackStack(navControllers[screen]) }
+                                    )
+                                }
                             }
                         }
 

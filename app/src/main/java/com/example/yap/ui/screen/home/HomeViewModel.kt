@@ -197,23 +197,6 @@ class HomeViewModel(
         }
     }
 
-
-//    fun addUser() {
-//        _state.update { currentState ->
-//            if (currentState.users.size >= 20) return@update currentState
-//
-//            val newId = (currentState.users.maxOfOrNull { it.id } ?: 0).toString() + 1
-//            val randomAvatar = listOf(R.drawable.avatar_1, R.drawable.avatar_2, R.drawable.avatar_3, R.drawable.avatar_4).random()
-//            val newUser = UserItem(newId, "User $newId", false, randomAvatar)
-//
-//            val updatedList = currentState.users + newUser
-//            saveUsersToStore(updatedList)
-//
-//            currentState.copy(users = updatedList)
-//        }
-//        updateStateWithPrice { it }
-//    }
-
     fun addUser() {
         viewModelScope.launch {
             val currentState = _state.value
@@ -473,10 +456,13 @@ class HomeViewModel(
                     startEnergyRegeneration(regenDelay)
                 }
 
-                val activeReceivers = state.users.filter { it.isYapActive }
-                if (activeReceivers.isEmpty()) return@launch
 
                 val senderId = FirebaseAuth.getInstance().currentUser?.uid ?: return@launch
+
+                val activeReceivers = state.users.filter { it.isYapActive && it.id != senderId}
+                if (activeReceivers.isEmpty()) return@launch
+
+
 
                 Log.d("API1", "Receiver ID: $activeReceivers")
                 val messageToSend = MessageEntity(

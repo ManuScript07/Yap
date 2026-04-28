@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
@@ -95,17 +96,24 @@ val UriSaver = Saver<Uri?, String>(
 @Composable
 fun ProfileRegistrationScreen(
     initialName: String,
-    onComplete: (name: String, username: String, dob: Long?, showOnlyDay: Boolean, bio: String, photoUri: Uri?) -> Unit
+    initialUsername: String = "",
+    initialBio: String = "",
+    initialDob: Long? = null,
+    initialShowOnlyDay: Boolean = false,
+    initialAvatarUrl: String? = null,
+    onComplete: (name: String, username: String, dob: Long?, showOnlyDay: Boolean, bio: String, photoUri: Uri?, isPhotoRemoved: Boolean) -> Unit,
+    isEdit: Boolean = false
 ) {
     SystemBarsIconsColor(isLight = true)
-    // Состояния формы
+
+    var isInitialImageRemoved by rememberSaveable { mutableStateOf(false) }
     var photoUri by rememberSaveable(stateSaver = UriSaver) { mutableStateOf(null) }
 
     var name by rememberSaveable { mutableStateOf(initialName) }
-    var username by rememberSaveable { mutableStateOf("") }
-    var dobTimestamp by rememberSaveable { mutableStateOf<Long?>(null) }
-    var showOnlyDay by rememberSaveable { mutableStateOf(false) }
-    var bio by rememberSaveable { mutableStateOf("") }
+    var username by rememberSaveable { mutableStateOf(initialUsername) }
+    var dobTimestamp by rememberSaveable { mutableStateOf<Long?>(initialDob) }
+    var showOnlyDay by rememberSaveable { mutableStateOf(initialShowOnlyDay) }
+    var bio by rememberSaveable { mutableStateOf(initialBio) }
 
     var showDatePicker by rememberSaveable { mutableStateOf(false) }
 
@@ -113,11 +121,15 @@ fun ProfileRegistrationScreen(
 
     val baseScale = LocalBaseScale.current
 
-    // Лаунчер для выбора фото из галереи
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri ->
-        if (uri != null) photoUri = uri
+        if (uri != null) {
+            photoUri = uri
+            // Как только выбрали новое фото, флаг удаления старого нам больше не мешает,
+            // так как photoUri имеет приоритет в отображении.
+            isInitialImageRemoved = true
+        }
     }
 
     // Состояние для DatePicker
@@ -139,11 +151,13 @@ fun ProfileRegistrationScreen(
             .nestedScroll(scrollBehavior.nestedScrollConnection),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
-            BaseTopAppBar(
-                title = stringResource(R.string.account_creation),
-                onBack = null,
-                scrollBehavior = scrollBehavior
-            )
+            if (!isEdit){
+                BaseTopAppBar(
+                    title = stringResource(R.string.account_creation),
+                    onBack = null,
+                    scrollBehavior = scrollBehavior
+                )
+            }
         }
     ) { paddingValues ->
         Column(
@@ -156,7 +170,6 @@ fun ProfileRegistrationScreen(
         ) {
             Spacer(modifier = Modifier.height(24.dp*baseScale))
 
-            // 1. Блок фотографии
             RegistrationSectionTitle(stringResource(R.string.select_a_photo))
 
             Text(
@@ -169,65 +182,87 @@ fun ProfileRegistrationScreen(
 
             Spacer(modifier = Modifier.height(16.dp * baseScale) )
 
+
+            val currentImageModel = when {
+                photoUri != null -> photoUri
+                !isInitialImageRemoved && !initialAvatarUrl.isNullOrEmpty() -> initialAvatarUrl
+                else -> null
+            }
+            val hasImage = currentImageModel != null
+
             Box(
                 modifier = Modifier
-                    .size(138.dp*baseScale)
-                    .clip(RoundedCornerShape(28.dp))
-                    .background(LocalAdditionColors.current.surfacePhotoColor)
-                    .clickable {
-                        if (photoUri == null) {
+                    .size(138.dp * baseScale)
+                    .align(Alignment.Start)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(28.dp))
+                        .background(LocalAdditionColors.current.surfacePhotoColor)
+                        .clickable {
                             photoPickerLauncher.launch(
                                 PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
                             )
-                        }
-                    }
-                    .align(Alignment.Start),
-                contentAlignment = Alignment.Center
-            ) {
-                if (photoUri != null) {
-                    AsyncImage(
-                        model = photoUri,
-                        contentDescription = "Profile Photo",
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                    // Крестик удаления
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(8.dp * baseScale),
-                        contentAlignment = Alignment.TopEnd
-                    ) {
-                        Surface(
-                            onClick = { photoUri = null },
-                            modifier = Modifier.size(32.dp * baseScale),
-                            shape = CircleShape,
-                            color = Color.White,
-                            shadowElevation = 2.dp
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (hasImage) {
+                        AsyncImage(
+                            model = currentImageModel,
+                            contentDescription = "Profile Photo",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        // Заглушка
+                        Box(
+                            modifier = Modifier
+                                .size(74.dp * baseScale)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primary),
+                            contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = "Удалить",
-                                tint = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier
-                                    .padding(2.dp * baseScale)
-                                    .fillMaxSize()
+                                painter = painterResource(id = R.drawable.add_image),
+                                contentDescription = "Add photo",
+                                modifier = Modifier.size(48.dp * baseScale),
+                                tint = MaterialTheme.colorScheme.onSurface
                             )
                         }
                     }
-                } else {
-                    Box(
+                }
+
+                // КНОПКА УДАЛЕНИЯ
+                if (hasImage) {
+                    Surface(
+                        onClick = {
+                            if (photoUri != null) {
+                                // Сбрасываем только что выбранное
+                                photoUri = null
+                                // Важный момент: если мы сбросили новое фото,
+                                // нужно решить, показывать ли старое обратно.
+                                // Если ты хочешь, чтобы после удаления нового фото старое НЕ возвращалось,
+                                // оставляем isInitialImageRemoved = true.
+                            } else {
+                                // Прячем старое фото
+                                isInitialImageRemoved = true
+                            }
+                        },
                         modifier = Modifier
-                            .size(74.dp * baseScale)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primary),
-                        contentAlignment = Alignment.Center
+                            .align(Alignment.TopEnd)
+                            .padding(4.dp * baseScale)
+                            .size(32.dp * baseScale)
+                            .offset(x = -(4).dp, y = 4.dp),
+                        shape = CircleShape,
+                        color = Color.White,
+                        shadowElevation = 4.dp
                     ) {
                         Icon(
-                            painter = painterResource(id = R.drawable.add_image),
-                            contentDescription = "Add photo",
-                            modifier = Modifier.size(48.dp * baseScale),
-                            tint = MaterialTheme.colorScheme.onSurface
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Удалить",
+                            tint = Color.Black,
+                            modifier = Modifier.padding(6.dp * baseScale).fillMaxSize()
                         )
                     }
                 }
@@ -286,8 +321,8 @@ fun ProfileRegistrationScreen(
                 // Кастомный чекбокс
                 Box(
                     modifier = Modifier
-                        .size(16.dp * baseScale) // Уменьшаем размер (стандарт 24dp)
-                        .clip(RoundedCornerShape(6.dp * baseScale)) // Делаем более закругленным
+                        .size(16.dp * baseScale)
+                        .clip(RoundedCornerShape(6.dp * baseScale))
                         .background(
                             if (showOnlyDay) MaterialTheme.colorScheme.onSurface
                             else Color.LightGray
@@ -349,11 +384,24 @@ fun ProfileRegistrationScreen(
                 contentAlignment = Alignment.CenterEnd
             ) {
                 RegistrationActionButton(
-                    text = stringResource(R.string.complete),
+                    text =
+                        if (isEdit)
+                            stringResource(R.string.apply)
+                        else
+                            stringResource(R.string.complete),
                     enabled = name.isNotBlank(),
                     onClick = {
-                        onComplete(name, username, dobTimestamp, showOnlyDay, bio, photoUri)
-                    }
+                        val finalPhotoUri = if (photoUri != null) {
+                            photoUri
+                        } else if (isInitialImageRemoved) {
+                            null
+                        } else {
+                            null
+                        }
+                        onComplete(name, username, dobTimestamp, showOnlyDay, bio,
+                            photoUri,
+                            isInitialImageRemoved)
+                    },
                 )
             }
 
