@@ -1,5 +1,6 @@
 package com.example.yap.data.api
 
+import com.example.yap.data.model.GroqResponse
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
@@ -21,4 +22,3 @@ interface GroqTranscriptionApi {
     ): GroqResponse
 }
 
-data class GroqResponse(val text: String)
