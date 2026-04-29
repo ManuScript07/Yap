@@ -284,6 +284,13 @@ fun NavigationApp(splashViewModel: SplashViewModel = viewModel()) {
                                             lockState = navLockTime
                                         )
                                     },
+                                    onNavigateToSearch = {
+                                        safeNavigate(
+                                            controller = navControllers[screen],
+                                            route = AppDestinations.SEARCH_FRIENDS_FROM_HOME,
+                                            lockState = navLockTime
+                                        )
+                                    },
                                     viewModel = sharedViewModel
                                 )
                             }
@@ -301,11 +308,21 @@ fun NavigationApp(splashViewModel: SplashViewModel = viewModel()) {
                                     homeViewModel = sharedViewModel
                                 )
                             }
+
+
                             userProfileComposable(
                                 navController = navControllers[screen],
                                 homeViewModel = sharedViewModel,
                                 navLockTime = navLockTime
                             )
+
+                            searchFriendsComposable(
+                                navController = navControllers[screen],
+                                navLockTime = navLockTime,
+                                route = AppDestinations.SEARCH_FRIENDS_FROM_HOME
+                            )
+
+
                         }
 
 
@@ -330,18 +347,11 @@ fun NavigationApp(splashViewModel: SplashViewModel = viewModel()) {
                                 )
                             }
 
-                            composable(AppDestinations.SEARCH_FRIENDS) {
-                                SearchFriendsScreen(
-                                    onBack = { safePopBackStack(navControllers[screen]) },
-                                    onNavigateToProfile = { userId ->
-                                        safeNavigate(
-                                            controller = navControllers[screen],
-                                            route = AppDestinations.createProfileRoute(userId),
-                                            lockState = navLockTime
-                                        )
-                                    }
-                                )
-                            }
+                            searchFriendsComposable(
+                                navController = navControllers[screen],
+                                navLockTime = navLockTime,
+                                route = AppDestinations.SEARCH_FRIENDS
+                            )
 
 
                             userProfileComposable(
@@ -483,6 +493,26 @@ fun NavGraphBuilder.userProfileComposable(
                 )
             },
             homeViewModel = homeViewModel
+        )
+    }
+}
+
+
+fun NavGraphBuilder.searchFriendsComposable(
+    navController: NavHostController?,
+    navLockTime: MutableLongState,
+    route: String
+) {
+    composable(route) {
+        SearchFriendsScreen(
+            onBack = { safePopBackStack(navController) },
+            onNavigateToProfile = { userId ->
+                safeNavigate(
+                    controller = navController,
+                    route = AppDestinations.createProfileRoute(userId),
+                    lockState = navLockTime
+                )
+            }
         )
     }
 }

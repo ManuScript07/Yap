@@ -20,6 +20,7 @@ object AppDestinations {
     const val NOTIFICATIONS = "home/notifications"
     const val USER_PROFILE_ROUTE = "user_profile/{userId}"
     const val SEARCH_FRIENDS = "friends/search"
+    const val SEARCH_FRIENDS_FROM_HOME = "home/search"
     const val USER_FRIENDS_LIST = "user_friends_list/{userId}"
     const val EDIT_PROFILE = "profile/edit"
     const val SUPPORT = "profile/support"

@@ -30,6 +30,7 @@ foundationVersion = "1.11.0"
 runtime = "1.11.0"
 firebaseCrashlyticsBuildtoolsVersion = "3.0.7"
 firebaseAppcheckDebug = "19.0.2"
+uiText = "1.11.0"
 
 [libraries]
 androidx-compose-material3-v131 = { module = "androidx.compose.material3:material3", version.ref = "material3Version" }
@@ -69,6 +70,7 @@ androidx-foundation = { group = "androidx.compose.foundation", name = "foundatio
 androidx-compose-runtime = { group = "androidx.compose.runtime", name = "runtime", version.ref = "runtime" }
 google-firebase-crashlytics-buildtools = { group = "com.google.firebase", name = "firebase-crashlytics-buildtools", version.ref = "firebaseCrashlyticsBuildtoolsVersion" }
 firebase-appcheck-debug = { group = "com.google.firebase", name = "firebase-appcheck-debug", version.ref = "firebaseAppcheckDebug" }
+androidx-compose-ui-text = { group = "androidx.compose.ui", name = "ui-text", version.ref = "uiText" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

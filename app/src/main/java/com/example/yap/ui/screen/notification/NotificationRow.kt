@@ -32,8 +32,10 @@ import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -148,8 +150,9 @@ private fun NotificationCardContent(
 ) {
 
     val isVoice = item.audioUrl != null
-
     val showPlaceholder = isVoice && item.messageText.isNullOrBlank()
+
+    var isTextTruncated by remember { mutableStateOf(false) }
 
     val textToShow = if (showPlaceholder) {
         stringResource(R.string.voice_message_placeholder)
@@ -164,7 +167,7 @@ private fun NotificationCardContent(
         modifier = Modifier
             .fillMaxWidth()
             .then(
-                if (isVoice) Modifier.clickable { onListenClick() }
+                if (isVoice || isTextTruncated) Modifier.clickable { onListenClick() }
                 else Modifier
             ),
         color = MaterialTheme.colorScheme.background
@@ -189,7 +192,6 @@ private fun NotificationCardContent(
                     ) {
                         onNavigateToProfile(item.user.id)
                     },
-                // Плейсхолдер и ошибка — используем локальный ресурс
                 placeholder = painterResource(id = R.drawable.avatar_1),
                 error = painterResource(id = R.drawable.avatar_1),
                 fallback = painterResource(R.drawable.avatar_1)
@@ -219,7 +221,12 @@ private fun NotificationCardContent(
                         color = LocalAdditionColors.current.notifText,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        lineHeight = (20 * baseScale).sp
+                        lineHeight = (20 * baseScale).sp,
+                        onTextLayout = { textLayoutResult ->
+                            if (textLayoutResult.hasVisualOverflow) {
+                                isTextTruncated = true
+                            }
+                        }
                     )
                 }
 

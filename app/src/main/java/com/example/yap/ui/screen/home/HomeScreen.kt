@@ -159,6 +159,7 @@ fun HomeScreen(
     viewModel: HomeViewModel,
     onNavigateToProfile: (String) -> Unit,
     onNavigateToNotifications: () -> Unit,
+    onNavigateToSearch: () -> Unit
 ) {
     SystemBarsIconsColor(isLight = true)
     val state by viewModel.state.collectAsState()
@@ -267,6 +268,10 @@ fun HomeScreen(
         onNavigateToNotifications()
     }
 
+    val guardedNavigateToSearch = rememberLambda<Unit> {
+        onNavigateToSearch()
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         Image(
             painter = painterResource(id = R.drawable.bg),
@@ -283,7 +288,7 @@ fun HomeScreen(
             screenHeight = LocalConfiguration.current.screenHeightDp.dp,
             onUserClick = guardedNavigateToProfile,
             onYapClick = { userId -> viewModel.toggleUserYap(userId) },
-            onAddUserClick = { /*viewModel.addUser()*/},
+            onAddUserClick = onNavigateToSearch,
             onRemoveUserClick = { id -> viewModel.removeUser(id) },
             content = { innerPadding ->
                 HomeContent(

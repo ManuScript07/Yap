@@ -267,15 +267,15 @@ fun VoiceDetailsSheet(
     totalDurationMs: Int = 12000,
     onPrepare: (String) -> Unit,
 ) {
+
     val sheetState = rememberModalBottomSheetState()
     val notification = state.selectedNotification ?: return
-
     val baseScale = LocalBaseScale.current
 
+    val isVoiceMessage = notification.audioUrl != null
+
     var isDragging by remember { mutableStateOf(false) }
-
     var localSliderValue by remember { mutableFloatStateOf(0f) }
-
     val targetProgress = if (totalDurationMs > 0) currentProgressMs.toFloat() / totalDurationMs else 0f
 
     val animatedProgress by animateFloatAsState(
@@ -303,16 +303,21 @@ fun VoiceDetailsSheet(
         containerColor = LocalAdditionColors.current.purpleBackColor
     ) {
         Column(
-    modifier = Modifier
-        .fillMaxWidth()
-        .padding(horizontal = 30.dp * baseScale)
-        .navigationBarsPadding(),
-    horizontalAlignment = Alignment.Start
-) {
-    when {
-        notification.messageText != null -> {
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 30.dp * baseScale)
+                .navigationBarsPadding(),
+            horizontalAlignment = Alignment.Start
+        ) {
+            val title = if (isVoiceMessage) {
+                stringResource(R.string.transcription)
+            } else {
+                // Динамическая строка: "Сообщение от Имя"
+                "${stringResource(R.string.message_from)} ${notification.user.name}"
+            }
+
             Text(
-                text = stringResource(R.string.transcription),
+                text = title,
                 fontSize = 24.sp * baseScale,
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurface
@@ -320,68 +325,99 @@ fun VoiceDetailsSheet(
 
             Spacer(Modifier.height(20.dp * baseScale))
 
-            Text(
-                text = notification.messageText.trim(),
-                fontSize = 18.sp * baseScale,
-                color = LocalAdditionColors.current.secondTextColor,
-                lineHeight = 20.sp * baseScale,
-                textAlign = TextAlign.Start
-            )
-        }
-        notification.isTranscribing -> {
-            Text(
-                text = stringResource(R.string.transcription),
-                fontSize = 24.sp * baseScale,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Spacer(Modifier.height(24.dp * baseScale))
-            TranscriptionShimmer(baseScale)
-        }
-        else -> {
-            val interactionSource = remember { MutableInteractionSource() }
-            Text(
-                text = stringResource(R.string.to_decipher),
-                fontSize = 24.sp * baseScale,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(12.dp * baseScale))
-                    .background(LocalAdditionColors.current.purpleLightColor.copy(alpha = 0.8f))
-                    .padding(horizontal = 8.dp * baseScale, vertical = 8.dp * baseScale)
-                    .clickable(
-                        interactionSource = interactionSource,
-                        indication = null
-                    ) {
-                        notification.audioUrl?.let { onRequestTranscription(it) }
-                    }
-            )
+            when {
+                notification.messageText != null -> {
+                    Text(
+                        text = notification.messageText.trim(),
+                        fontSize = 18.sp * baseScale,
+                        color = LocalAdditionColors.current.secondTextColor,
+                        lineHeight = 20.sp * baseScale,
+                        textAlign = TextAlign.Start
+                    )
+                }
+                notification.isTranscribing -> {
+                    TranscriptionShimmer(baseScale)
+                }
+                else -> {
+                    val interactionSource = remember { MutableInteractionSource() }
+                    Text(
+                        text = stringResource(R.string.to_decipher),
+                        fontSize = 24.sp * baseScale,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp * baseScale))
+                            .background(LocalAdditionColors.current.purpleLightColor.copy(alpha = 0.8f))
+                            .padding(horizontal = 8.dp * baseScale, vertical = 8.dp * baseScale)
+                            .clickable(
+                                interactionSource = interactionSource,
+                                indication = null
+                            ) {
+                                notification.audioUrl?.let { onRequestTranscription(it) }
+                            }
+                    )
+                }
+            }
+
+            if (notification.audioUrl != null) {
+                Spacer(Modifier.height(24.dp * baseScale))
+
+                NotificationAudioPlayer(
+                    isPlaying = state.isPlaying,
+                    audioUrl = notification.audioUrl,
+                    baseScale = baseScale,
+                    isDragging = isDragging,
+                    localSliderValue = localSliderValue,
+                    animatedProgress = animatedProgress,
+                    totalDurationMs = totalDurationMs,
+                    currentProgressMs = currentProgressMs,
+                    onTogglePlay = onTogglePlay,
+                    onSeek = onSeek,
+                    onSliderValueChange = { localSliderValue = it },
+                    onDraggingChange = { isDragging = it }
+                )
+            }
+            Spacer(Modifier.height(32.dp * baseScale))
         }
     }
+}
 
 
-    Spacer(Modifier.height(24.dp * baseScale))
-
-    // ПЛЕЕР
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun NotificationAudioPlayer(
+    isPlaying: Boolean,
+    audioUrl: String?,
+    baseScale: Float,
+    isDragging: Boolean,
+    localSliderValue: Float,
+    animatedProgress: Float,
+    totalDurationMs: Int,
+    currentProgressMs: Int,
+    onTogglePlay: (String) -> Unit,
+    onSeek: (Float) -> Unit,
+    onSliderValueChange: (Float) -> Unit,
+    onDraggingChange: (Boolean) -> Unit
+) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .height(72.dp * baseScale) // Высота по самому высокому элементу (Play)
+            .height(72.dp * baseScale)
     ) {
-        // 1. Анимация размеров (Play — высокая, Pause — квадратная)
-        val buttonWidth by animateDpAsState(if (state.isPlaying) 54.dp else 48.dp, label = "w")
-        val buttonCornerRadius by animateDpAsState(if (state.isPlaying) 8.dp else 24.dp, label = "r")
+        // 1. Анимация размеров и цветов кнопки
+        val buttonWidth by animateDpAsState(if (isPlaying) 54.dp else 48.dp, label = "w")
+        val buttonCornerRadius by animateDpAsState(if (isPlaying) 8.dp else 24.dp, label = "r")
 
         val buttonColor by animateColorAsState(
-            targetValue = if (state.isPlaying)
+            targetValue = if (isPlaying)
                 LocalAdditionColors.current.purpleLightColor
             else
                 LocalAdditionColors.current.purpleSurfaceColor
         )
 
         val contentColor by animateColorAsState(
-            targetValue = if (state.isPlaying)
+            targetValue = if (isPlaying)
                 LocalAdditionColors.current.purpleSurfaceColor
             else
                 Color.White
@@ -394,12 +430,12 @@ fun VoiceDetailsSheet(
                 .height(54.dp * baseScale)
                 .clip(RoundedCornerShape(buttonCornerRadius * baseScale))
                 .background(buttonColor)
-                .clickable { notification.audioUrl?.let { onTogglePlay(it) } },
+                .clickable { audioUrl?.let { onTogglePlay(it) } },
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 painter = painterResource(
-                    if (state.isPlaying) R.drawable.baseline_pause_32 else R.drawable.baseline_play_arrow_32
+                    if (isPlaying) R.drawable.baseline_pause_32 else R.drawable.baseline_play_arrow_32
                 ),
                 contentDescription = null,
                 tint = contentColor,
@@ -409,20 +445,20 @@ fun VoiceDetailsSheet(
 
         Spacer(Modifier.width(10.dp * baseScale))
 
+        // 2. Слайдер (Трэк)
         Slider(
             value = if (isDragging) localSliderValue else animatedProgress,
             onValueChange = {
-                isDragging = true
-                localSliderValue = it
+                onDraggingChange(true)
+                onSliderValueChange(it)
             },
             onValueChangeFinished = {
-                isDragging = false
+                onDraggingChange(false)
                 onSeek(localSliderValue * totalDurationMs)
             },
             modifier = Modifier
                 .weight(1f)
                 .height(54.dp * baseScale),
-            // Кастомный ползунок (вертикальная палочка)
             thumb = {
                 Box(
                     Modifier
@@ -432,7 +468,6 @@ fun VoiceDetailsSheet(
                         .background(LocalAdditionColors.current.purpleSurfaceColor)
                 )
             },
-            // Кастомный трек (высокая плашка)
             track = {
                 val currentFraction = if (isDragging) localSliderValue else animatedProgress
 
@@ -455,9 +490,10 @@ fun VoiceDetailsSheet(
 
         Spacer(Modifier.width(10.dp * baseScale))
 
+        // 3. Таймер
         val displayTimeMs = if (isDragging) {
             (localSliderValue * totalDurationMs).toInt()
-        } else if (state.isPlaying || currentProgressMs > 0) {
+        } else if (isPlaying || currentProgressMs > 0) {
             currentProgressMs
         } else {
             totalDurationMs
@@ -477,9 +513,6 @@ fun VoiceDetailsSheet(
                 .padding(horizontal = 12.dp * baseScale)
                 .wrapContentHeight(Alignment.CenterVertically)
         )
-    }
-        Spacer(Modifier.height(32.dp * baseScale))
-        }
     }
 }
 

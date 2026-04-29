@@ -6,9 +6,9 @@ import android.util.Log
 import androidx.annotation.StringRes
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.yap.data.model.MessageEntity
 import com.example.yap.R
 import com.example.yap.data.manager.VoiceManager
+import com.example.yap.data.model.MessageEntity
 import com.example.yap.data.model.UserItem
 import com.example.yap.ui.components.YapButtonState
 import com.example.yap.ui.main.YapApp
@@ -28,7 +28,6 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
 import java.io.File
 
 class HomeViewModel(
@@ -202,35 +201,6 @@ class HomeViewModel(
         }
     }
 
-    fun addUser() {
-        viewModelScope.launch {
-            val currentState = _state.value
-            if (currentState.users.size >= 20) return@launch
-
-            // 1. Генерируем ID и данные для нового "фиктивного" юзера
-            val newId = "user_" + System.currentTimeMillis()
-            val randomNames = listOf("Алексей", "Мария", "Иван", "София")
-            val newUserMap = mapOf(
-                "name" to randomNames.random(),
-                "quickList" to emptyList<String>(),
-                "mutedUsers" to emptyList<String>()
-            )
-
-            try {
-                // 2. Создаем этого юзера в глобальной коллекции users
-                userRepository.usersCollection.document(newId).set(newUserMap).await()
-
-                // 3. Добавляем его ID в наш собственный Quick List
-                userRepository.toggleQuickList(newId, add = true)
-
-                // ПРИМЕЧАНИЕ: Нам не нужно вручную обновлять _state.update { ... }
-                // Наш Flow в observeQuickList() сам увидит обновление документа в Firebase
-                // и перерисует экран. Это и есть "Single Source of Truth".
-            } catch (e: Exception) {
-                Log.e("HomeViewModel", "Failed to add fake user", e)
-            }
-        }
-    }
 
     fun removeUser(userId: String) {
         viewModelScope.launch {
