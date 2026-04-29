@@ -74,7 +74,9 @@ class ChatRepository(
                 val receiverDoc = usersCollection.document(receiverId).get().await()
 
                 // Без защиты, такие проверки надо делать на сервере
-                val mutedUsers = receiverDoc.get("mutedUsers") as? List<String> ?: emptyList()
+                val mutedUsers = (receiverDoc.get("mutedUsers") as? List<*>)
+                    ?.filterIsInstance<String>()
+                    ?: emptyList()
                 if (mutedUsers.contains(senderId)) {
                     Log.d("PUSH_SENDER", "Уведомление отменено: получатель $receiverId замьютил отправителя $senderId")
                     return@withContext // Просто выходим, не дергая сервер Render

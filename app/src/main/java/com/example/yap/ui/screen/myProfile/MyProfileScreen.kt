@@ -64,12 +64,12 @@ import coil.compose.AsyncImage
 import com.example.yap.R
 import com.example.yap.ui.components.FullScreenAvatarViewer
 import com.example.yap.ui.main.MainActivity
-import com.example.yap.ui.screen.home.HomeViewModel
 import com.example.yap.ui.screen.userProfile.ProfileInfoItem
 import com.example.yap.ui.theme.LocalAdditionColors
 import com.example.yap.ui.theme.LocalBaseScale
 import com.example.yap.util.compose.SystemBarsIconsColor
 import com.example.yap.util.compose.rememberLambda
+import com.example.yap.util.extension.shareUserProfile
 import com.example.yap.util.formatBirthday
 
 @SuppressLint("LocalContextGetResourceValueCall")
@@ -95,19 +95,7 @@ fun MyProfileScreen(
 
     val guardedOnShareProfile = rememberLambda<Unit> {
         val user = state.user ?: return@rememberLambda
-        val userId = user.id
-        val userCode = user.userCode
-        val deepLinkUrl = "https://yap.app/profile/$userId"
-
-        val shareMessage = context.getString(R.string.share_profile_message, userCode, deepLinkUrl)
-
-        val sendIntent = Intent().apply {
-            action = Intent.ACTION_SEND
-            putExtra(Intent.EXTRA_TEXT, shareMessage)
-            type = "text/plain"
-        }
-
-        context.startActivity(Intent.createChooser(sendIntent, null))
+        context.shareUserProfile(user.id, user.userCode)
     }
 
     val guardedOnEditProfile = rememberLambda<Unit> {
@@ -251,7 +239,8 @@ fun MyProfileScreen(
                                                 fontSize = 18.sp * baseScale,
                                                 fontWeight = FontWeight.Medium,
                                                 maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
+                                                overflow = TextOverflow.Ellipsis,
+                                                modifier = Modifier.weight(1f, fill = false)
                                             )
 
                                             Spacer(modifier = Modifier.width(8.dp * baseScale))

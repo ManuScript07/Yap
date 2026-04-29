@@ -28,6 +28,7 @@ import com.example.yap.R
 import com.example.yap.ui.components.BaseTopAppBar
 import com.example.yap.ui.theme.LocalAdditionColors
 import com.example.yap.ui.theme.LocalBaseScale
+import com.example.yap.util.compose.SystemBarsIconsColor
 import com.example.yap.util.openUrl
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -36,6 +37,8 @@ fun SupportScreen(
     onBack: () -> Unit,
     viewModel: SupportViewModel = viewModel()
 ) {
+
+    SystemBarsIconsColor(isLight = true)
     val context = LocalContext.current
     val baseScale = LocalBaseScale.current
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())

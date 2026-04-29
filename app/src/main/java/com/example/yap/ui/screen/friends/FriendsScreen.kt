@@ -1,6 +1,5 @@
 package com.example.yap.ui.screen.friends
 
-import android.content.Intent
 import android.widget.Toast
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
@@ -43,6 +42,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.LocalTextStyle
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextFieldDefaults
@@ -62,7 +62,6 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.font.FontStyle
@@ -89,6 +88,7 @@ import com.example.yap.ui.theme.LocalBaseScale
 import com.example.yap.util.compose.SystemBarsIconsColor
 import com.example.yap.util.compose.rememberLambda
 import com.example.yap.util.extension.SystemStatusPill
+import com.example.yap.util.extension.shareUserProfile
 import com.example.yap.util.fetchLocationAndSendDirectYap
 
 @Composable
@@ -105,7 +105,6 @@ fun FriendsScreen(
     val baseScale = LocalBaseScale.current
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
-    val shareMessage = stringResource(R.string.share_text, state.myUserCode)
 
     val isLocationEnabled by remember { derivedStateOf { homeState.isLocationEnabled } }
 
@@ -190,13 +189,10 @@ fun FriendsScreen(
                         Toast.makeText(context, R.string.code_copied, Toast.LENGTH_SHORT).show()
                     },
                     onShare = {
-                        val sendIntent = Intent().apply {
-                            action = Intent.ACTION_SEND
-                            putExtra(Intent.EXTRA_TEXT, shareMessage)
-                            type = "text/plain"
+                        val myId = homeState.currentUserId
+                        if (myId != null) {
+                            context.shareUserProfile(myId, state.myUserCode)
                         }
-                        val shareIntent = Intent.createChooser(sendIntent, null)
-                        context.startActivity(shareIntent)
                     }
                 )
 

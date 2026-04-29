@@ -1,5 +1,8 @@
 package com.example.yap.data.model
 
+import androidx.annotation.Keep
+
+@Keep
 data class UserItem(
     val id: String = "",
     val name: String = "",

@@ -1,5 +1,6 @@
 package com.example.yap.ui.screen.home
 
+import android.annotation.SuppressLint
 import android.app.Application
 import android.util.Log
 import androidx.annotation.StringRes
@@ -43,8 +44,7 @@ class HomeViewModel(
 
     private val energyPrefs = app.userPrefs
     private val voiceManager = VoiceManager(application)
-//    private val transcriptionService = VoskTranscriptionService(application)
-//    private val transcriptionService = ServerTranscriptionService()
+
 
 
     private val networkMonitor = NetworkMonitor(application)
@@ -75,6 +75,10 @@ class HomeViewModel(
     private val priceVoice: Int
         get() = configManager.priceVoice
 
+    private val maxLengthInputText: Int
+        get() = configManager.maxLengthInputText
+
+
     init {
         Log.d("API1", "Инициализация")
         updateStateWithPrice { it }
@@ -94,6 +98,7 @@ class HomeViewModel(
     private fun observeAuthStateAndSyncFcmToken() {
         viewModelScope.launch {
             userRepository.currentUserFlow.collect { user ->
+                _state.update { it.copy(currentUserId = user?.uid) }
                 if (user != null) {
                     Log.d("FCM_SYNC", "User authenticated: ${user.uid}. Checking FCM token...")
                     userRepository.updateFcmTokenIfNeeded()
@@ -316,7 +321,10 @@ class HomeViewModel(
             currentState.copy(
                 currentAlertMessage = null,
                 currentAlertResource = null,
+                userGeneratedContent = null,
                 isEmojiOnly = false,
+                isQuickMessage = false,
+                isCustomInputActive = false,
                 yapType = YapType.YAP
             )
         }
@@ -325,7 +333,8 @@ class HomeViewModel(
     fun toggleEmojiPicker(open: Boolean) {
         _state.update { it.copy(
             isEmojiPickerOpen = open,
-            isChatPickerOpen = if (open) false else it.isChatPickerOpen
+            isChatPickerOpen = if (open) false else it.isChatPickerOpen,
+            isCustomInputActive = if (open) false else it.isCustomInputActive
         ) }
     }
 
@@ -348,6 +357,8 @@ class HomeViewModel(
                         currentAlertMessage = emoji,
                         userGeneratedContent = emoji,
                         isEmojiOnly = true,
+                        isQuickMessage = false,
+                        isCustomInputActive = false,
                         yapType = YapType.EMOJI,
                         canCloseMessage = true
                     )
@@ -360,6 +371,8 @@ class HomeViewModel(
                         currentAlertMessage = newContent,
                         userGeneratedContent = newContent,
                         isEmojiOnly = true,
+                        isQuickMessage = false,
+                        isCustomInputActive = false,
                         yapType = YapType.EMOJI,
                         isEmojiPickerOpen = newCount < 5,
                         canCloseMessage = true
@@ -372,7 +385,8 @@ class HomeViewModel(
     fun toggleChatPicker(open: Boolean) {
         _state.update { it.copy(
             isChatPickerOpen = open,
-            isEmojiPickerOpen = if (open) false else it.isEmojiPickerOpen
+            isEmojiPickerOpen = if (open) false else it.isEmojiPickerOpen,
+            isCustomInputActive = if (open) false else it.isCustomInputActive
         ) }
     }
 
@@ -385,11 +399,53 @@ class HomeViewModel(
                 currentAlertMessage = message,
                 userGeneratedContent = message,
                 isEmojiOnly = false,
+                isQuickMessage = true,
                 isChatPickerOpen = false,
                 canCloseMessage = true,
                 yapType = YapType.TEXT,
+                isCustomInputActive = false
             )
         }
+    }
+
+    fun startCustomTextInput() {
+        if (_state.value.yapType == YapType.VOICE) return
+
+        _state.update { currentState ->
+            // Проверяем: если текущий текст был НАПЕЧАТАН юзером, оставляем его.
+            // Если это были эмодзи или шаблон — начинаем с чистого листа.
+            val isTypedText = currentState.yapType == YapType.TEXT && !currentState.isEmojiOnly && !currentState.isQuickMessage
+            val initialText = if (isTypedText) currentState.userGeneratedContent ?: "" else ""
+
+            currentState.copy(
+                isChatPickerOpen = false,
+                yapType = YapType.TEXT,
+                currentAlertMessage = initialText,
+                userGeneratedContent = initialText,
+                isCustomInputActive = true,
+                isEmojiOnly = false,
+                isQuickMessage = false
+            )
+        }
+    }
+
+
+    @SuppressLint("SuspiciousIndentation")
+    fun onCustomTextChanged(newText: String) {
+        if (newText.length <= maxLengthInputText)
+        updateStateWithPrice { currentState ->
+            currentState.copy(
+                currentAlertMessage = newText,
+                userGeneratedContent = newText,
+                isEmojiOnly = false,
+                isQuickMessage = false,
+                canCloseMessage = true
+            )
+        }
+    }
+
+    fun closeCustomTextInput() {
+        _state.update { it.copy(isCustomInputActive = false) }
     }
 
 
@@ -664,7 +720,11 @@ class HomeViewModel(
             it.copy(
                 yapType = YapType.VOICE,
                 recordStartDate = startTime,
-                yapRecordTimeMs = 0L
+                yapRecordTimeMs = 0L,
+                isCustomInputActive = false,
+
+                currentAlertMessage = null,
+                userGeneratedContent = null,
             ) }
         voiceManager.startRecording()
     }
@@ -749,7 +809,8 @@ class HomeViewModel(
                 voiceAudioUri = null,
                 didOverrideMessage = false,
                 isPlayingVoice = false,
-                transcribedText = null
+                transcribedText = null,
+                isCustomInputActive = false
             )
         }
     }

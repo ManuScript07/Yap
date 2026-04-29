@@ -124,12 +124,6 @@ class UserPreferences(private val context: Context) {
         }
     }
 
-    suspend fun updateLastFcmToken(token: String) {
-        context.dataStore.edit { prefs ->
-            prefs[Keys.LAST_FCM_TOKEN] = token
-        }
-    }
-
     suspend fun clearOnLogout() {
         context.dataStore.edit { prefs ->
             val fcmToken = prefs[Keys.LAST_FCM_TOKEN]
@@ -152,6 +146,13 @@ class UserPreferences(private val context: Context) {
             prefs[Keys.LAST_FCM_TOKEN_USER_ID] = userId
         }
     }
+    suspend fun clearUserTokenLink() {
+        context.dataStore.edit { prefs ->
+            prefs.remove(Keys.LAST_FCM_TOKEN_USER_ID)
+            Log.d("UserPrefs", "FCM User link cleared. Token remains, but is unassigned.")
+        }
+    }
+
 
 
 }

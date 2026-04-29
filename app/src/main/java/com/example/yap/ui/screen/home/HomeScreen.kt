@@ -53,15 +53,22 @@ import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
@@ -72,6 +79,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -94,6 +102,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -107,10 +117,14 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
@@ -135,6 +149,7 @@ import com.example.yap.util.LocationHelper.checkLocationSettings
 import com.example.yap.util.compose.SystemBarsIconsColor
 import com.example.yap.util.compose.rememberLambda
 import com.google.android.gms.location.LocationServices
+import kotlinx.coroutines.delay
 
 
 @SuppressLint("ConfigurationScreenWidthHeight")
@@ -592,10 +607,15 @@ fun HomeContent(
     onLocationToggle: (Boolean) -> Unit,
     onRequestMicrophonePermission: () -> Unit,
     onNotificationsClick: () -> Unit
-    ) {
+) {
     val state by viewModel.state.collectAsState()
     val baseScale = LocalBaseScale.current
     val context = LocalContext.current
+
+    // 1. ВЫНОСИМ УПРАВЛЕНИЕ ФОКУСОМ НА ВЕРХНИЙ УРОВЕНЬ
+    val focusRequester = remember { FocusRequester() }
+    val softwareKeyboardController = LocalSoftwareKeyboardController.current
+
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
@@ -607,6 +627,11 @@ fun HomeContent(
                             if (state.isEmojiPickerOpen || state.isChatPickerOpen) {
                                 viewModel.toggleEmojiPicker(false)
                                 viewModel.toggleChatPicker(false)
+                            } else {
+                                softwareKeyboardController?.hide()
+                                if (state.isCustomInputActive) {
+                                    viewModel.closeCustomTextInput()
+                                }
                             }
                         }
                     )
@@ -628,9 +653,19 @@ fun HomeContent(
                 message = state.currentAlertMessage,
                 messageResId = state.currentAlertResource,
                 showCloseIcon = state.canCloseMessage,
-                onClose = { viewModel.dismissMessage() },
+                onClose = {
+                    softwareKeyboardController?.hide()
+                    viewModel.dismissMessage()
+                },
                 baseScale = baseScale,
-                isEmojiOnly = state.isEmojiOnly
+                isEmojiOnly = state.isEmojiOnly,
+                isCustomInputActive = state.isCustomInputActive,
+                onTextChange = { viewModel.onCustomTextChanged(it) },
+                focusRequester = focusRequester,
+                onKeyboardDone = {
+                    softwareKeyboardController?.hide()
+                    viewModel.closeCustomTextInput()
+                }
             )
 
             // --- 2. ЦЕНТР ---
@@ -640,7 +675,7 @@ fun HomeContent(
                     .fillMaxWidth(),
                 contentAlignment = Alignment.Center
             ) {
-                   MainYapButton(
+                MainYapButton(
                     price = state.yapPrice,
                     onClick = { selectedType ->
                         fetchLocationAndSendYap(
@@ -648,7 +683,8 @@ fun HomeContent(
                             viewModel = viewModel,
                             isLocationEnabled = state.isLocationEnabled,
                             messageType = selectedType
-                    )},
+                        )
+                    },
                     viewModel = viewModel,
                     context = context,
                     onRequestMicrophonePermission = onRequestMicrophonePermission
@@ -656,7 +692,6 @@ fun HomeContent(
             }
 
             // --- 3. НИЗ ---
-            // Теперь здесь ТОЛЬКО кнопки и прогресс-бар. Никакого чата.
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
@@ -674,6 +709,16 @@ fun HomeContent(
             }
         }
 
+        LaunchedEffect(state.isCustomInputActive) {
+            if (state.isCustomInputActive) {
+                delay(100)
+                try {
+                    focusRequester.requestFocus()
+                    softwareKeyboardController?.show()
+                } catch (_: Exception) { }
+            }
+        }
+
         // ==========================================
         // СЛОЙ 2: ПАНЕЛЬ ЧАТА (ВСПЛЫВАЕТ ПОВЕРХ ВСЕГО)
         // ==========================================
@@ -682,7 +727,6 @@ fun HomeContent(
             enter = fadeIn(animationSpec = tween(220, delayMillis = 90)) +
                     scaleIn(
                         initialScale = 0.85f,
-                        // Указываем, что анимация идет из правого нижнего угла (от кнопки)
                         transformOrigin = TransformOrigin(1f, 1f),
                         animationSpec = tween(220, delayMillis = 90)
                     ),
@@ -701,6 +745,9 @@ fun HomeContent(
         ) {
             QuickMessagesPanel(
                 onMessageSelected = { viewModel.selectQuickMessage(it) },
+                onCustomTextClick = {
+                    viewModel.startCustomTextInput()
+                },
                 baseScale = baseScale
             )
         }
@@ -742,51 +789,99 @@ fun InfoMessage(
     isEmojiOnly: Boolean,
     showCloseIcon: Boolean,
     onClose: () -> Unit,
-    baseScale: Float
+    baseScale: Float,
+    isCustomInputActive: Boolean,
+    onTextChange: (String) -> Unit,
+    focusRequester: FocusRequester,
+    onKeyboardDone: () -> Unit
 ) {
-    val finalMessage = message ?: messageResId?.let { stringResource(it) } ?: ""
 
+    val finalMessage = message ?: messageResId?.let { stringResource(it) } ?: ""
     val dynamicFontSize = if (isEmojiOnly) (32 * baseScale).sp else (18 * baseScale).sp
     val dynamicLetterSpacing = if (isEmojiOnly) (4 * baseScale).sp else TextUnit.Unspecified
 
+
     AnimatedVisibility(
-        visible = finalMessage.isNotEmpty(),
+        visible = finalMessage.isNotEmpty() || isCustomInputActive,
         enter = fadeIn() + expandVertically(),
         exit = fadeOut() + shrinkVertically()
     ) {
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = 20.dp * baseScale),
-            contentAlignment = Alignment.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(
-                text = finalMessage,
-                color = MaterialTheme.colorScheme.background,
-                fontSize = dynamicFontSize,
-                letterSpacing = dynamicLetterSpacing,
-                textAlign = TextAlign.Center,
-                fontWeight = if (isEmojiOnly) FontWeight.Normal else FontWeight.Bold,
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp * baseScale)
-            )
-
-            if (showCloseIcon) {
-                IconButton(
-                    onClick = onClose,
-                    modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .padding(end = 8.dp * baseScale)
-                        .size(32.dp * baseScale)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Close",
-                        tint = MaterialTheme.colorScheme.background.copy(alpha = 0.7f),
-                        modifier = Modifier.size(24.dp * baseScale)
+                    .fillMaxWidth(),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (isCustomInputActive) {
+                    BasicTextField(
+                        value = finalMessage,
+                        onValueChange = onTextChange,
+                        textStyle = TextStyle(
+                            color = MaterialTheme.colorScheme.background,
+                            fontSize = dynamicFontSize,
+                            letterSpacing = dynamicLetterSpacing,
+                            textAlign = TextAlign.Center,
+                            fontWeight = FontWeight.Bold
+                        ),
+                        // Курсор цвета текста
+                        cursorBrush = SolidColor(MaterialTheme.colorScheme.background),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 48.dp * baseScale) // Даем отступ для крестика
+                            .focusRequester(focusRequester),
+                        keyboardOptions = KeyboardOptions(
+                            imeAction = ImeAction.Done,
+                            capitalization = KeyboardCapitalization.Sentences
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onDone = { onKeyboardDone() }
+                        )
+                    )
+                } else {
+                    Text(
+                        text = finalMessage,
+                        color = MaterialTheme.colorScheme.background,
+                        fontSize = dynamicFontSize,
+                        letterSpacing = dynamicLetterSpacing,
+                        textAlign = TextAlign.Center,
+                        fontWeight = if (isEmojiOnly) FontWeight.Normal else FontWeight.Bold,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp * baseScale)
                     )
                 }
+
+                if (showCloseIcon || isCustomInputActive) {
+                    IconButton(
+                        onClick = onClose,
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .size(32.dp * baseScale)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close",
+                            tint = MaterialTheme.colorScheme.background.copy(alpha = 0.7f),
+                            modifier = Modifier.size(24.dp * baseScale)
+                        )
+                    }
+                }
+            }
+            if (isCustomInputActive) {
+                Text(
+                    text = "${finalMessage.length}/60",
+                    color = MaterialTheme.colorScheme.background.copy(alpha = 0.7f),
+                    fontSize = (14 * baseScale).sp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp * baseScale, end = 6.dp * baseScale)
+                        .wrapContentWidth(Alignment.End)
+                )
             }
         }
     }
@@ -920,6 +1015,7 @@ fun EmojiPickerPanel(
 @Composable
 fun QuickMessagesPanel(
     onMessageSelected: (String) -> Unit,
+    onCustomTextClick: () -> Unit,
     baseScale: Float
 ) {
     val messages = stringArrayResource(R.array.quick_messages).toList()
@@ -927,6 +1023,8 @@ fun QuickMessagesPanel(
     Card(
         modifier = Modifier
             .width(220.dp * baseScale)
+            // Ограничиваем максимальную высоту панели, чтобы она не занимала весь экран
+            .heightIn(max = 300.dp * baseScale)
             .padding(bottom = 8.dp * baseScale),
         shape = RoundedCornerShape(28.dp * baseScale),
         colors = CardDefaults.cardColors(
@@ -934,29 +1032,66 @@ fun QuickMessagesPanel(
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .padding(vertical = 8.dp * baseScale)
-        ) {
-            messages.forEach { msg ->
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = ripple(),
-                            onClick = { onMessageSelected(msg) }
-                        )
-                        .padding(vertical = 14.dp * baseScale, horizontal = 20.dp * baseScale)
-                ) {
+        Column {
+            // 1. ФИКСИРОВАННАЯ ЧАСТЬ: Кнопка "Написать" всегда вверху
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onCustomTextClick() }
+                    .padding(vertical = 14.dp * baseScale, horizontal = 20.dp * baseScale)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.outline_edit_24),
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp * baseScale),
+                        tint = MaterialTheme.colorScheme.tertiary
+                    )
+                    Spacer(modifier = Modifier.width(12.dp * baseScale))
                     Text(
-                        text = msg,
+                        text = stringResource(R.string.write_custom),
                         style = MaterialTheme.typography.bodyLarge.copy(
-                            fontSize = (16 * baseScale).sp,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurface
+                            fontSize = (20 * baseScale).sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.tertiary
                         )
                     )
+                }
+            }
+
+            HorizontalDivider(
+                modifier = Modifier.padding(horizontal = 20.dp),
+                thickness = 0.5.dp,
+                color = MaterialTheme.colorScheme.outlineVariant
+            )
+
+            // 2. ПРОКРУЧИВАЕМАЯ ЧАСТЬ: Список сообщений
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()) // Добавляем прокрутку
+                    .padding(vertical = 8.dp * baseScale)
+            ) {
+                messages.forEach { msg ->
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = ripple(),
+                                onClick = { onMessageSelected(msg) }
+                            )
+                            .padding(vertical = 14.dp * baseScale, horizontal = 20.dp * baseScale)
+                    ) {
+                        Text(
+                            text = msg,
+                            style = MaterialTheme.typography.bodyLarge.copy(
+                                fontSize = (18 * baseScale).sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        )
+                    }
                 }
             }
         }

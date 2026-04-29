@@ -129,10 +129,12 @@ class MyProfileViewModel(
             _logoutState.value = LogoutState.Loading
 
             try {
+                userRepository.removeFcmTokenOnLogout()
                 chatRepository.clearCacheOnLogout()
                 friendRequestRepository.clearCacheOnLogout()
                 userRepository.clearCacheOnLogout()
                 userPrefs.clearOnLogout()
+
 
                 FirebaseAuth.getInstance().signOut()
 

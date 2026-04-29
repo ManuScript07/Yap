@@ -1,5 +1,8 @@
 package com.example.yap.data.model
 
+import androidx.annotation.Keep
+
+@Keep
 data class FriendRequestEntity(
     val id: String = "",
     val senderId: String = "",

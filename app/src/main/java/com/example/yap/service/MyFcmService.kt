@@ -27,6 +27,11 @@ class MyFcmService : FirebaseMessagingService() {
 
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
 
+        val recipientId = remoteMessage.data["recipient_id"]
+        val currentUid = userRepository.currentUserId
+
+        if (recipientId != null && recipientId != currentUid) return
+
         val targetScreen = remoteMessage.data["target_screen"]
         val type = remoteMessage.data["type"]
 

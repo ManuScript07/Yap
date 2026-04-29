@@ -1,8 +1,9 @@
 package com.example.yap.data.model
 
+import androidx.annotation.Keep
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.ServerTimestamp
-
+@Keep
 data class MessageEntity(
     val id: String = "",
     val senderId: String = "",

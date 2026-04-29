@@ -7,7 +7,6 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.yap.R
 import com.example.yap.data.model.UserItem
-import com.example.yap.data.repository.UserRepository
 import com.example.yap.ui.main.YapApp
 import com.example.yap.ui.screen.addUser.AddFriendStatus
 import kotlinx.coroutines.Job

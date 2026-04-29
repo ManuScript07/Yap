@@ -102,5 +102,6 @@
     <string name="support_description" />
     <string name="support_have_problems">Возникли проблемы?</string>
     <string name="support_text">Напишите нам в соцсетях или ознакомьтесь с проектом на GitHub</string>
+    <string name="write_custom">Написать...</string>
 </resources>
 

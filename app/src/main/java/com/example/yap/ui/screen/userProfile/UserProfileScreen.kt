@@ -2,7 +2,6 @@ package com.example.yap.ui.screen.userProfile
 
 import android.annotation.SuppressLint
 import android.app.Application
-import android.content.Intent
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -52,6 +51,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -63,18 +63,18 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.example.yap.R
 import com.example.yap.ui.components.FullScreenAvatarViewer
+import com.example.yap.ui.screen.addUser.AddFriendStatus
+import com.example.yap.ui.screen.friends.RemoveFriendDialog
 import com.example.yap.ui.screen.home.HomeViewModel
 import com.example.yap.ui.screen.home.YapType
 import com.example.yap.ui.theme.LocalAdditionColors
 import com.example.yap.ui.theme.LocalBaseScale
 import com.example.yap.util.compose.SystemBarsIconsColor
+import com.example.yap.util.compose.rememberLambda
 import com.example.yap.util.extension.SystemStatusPill
+import com.example.yap.util.extension.shareUserProfile
 import com.example.yap.util.fetchLocationAndSendDirectYap
 import com.example.yap.util.formatBirthday
-import androidx.compose.ui.platform.LocalResources
-import com.example.yap.ui.screen.addUser.AddFriendStatus
-import com.example.yap.ui.screen.friends.RemoveFriendDialog
-import com.example.yap.util.compose.rememberLambda
 
 @SuppressLint("LocalContextGetResourceValueCall")
 @OptIn(ExperimentalMaterial3Api::class)
@@ -107,21 +107,7 @@ fun UserProfileScreen(
     var isMenuVisible by remember { mutableStateOf(false) }
     var showRemoveDialog by remember { mutableStateOf(false) }
 
-    val onShareProfile = {
-        val userId = state.user?.id ?: ""
-        val userCode = state.user?.userCode ?: ""
-        val deepLinkUrl = "https://yap.app/profile/$userId"
 
-        val shareMessage = context.getString(R.string.share_profile_message, userCode, deepLinkUrl)
-
-        val sendIntent: Intent = Intent().apply {
-            action = Intent.ACTION_SEND
-            putExtra(Intent.EXTRA_TEXT, shareMessage)
-            type = "text/plain"
-        }
-
-        context.startActivity(Intent.createChooser(sendIntent, null))
-    }
 
     val onYapSend = remember(state.user, homeViewModel, context, isLocationEnabled) {
         {
@@ -469,8 +455,12 @@ fun UserProfileScreen(
                 isMuted = state.isMuted,
                 onDismiss = { isMenuVisible = false },
                 onMuteClick = { viewModel.toggleMute() },
-                onShareClick = onShareProfile,
-                onDeleteClick = { showRemoveDialog = true } // Открываем диалог подтверждения
+                onShareClick = {
+                    state.user?.let { user ->
+                        context.shareUserProfile(user.id, user.userCode)
+                    }
+                               },
+                onDeleteClick = { showRemoveDialog = true }
             )
 
             if (showRemoveDialog) {

@@ -5,7 +5,6 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.application
 import androidx.lifecycle.viewModelScope
-import com.example.yap.R
 import com.example.yap.data.manager.VoiceManager
 import com.example.yap.data.model.UserItem
 import com.example.yap.ui.main.YapApp

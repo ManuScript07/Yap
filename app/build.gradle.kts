@@ -31,8 +31,8 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
-//            isShrinkResources = true
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -128,6 +128,7 @@ dependencies {
     implementation(libs.androidx.compose.runtime)
     implementation(libs.google.firebase.crashlytics.buildtools)
     implementation(libs.firebase.appcheck.debug)
+    implementation(libs.androidx.compose.ui.text)
 
 
     // Тесты и дебаг

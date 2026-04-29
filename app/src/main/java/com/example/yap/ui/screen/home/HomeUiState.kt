@@ -4,6 +4,8 @@ import com.example.yap.data.model.UserItem
 import com.example.yap.ui.components.YapButtonState
 
 data class HomeUiState(
+    val currentUserId: String? = null,
+
     val users: List<UserItem> = emptyList(),
 
     val currentStars: Int = 100,
@@ -52,7 +54,9 @@ data class HomeUiState(
     val transcribedText: String? = null,
     val isTranscribing: Boolean = false,
 
-
+    val isCustomInputActive: Boolean = false,
+    val isQuickMessage: Boolean = false,
+    val maxLength: Int = 60
 
 )
 

@@ -1,7 +1,6 @@
 package com.example.yap.ui.screen.friends
 
 import androidx.compose.runtime.Immutable
-import com.example.yap.data.model.FriendRequestEntity
 import com.example.yap.data.model.UserItem
 
 @Immutable
@@ -12,6 +11,7 @@ data class FriendItemModel(
 )
 
 data class FriendsUiState(
+    val myUserId: String = "",
     val myUserCode: String = "",
     val friends: List<FriendItemModel> = emptyList(), // Основной список
     val filteredFriends: List<FriendItemModel> = emptyList(), // Список после поиска

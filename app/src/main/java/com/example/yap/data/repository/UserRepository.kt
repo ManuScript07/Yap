@@ -2,7 +2,6 @@ package com.example.yap.data.repository
 
 import UserPreferences
 import android.util.Log
-import com.example.yap.R
 import com.example.yap.data.manager.RemoteConfigManager
 import com.example.yap.data.model.UserItem
 import com.google.firebase.auth.FirebaseAuth
@@ -15,11 +14,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Source
 import com.google.firebase.messaging.FirebaseMessaging
 import io.github.jan.supabase.SupabaseClient
-import io.github.jan.supabase.annotations.SupabaseInternal
-import io.github.jan.supabase.createSupabaseClient
-import io.github.jan.supabase.storage.Storage
 import io.github.jan.supabase.storage.storage
-import io.ktor.websocket.WebSocketDeflateExtension.Companion.install
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -45,7 +40,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import java.util.UUID
 import kotlin.coroutines.cancellation.CancellationException
-import kotlin.getValue
 
 class UserRepository(
     private val firestore: FirebaseFirestore,
@@ -276,9 +270,9 @@ class UserRepository(
             email = doc.getString("email") ?: "",
             isYapActive = doc.getBoolean("isYapActive") ?: false,
             isMuted = doc.getBoolean("isMuted") ?: false,
-            quickList = doc.get("quickList") as? List<String> ?: emptyList(),
-            mutedUsers = doc.get("mutedUsers") as? List<String> ?: emptyList(),
-            friends = doc.get("friends") as? List<String> ?: emptyList(),
+            quickList = (doc.get("quickList") as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
+            mutedUsers = (doc.get("mutedUsers") as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
+            friends = (doc.get("friends") as? List<*>)?.filterIsInstance<String>() ?: emptyList()
         )
     }
 
@@ -567,6 +561,22 @@ class UserRepository(
         }
     }
 
+
+
+    suspend fun removeFcmTokenOnLogout() {
+        val userId = currentUserId ?: return
+        try {
+            // Удаляем токен из документа пользователя в Firestore
+            usersCollection.document(userId).update("fcmToken", FieldValue.delete()).await()
+
+            // Очищаем локальную привязку в DataStore, чтобы при следующем входе
+            // логика updateFcmTokenIfNeeded сработала обязательно
+            userPrefs.clearUserTokenLink()
+            Log.d("FCM_SYNC", "Token removed from Firestore for user: $userId")
+        } catch (e: Exception) {
+            Log.e("FCM_SYNC", "Failed to remove token on logout", e)
+        }
+    }
 
     fun clearCacheOnLogout() {
         profileCache.value = emptyMap()

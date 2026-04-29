@@ -38,6 +38,8 @@ class RemoteConfigManager {
     val priceSimpleYap: Int get() = remoteConfig.getLong("price_simple_yap").toInt()
     val regenDelayMs: Long get() = remoteConfig.getLong("regen_delay_ms")
 
+    val maxLengthInputText: Int get() = remoteConfig.getLong("max_length_input_text").toInt()
+
     val supabaseBucket: String get() = remoteConfig.getString("supabase_bucket_name")
     val supabaseUrl: String get() = remoteConfig.getString("supabase_project_url")
     val supabaseAnonKey: String get() = remoteConfig.getString("supabase_anon_key")
@@ -45,5 +47,7 @@ class RemoteConfigManager {
     val groqApiKey: String get() = remoteConfig.getString("groq_api_key")
     val telegramUrl: String get() = remoteConfig.getString("support_telegram")
     val githubUrl: String get() = remoteConfig.getString("support_github")
+
+
 
 }

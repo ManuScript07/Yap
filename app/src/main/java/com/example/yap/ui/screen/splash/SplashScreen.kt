@@ -97,7 +97,7 @@ fun AppEntryWithSplash(
                 Scaffold(
                     modifier = Modifier
                         .fillMaxSize()
-                        .nestedScroll(scrollBehavior.nestedScrollConnection), // Связываем скролл
+                        .nestedScroll(scrollBehavior.nestedScrollConnection),
                     topBar = {
                         BaseTopAppBar(
                             title = stringResource(R.string.account_creation),
