@@ -33,7 +33,8 @@ import androidx.compose.ui.unit.sp
 fun NotificationBadge(
     count: Int,
     modifier: Modifier = Modifier,
-    maxCount: Int = 9
+    maxCount: Int = 9,
+    baseScale: Float = 1f
 ) {
     AnimatedVisibility(
         visible = count > 0,
@@ -42,7 +43,7 @@ fun NotificationBadge(
         exit = scaleOut() + fadeOut()
     ) {
         Surface(
-            modifier = Modifier.size(20.dp),
+            modifier = Modifier.size(22.dp * baseScale),
             shape = CircleShape,
             color = Color.Red
         ) {
@@ -66,11 +67,11 @@ fun NotificationBadge(
                     Text(
                         text = if (targetCount > maxCount) "$maxCount+" else targetCount.toString(),
                         color = Color.White,
-                        fontSize = 13.sp,
+                        fontSize = 14.sp * baseScale,
                         fontWeight = FontWeight.ExtraBold,
                         textAlign = TextAlign.Center,
                         style = LocalTextStyle.current.copy(
-                            lineHeight = 12.sp,
+                            lineHeight = 13.sp * baseScale,
                             platformStyle = PlatformTextStyle(includeFontPadding = false)
                         )
                     )

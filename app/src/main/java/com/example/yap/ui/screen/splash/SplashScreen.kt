@@ -2,6 +2,7 @@ package com.example.yap.ui.screen.splash
 
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
@@ -38,6 +39,7 @@ import com.example.yap.ui.navigation.NavigationApp
 import com.example.yap.ui.screen.auth.AuthScreen
 import com.example.yap.ui.screen.registration.ProfileRegistrationScreen
 import com.example.yap.ui.screen.registration.RegistrationViewModel
+import com.example.yap.ui.theme.LocalBaseScale
 import com.example.yap.util.compose.SystemBarsIconsColor
 import com.google.firebase.auth.FirebaseAuth
 
@@ -49,6 +51,8 @@ fun AppEntryWithSplash(
 ) {
     val splashVisible by splashViewModel.isSplashVisible.collectAsState()
     val entryState by splashViewModel.entryState.collectAsState()
+
+    val baseScale = LocalBaseScale.current
 
     val regState by registrationViewModel.registrationState.collectAsState()
 
@@ -81,11 +85,9 @@ fun AppEntryWithSplash(
 
             "auth" -> AuthScreen(
                 onAuthSuccessExisting = {
-                    // Старый юзер, пускаем в прилу
                     currentScreen = "main"
                 },
                 onAuthSuccessNew = { googleName ->
-                    // Новый юзер, перекидываем на создание профиля
                     initialNameForRegistration = googleName
                     currentScreen = "registration"
                 }
@@ -145,16 +147,17 @@ fun AppEntryWithSplash(
 
         AnimatedVisibility(
             visible = splashVisible,
-            exit = slideOutVertically(targetOffsetY = { 0 }) + fadeOut()
+            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(tween())
         ) {
-            SplashContent()
+            SplashContent(baseScale = baseScale)
         }
     }
 }
 
 @Composable
-fun SplashContent() {
+fun SplashContent(baseScale: Float = 1f) {
     SystemBarsIconsColor(isLight = true)
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -166,8 +169,8 @@ fun SplashContent() {
             contentDescription = "YAP Logo",
             tint = MaterialTheme.colorScheme.onPrimaryContainer,
             modifier = Modifier.size(
-                width = 140.dp,
-                height = 60.dp
+                width = 140.dp * baseScale,
+                height = 60.dp * baseScale
             )
         )
     }

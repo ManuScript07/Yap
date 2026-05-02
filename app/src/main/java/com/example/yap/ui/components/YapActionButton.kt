@@ -8,6 +8,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -33,7 +34,6 @@ fun YapActionButton(
     @SuppressLint("ModifierParameter") modifier: Modifier = Modifier,
     baseScale: Float = 1f
 ) {
-    // 1. Изолируем цвета, чтобы кнопка не перерисовывалась целиком, если меняется что-то другое в теме
     val additionColors = LocalAdditionColors.current
 
     val iconTint = remember(user.isYapActive, additionColors) {
@@ -46,21 +46,19 @@ fun YapActionButton(
         else additionColors.disabledYabBackgroundColor
     }
 
-    // 2. Индикацию нажатия (ripple) лучше вынести в remember, чтобы не пересоздавать объект
     val interactionSource = remember { MutableInteractionSource() }
     val rippleIndication = ripple(bounded = true)
 
     Box(
         modifier = modifier
-            .height(32.dp * baseScale)
-            .width(64.dp * baseScale)
-            .clip(RoundedCornerShape(16.dp * baseScale))
+            .height(35.dp * baseScale)
+            .width(70.dp * baseScale)
+            .clip(RoundedCornerShape(18.dp * baseScale))
             .background(backgroundColor)
             .combinedClickable(
                 interactionSource = interactionSource,
                 indication = rippleIndication,
                 onClick = { onYapClick(user.id) },
-                // 3. Используем remember для лямбды длинного нажатия, чтобы избежать аллокаций
                 onLongClick = remember(user.id, onLongYapClick) {
                     onLongYapClick?.let { { it(user.id) } }
                 }
@@ -71,7 +69,8 @@ fun YapActionButton(
             painter = painterResource(id = R.drawable.yap_button_text),
             contentDescription = "YAP Logo",
             tint = iconTint,
-            modifier = Modifier.padding(horizontal = 8.dp * baseScale)
+            modifier = Modifier
+                .size(width = 47.dp * baseScale, height = 18.dp * baseScale)
         )
     }
 }

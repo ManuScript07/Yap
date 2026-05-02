@@ -102,6 +102,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
@@ -112,6 +113,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
@@ -288,7 +290,7 @@ fun HomeScreen(
             screenHeight = LocalConfiguration.current.screenHeightDp.dp,
             onUserClick = guardedNavigateToProfile,
             onYapClick = { userId -> viewModel.toggleUserYap(userId) },
-            onAddUserClick = onNavigateToSearch,
+            onAddUserClick = { guardedNavigateToSearch(Unit) },
             onRemoveUserClick = { id -> viewModel.removeUser(id) },
             content = { innerPadding ->
                 HomeContent(
@@ -642,7 +644,7 @@ fun HomeContent(
                     )
                 }
                 .padding(bottom = innerPadding.calculateBottomPadding() + (10.dp * baseScale))
-                .padding(horizontal = 20.dp),
+                .padding(horizontal = 20.dp * baseScale),
             verticalArrangement = Arrangement.SpaceBetween,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -651,7 +653,8 @@ fun HomeContent(
                 state = state,
                 onLocationToggle = onLocationToggle,
                 modifier = Modifier.padding(top = 12.dp * baseScale),
-                onNotificationsClick = onNotificationsClick
+                onNotificationsClick = onNotificationsClick,
+                baseScale = baseScale
             )
 
             InfoMessage(
@@ -710,7 +713,9 @@ fun HomeContent(
                 )
 
                 Spacer(modifier = Modifier.height(12.dp * baseScale))
-                ProgressIndicatorOnly(progress = state.progress)
+                ProgressIndicatorOnly(
+                    progress = state.progress,
+                    baseScale = baseScale)
             }
         }
 
@@ -924,7 +929,11 @@ fun ActionButtonsRow(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                ProgressText(currentValue = state.currentStars, maxValue = state.maxStars)
+                ProgressText(
+                    currentValue = state.currentStars,
+                    maxValue = state.maxStars,
+                    baseScale = baseScale
+                )
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     ActionButton(
@@ -1104,26 +1113,34 @@ fun QuickMessagesPanel(
 }
 
 @Composable
-fun ProgressText(currentValue: Int, maxValue: Int = 100) {
+fun ProgressText(
+    currentValue: Int,
+    maxValue: Int = 100,
+    baseScale: Float = 1f
+) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Icon(
             painter = painterResource(R.drawable.star),
             contentDescription = null,
             tint = Color.White,
-            modifier = Modifier.size(32.dp)
+
+            modifier = Modifier.size(36.dp * baseScale)
         )
-        Spacer(modifier = Modifier.width(5.dp))
+        Spacer(modifier = Modifier.width(6.dp * baseScale))
         Text(
             text = "$currentValue/$maxValue",
             color = Color.White,
-            fontSize = 25.sp,
+            fontSize = 28.sp * baseScale,
             fontWeight = FontWeight.Bold
         )
     }
 }
 
 @Composable
-fun ProgressIndicatorOnly(progress: Float) {
+fun ProgressIndicatorOnly(
+    progress: Float,
+    baseScale: Float = 1f
+) {
     val animatedProgress by animateFloatAsState(
         targetValue = progress.coerceIn(0f, 1f),
         animationSpec = tween(durationMillis = 500, easing = LinearOutSlowInEasing),
@@ -1148,8 +1165,8 @@ fun ProgressIndicatorOnly(progress: Float) {
     Canvas(
         modifier = Modifier
             .fillMaxWidth()
-            .height(20.dp)
-            .padding(horizontal = 2.dp)
+            .height(22.dp * baseScale)
+            .padding(horizontal = 2.dp * baseScale)
     ) {
         val strokeWidth = size.height
         val radius = strokeWidth / 2
@@ -1194,25 +1211,27 @@ fun ProgressIndicatorOnly(progress: Float) {
 }
 
 
-
 @Composable
 fun TopActionBar(
     state: HomeUiState,
     onLocationToggle: (Boolean) -> Unit,
     onNotificationsClick: () -> Unit,
+    baseScale: Float,
     modifier: Modifier = Modifier
 ) {
+    val targetHeight = 57.dp * baseScale
+
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .height(52.dp),
+            .height(targetHeight),
         verticalAlignment = Alignment.CenterVertically
     ) {
         // 1. КНОПКА УВЕДОМЛЕНИЙ
-        Box(modifier = Modifier.size(56.dp)) {
+        Box(modifier = Modifier.size(62.dp * baseScale)) {
             Surface(
-                modifier = Modifier.size(52.dp),
-                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.size(targetHeight),
+                shape = RoundedCornerShape(18.dp * baseScale),
                 color = MaterialTheme.colorScheme.primaryContainer,
                 onClick = { onNotificationsClick() }
             ) {
@@ -1221,7 +1240,7 @@ fun TopActionBar(
                         painter = painterResource(id = R.drawable.baseline_notifications_24),
                         contentDescription = "Notifications",
                         tint = MaterialTheme.colorScheme.onBackground,
-                        modifier = Modifier.size(40.dp)
+                        modifier = Modifier.size(44.dp * baseScale)
                     )
                 }
             }
@@ -1229,53 +1248,64 @@ fun TopActionBar(
                 count = state.notificationsCount,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .offset(x = 2.dp, y = (-2).dp)
+                    .offset(x = 2.dp * baseScale, y = (-2).dp * baseScale),
+                baseScale = baseScale
             )
         }
 
-
-        Spacer(modifier = Modifier.width(12.dp))
+        Spacer(modifier = Modifier.width(12.dp * baseScale))
 
         // 2. ПЕРЕКЛЮЧАТЕЛЬ ЛОКАЦИИ
         Surface(
-            modifier = Modifier.height(52.dp),
-            shape = RoundedCornerShape(16.dp),
+            modifier = Modifier.height(targetHeight),
+            shape = RoundedCornerShape(18.dp * baseScale),
             color = LocalAdditionColors.current.buttonReactionColor
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
                 modifier = Modifier
-                    .padding(start = 6.dp)
-                    .offset(x = (-6).dp)
+                    .offset(x = (-1).dp * baseScale)
+                    .padding(horizontal = 4.dp * baseScale)
             ) {
                 Icon(
                     painter = painterResource(id = R.drawable.base_location_38),
                     contentDescription = null,
-                    modifier = Modifier.size(38.dp),
+                    modifier = Modifier.size(42.dp * baseScale),
                     tint = MaterialTheme.colorScheme.onPrimaryContainer
                 )
-                Switch(
-                    checked = state.isLocationEnabled,
-                    onCheckedChange = onLocationToggle,
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = Color.White,
-                        checkedTrackColor = MaterialTheme.colorScheme.tertiary,
-                        uncheckedTrackColor = Color.White.copy(alpha = 0.5f)
-                    ),
+
+                Box(
                     modifier = Modifier
-                        .width(52.dp)
-                        .height(32.dp)
-                )
+                        .width(60.dp * baseScale)
+                        .height(52.dp * baseScale),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Switch(
+                        checked = state.isLocationEnabled,
+                        onCheckedChange = onLocationToggle,
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = MaterialTheme.colorScheme.tertiary,
+                            uncheckedTrackColor = Color.White.copy(alpha = 0.5f)
+                        ),
+                        modifier = Modifier.graphicsLayer(
+                            scaleX = baseScale * 1.1f,
+                            scaleY = baseScale * 1.1f
+                        )
+                    )
+                }
             }
         }
 
         Spacer(modifier = Modifier.weight(1f))
 
+        // 3. ПРАВАЯ КНОПКА (ЛОГОТИП)
         Surface(
             modifier = Modifier
-                .width(112.dp)
-                .height(52.dp),
-            shape = RoundedCornerShape(16.dp),
+                .width(123.dp * baseScale)
+                .height(targetHeight),
+            shape = RoundedCornerShape(18.dp * baseScale),
             onClick = { /* TODO */ }
         ) {
             Box(
@@ -1298,7 +1328,7 @@ fun TopActionBar(
                     painter = painterResource(id = R.drawable.nice),
                     contentDescription = "NICE",
                     tint = Color.Unspecified,
-                    modifier = Modifier.size(width = 102.dp, height = 52.dp)
+                    modifier = Modifier.size(width = 112.dp * baseScale, height = targetHeight)
                 )
             }
         }

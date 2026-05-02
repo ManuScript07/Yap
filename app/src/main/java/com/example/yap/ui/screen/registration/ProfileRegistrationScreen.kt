@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -66,6 +67,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -479,8 +481,6 @@ fun RegistrationInputField(
 
     val animationSpec = tween<Color>(durationMillis = 300)
 
-    // 1. Рамка: Акцентная только когда в фокусе.
-    // Если фокуса нет — всегда серая (даже если текст введен).
     val animatedBorderColor by animateColorAsState(
         targetValue = when {
             !enabled -> Color.LightGray.copy(alpha = 0.5f)
@@ -491,7 +491,6 @@ fun RegistrationInputField(
         label = "BorderColor"
     )
 
-    // 2. Фон: Акцентный, если есть фокус ИЛИ введен текст.
     val animatedContainerColor by animateColorAsState(
         targetValue = if (isFocused || value.isNotEmpty()) {
             LocalAdditionColors.current.fieldBackColor
@@ -502,7 +501,6 @@ fun RegistrationInputField(
         label = "ContainerColor"
     )
 
-    // 3. Иконка: Как и рамка, становится серой без фокуса.
     val animatedIconTint by animateColorAsState(
         targetValue = if (isFocused && enabled) {
             LocalAdditionColors.current.borderFieldColor
@@ -520,6 +518,7 @@ fun RegistrationInputField(
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
+                .heightIn(min = if (singleLine) 62.dp * baseScale else 120.dp * baseScale)
                 .then(
                     if (onClick != null) {
                         Modifier.clickable(
@@ -529,7 +528,7 @@ fun RegistrationInputField(
                         )
                     } else Modifier
                 ),
-            shape = RoundedCornerShape(28.dp * baseScale),
+            shape = RoundedCornerShape(if (singleLine) 41.dp * baseScale else 20.dp * baseScale),
             color = animatedContainerColor,
             border = BorderStroke(width = 2.dp, color = animatedBorderColor)
         ) {
@@ -538,13 +537,12 @@ fun RegistrationInputField(
                 onValueChange = {
                     if (maxLength == null || it.length <= maxLength) onValueChange(it)
                 },
-                modifier = Modifier
-                    .fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth(),
                 interactionSource = interactionSource,
                 textStyle = TextStyle(
                     fontSize = 16.sp * baseScale,
                     fontWeight = FontWeight.Bold,
-                    color = LocalAdditionColors.current.secondTextColor // Текст всегда акцентный
+                    color = LocalAdditionColors.current.secondTextColor
                 ),
                 placeholder = {
                     Text(
@@ -560,7 +558,7 @@ fun RegistrationInputField(
                         Icon(
                             painter = painterResource(id = resId),
                             contentDescription = null,
-                            modifier = Modifier.size(20.dp * baseScale),
+                            modifier = Modifier.size(24.dp * baseScale),
                             tint = animatedIconTint
                         )
                     }
@@ -568,7 +566,7 @@ fun RegistrationInputField(
                 readOnly = readOnly,
                 enabled = enabled,
                 singleLine = singleLine,
-                shape = RoundedCornerShape(28.dp * baseScale),
+                shape = RoundedCornerShape(if (singleLine) 41.dp * baseScale else 20.dp * baseScale),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = Color.Transparent,
                     unfocusedBorderColor = Color.Transparent,
@@ -577,31 +575,26 @@ fun RegistrationInputField(
                     unfocusedContainerColor = Color.Transparent,
                     disabledContainerColor = Color.Transparent,
                     cursorColor = LocalAdditionColors.current.borderFieldColor,
-                    selectionColors = TextSelectionColors(
-                        handleColor = LocalAdditionColors.current.borderFieldColor,
-                        backgroundColor = LocalAdditionColors.current.borderFieldColor.copy(alpha = 0.4f)
-                    ),
                     focusedTextColor = LocalAdditionColors.current.secondTextColor,
                     unfocusedTextColor = LocalAdditionColors.current.secondTextColor,
                     disabledTextColor = LocalAdditionColors.current.secondTextColor
-                ),
-                supportingText = null
+                )
             )
         }
 
-        // Supporting Text (без изменений)
+        // Supporting Text
         if (supportingText != null || maxLength != null) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 4.dp * baseScale, start = 16.dp * baseScale, end = 16.dp * baseScale),
+                    .padding(top = 6.dp * baseScale, start = 16.dp * baseScale, end = 16.dp * baseScale),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 if (supportingText != null) {
                     Text(
                         text = supportingText,
                         modifier = Modifier.weight(1f),
-                        fontSize = 16.sp * baseScale,
+                        fontSize = 14.sp * baseScale,
                         fontWeight = FontWeight.SemiBold,
                         color = LocalAdditionColors.current.secondTextColor,
                         maxLines = 1,
@@ -613,7 +606,7 @@ fun RegistrationInputField(
                 if (maxLength != null) {
                     Text(
                         text = "${value.length}/$maxLength",
-                        fontSize = 16.sp * baseScale,
+                        fontSize = 14.sp * baseScale,
                         fontWeight = FontWeight.Medium,
                         color = LocalAdditionColors.current.secondTextColor,
                     )

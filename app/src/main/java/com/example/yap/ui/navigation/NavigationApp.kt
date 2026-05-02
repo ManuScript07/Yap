@@ -19,6 +19,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -38,7 +40,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -67,6 +71,7 @@ import com.example.yap.ui.screen.userFriends.UserFriendsScreen
 import com.example.yap.ui.screen.userFriends.UserFriendsViewModel
 import com.example.yap.ui.screen.userProfile.UserProfileScreen
 import com.example.yap.ui.theme.LocalAdditionColors
+import com.example.yap.ui.theme.LocalBaseScale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.yield
 
@@ -74,6 +79,8 @@ import kotlinx.coroutines.yield
 @SuppressLint("RestrictedApi")
 @Composable
 fun NavigationApp(splashViewModel: SplashViewModel = viewModel()) {
+
+    val baseScale = LocalBaseScale.current
 
 
     val bottomItems = listOf(Screen.Friends, Screen.Home, Screen.Profile) // Порядок
@@ -194,7 +201,7 @@ fun NavigationApp(splashViewModel: SplashViewModel = viewModel()) {
                     containerColor = additionalColors.bottomSurface,
                     tonalElevation = 0.dp,
                     windowInsets = WindowInsets(0, 0, 0, 0),
-                    modifier = Modifier.height(64.dp)
+                    modifier = Modifier.height(70.dp * baseScale)
                 ) {
                     bottomItems.forEach { screen ->
                         val isSelected = currentTab == screen
@@ -218,9 +225,21 @@ fun NavigationApp(splashViewModel: SplashViewModel = viewModel()) {
                                 } else {
                                     if (isSelected) screen.selectedIcon else screen.unselectedIcon
                                 }
+
+
+                                val iconModifier = if (screen != Screen.Home) {
+                                    Modifier.size(32.dp * baseScale)
+                                } else {
+                                    Modifier
+                                        .height(32.dp * baseScale)
+                                        .wrapContentSize(Alignment.Center)
+                                        .scale(baseScale)
+                                }
+
                                 Icon(
                                     painter = painterResource(iconRes),
-                                    contentDescription = screen.route
+                                    contentDescription = screen.route,
+                                    modifier = iconModifier
                                 )
                             },
                             label = {
@@ -228,7 +247,7 @@ fun NavigationApp(splashViewModel: SplashViewModel = viewModel()) {
                                     screen.route
                                         .substringBefore("/")
                                         .replaceFirstChar { it.uppercase() },
-                                    fontSize = 12.sp,
+                                    fontSize = 18.sp * baseScale,
                                     fontWeight = FontWeight.SemiBold
                                 )
                             },

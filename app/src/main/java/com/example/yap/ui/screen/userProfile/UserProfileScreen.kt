@@ -580,7 +580,7 @@ fun UserProfileTopBar(
                 Icon(
                     painter = painterResource(R.drawable.baseline_arrow_back_24),
                     contentDescription = "Назад",
-                    modifier = Modifier.size(32.dp),
+                    modifier = Modifier.size(36.dp * baseScale),
                     tint = Color.Black
                 )
             }
@@ -601,7 +601,7 @@ fun UserProfileTopBar(
                     Icon(
                         painter = painterResource(id = R.drawable.more_vert),
                         contentDescription = "Меню",
-                        modifier = Modifier.size(32.dp * baseScale),
+                        modifier = Modifier.size(36.dp * baseScale),
                         tint = Color.Black
                     )
                 }

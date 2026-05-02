@@ -54,7 +54,6 @@ fun BaseUserListItem(
             .padding(vertical = 6.dp * baseScale),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Аватар
         AsyncImage(
             model = user.avatarUrl ?: R.drawable.avatar_1,
             contentDescription = null,
@@ -68,7 +67,6 @@ fun BaseUserListItem(
 
         Spacer(modifier = Modifier.width(16.dp * baseScale))
 
-        // Имя
         Text(
             text = user.name,
             modifier = Modifier.weight(1f),
@@ -79,16 +77,15 @@ fun BaseUserListItem(
             overflow = TextOverflow.Ellipsis
         )
 
-        // Кнопка Yap
         YapActionButton(
             user = user,
             onYapClick = onYapClick,
-            onLongYapClick = onLongYapClick
+            onLongYapClick = onLongYapClick,
+            baseScale = baseScale
         )
 
         Spacer(modifier = Modifier.width(8.dp * baseScale))
 
-        // Контейнер для иконки меню и самого Popup
         Box(contentAlignment = Alignment.Center) {
             IconButton(
                 onClick = { showMenu = true },
@@ -102,7 +99,6 @@ fun BaseUserListItem(
                 )
             }
 
-            // Вызываем переданный Popup здесь
             actionPopup(showMenu,{ showMenu = false })
         }
     }

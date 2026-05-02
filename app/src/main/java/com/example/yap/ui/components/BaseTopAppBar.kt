@@ -58,7 +58,7 @@ fun BaseTopAppBar(
                     Icon(
                         painter = painterResource(R.drawable.baseline_arrow_back_24),
                         contentDescription = "Назад",
-                        modifier = Modifier.size(32.dp),
+                        modifier = Modifier.size(36.dp * baseScale),
                         tint = MaterialTheme.colorScheme.onBackground
                     )
                 }

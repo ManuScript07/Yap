@@ -220,7 +220,8 @@ fun FriendsScreen(
                         count = state.incomingRequests,
                         modifier = Modifier
                             .align(Alignment.TopEnd)
-                            .offset(x = 4.dp, y = (-4).dp)
+                            .offset(x = 4.dp, y = (-4).dp),
+                        baseScale = baseScale
                     )
                 }
             }
