@@ -309,7 +309,8 @@ fun SearchFriendsScreen(
             statusResource = statusResId,
             statusMessage = statusMessage,
             statusId = statusId,
-            isSuccess = isStatusSuccess
+            isSuccess = isStatusSuccess,
+            baseScale = baseScale
         )
     }
 }

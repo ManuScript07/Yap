@@ -20,6 +20,7 @@ import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
@@ -96,13 +97,14 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
@@ -280,7 +282,7 @@ fun HomeScreen(
             contentDescription = null,
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0xFF0033FF)),
+                .background(LocalAdditionColors.current.homeScreenBackgroundColor),
             contentScale = ContentScale.Crop
         )
 
@@ -683,6 +685,13 @@ fun HomeContent(
                     .fillMaxWidth(),
                 contentAlignment = Alignment.Center
             ) {
+
+                YapPulseEffect(
+                    trigger = state.lastYapSentTrigger,
+                    modifier = Modifier.size(500.dp * baseScale),
+                    onConsumed = { viewModel.consumeYapPulse() },
+                )
+
                 MainYapButton(
                     price = state.yapPrice,
                     onClick = { selectedType ->
@@ -1253,7 +1262,7 @@ fun TopActionBar(
             )
         }
 
-        Spacer(modifier = Modifier.width(12.dp * baseScale))
+        Spacer(modifier = Modifier.width(10.dp * baseScale))
 
         // 2. ПЕРЕКЛЮЧАТЕЛЬ ЛОКАЦИИ
         Surface(
@@ -1332,6 +1341,59 @@ fun TopActionBar(
                 )
             }
         }
+    }
+}
+
+
+@Composable
+fun YapPulseEffect(
+    trigger: Long,
+    onConsumed: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val pulses = remember { mutableStateListOf<Long>() }
+
+
+    LaunchedEffect(trigger) {
+        if (trigger > 0) {
+            pulses.add(trigger)
+            onConsumed()
+        }
+    }
+
+    Box(modifier = modifier) {
+        pulses.forEach { pulseId ->
+            key(pulseId) {
+                PulseCircle(onAnimationFinished = { pulses.remove(pulseId) })
+            }
+        }
+    }
+}
+
+@Composable
+private fun PulseCircle(onAnimationFinished: () -> Unit) {
+    val progress = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        progress.animateTo(
+            targetValue = 1f,
+            animationSpec = tween(
+                durationMillis = 1000,
+                easing = LinearOutSlowInEasing
+            )
+        )
+        onAnimationFinished()
+    }
+
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        val radius = (size.minDimension / 2) * progress.value * 2.5f
+
+        val alpha = (1f - progress.value) * 0.3f
+
+        drawCircle(
+            color = Color.White.copy(alpha = alpha),
+            radius = radius,
+        )
+
     }
 }
 

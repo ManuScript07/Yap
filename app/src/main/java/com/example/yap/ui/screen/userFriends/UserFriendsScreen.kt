@@ -152,7 +152,8 @@ fun UserFriendsScreen(
             statusResource = homeState.systemStatusResource,
             statusMessage = homeState.systemStatusMessage,
             statusId = homeState.statusId,
-            isSuccess = homeState.isStatusSuccess
+            isSuccess = homeState.isStatusSuccess,
+            baseScale = baseScale
         )
     }
 }

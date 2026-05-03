@@ -87,7 +87,7 @@ class SplashViewModel(application: Application) : AndroidViewModel(application) 
 
             // Вычисляем, сколько еще нужно подождать до 1200мс
             val elapsedTime = System.currentTimeMillis() - startTime
-            val remainingDelay = 400L - elapsedTime
+            val remainingDelay = 200L - elapsedTime
 
             if (remainingDelay > 0) {
                 delay(remainingDelay)

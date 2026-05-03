@@ -42,5 +42,6 @@ data class AdditionalColors(
     val crossColor: Color,
     val checkBackgroundColor: Color,
     val descriptionSurfaceColor: Color,
-    val toggleButtonColor: Color
+    val toggleButtonColor: Color,
+    val homeScreenBackgroundColor: Color
 )

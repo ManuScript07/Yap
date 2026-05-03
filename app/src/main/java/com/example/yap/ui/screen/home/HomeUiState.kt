@@ -14,6 +14,8 @@ data class HomeUiState(
     val yapPrice: Int = 0,
     val yapType: YapType = YapType.YAP,
 
+    val lastYapSentTrigger: Long = 0L,
+
     val isNiceActive: Boolean = true,
     val isLocationEnabled: Boolean = true,
     val notificationsCount: Int = 8,

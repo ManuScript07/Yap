@@ -37,16 +37,14 @@ fun BoxScope.SystemStatusPill(
     statusResource: Int?,
     statusMessage: String?,
     statusId: Long,
-    isSuccess: Boolean
+    isSuccess: Boolean,
+    baseScale: Float = 1f
 ) {
-    // 1. Создаем "хранилище" для последнего валидного сообщения
-    // Оно НЕ обнуляется, когда statusResource становится null
     var lastValidMessage by remember { mutableStateOf("") }
     var lastValidIconIsSuccess by remember { mutableStateOf(true) }
 
     val currentMessage = statusResource?.let { stringResource(it) } ?: statusMessage
 
-    // Обновляем хранилище только если пришло что-то реальное
     LaunchedEffect(statusId) {
         if (currentMessage != null) {
             lastValidMessage = currentMessage
@@ -56,25 +54,26 @@ fun BoxScope.SystemStatusPill(
 
     AnimatedVisibility(
         visible = statusResource != null || statusMessage != null,
-        // Смещаем анимацию появления еще ниже, а улетание делаем симметричным
         enter = slideInVertically(initialOffsetY = { -it * 3 }) + fadeIn(),
         exit = slideOutVertically(targetOffsetY = { -it * 3 }) + fadeOut(),
         modifier = Modifier
             .align(Alignment.TopCenter)
-            .padding(top = 80.dp) // Чуть ниже от края
+            .padding(top = 88.dp * baseScale)
             .zIndex(100f)
     ) {
-        // Черный полупрозрачный фон
         val pillColor = Color.Black.copy(alpha = 0.8f)
 
         Surface(
             shape = CircleShape,
             color = pillColor,
-            shadowElevation = 4.dp,
-            modifier = Modifier.padding(horizontal = 24.dp)
+            shadowElevation = 5.dp * baseScale,
+            modifier = Modifier.padding(horizontal = 27.dp * baseScale)
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                modifier = Modifier.padding(
+                    horizontal = 18.dp * baseScale,
+                    vertical = 11.dp * baseScale
+                ),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
@@ -84,15 +83,15 @@ fun BoxScope.SystemStatusPill(
                     ),
                     contentDescription = null,
                     tint = Color.White,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(22.dp * baseScale)
                 )
 
-                Spacer(Modifier.width(10.dp))
+                Spacer(Modifier.width(11.dp * baseScale))
 
                 Text(
                     text = lastValidMessage,
                     color = Color.White,
-                    fontSize = 14.sp,
+                    fontSize = 16.sp * baseScale,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1
                 )

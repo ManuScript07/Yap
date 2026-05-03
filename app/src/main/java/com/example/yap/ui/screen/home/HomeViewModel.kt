@@ -568,6 +568,7 @@ class HomeViewModel(
                 }
 
                 _state.update { it.copy(
+                    lastYapSentTrigger = System.currentTimeMillis(),
                     currentStars = newStars,
                     progress = newProgress,
                     showSuccessAlert = false
@@ -783,6 +784,10 @@ class HomeViewModel(
                 isCustomInputActive = false
             )
         }
+    }
+
+    fun consumeYapPulse() {
+        _state.update { it.copy(lastYapSentTrigger = 0L) }
     }
 
 

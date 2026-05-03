@@ -7,6 +7,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.CircularProgressIndicator
@@ -57,7 +58,6 @@ fun FullScreenAvatarViewer(
         onDismissRequest = onClose,
         properties = DialogProperties(
             usePlatformDefaultWidth = false,
-            // 2. ВАЖНО: false заставляет диалог игнорировать границы системных окон
             decorFitsSystemWindows = false
         )
     ) {
@@ -65,7 +65,6 @@ fun FullScreenAvatarViewer(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color.Black)
-                // 3. Добавляем отступы только для TopAppBar, чтобы он не залез под "челку"
                 .statusBarsPadding()
                 .navigationBarsPadding(),
             contentAlignment = Alignment.Center
@@ -88,7 +87,8 @@ fun FullScreenAvatarViewer(
                         text = userName,
                         fontSize = (28 * baseScale).sp,
                         fontWeight = FontWeight.Medium,
-                        color = Color.White
+                        color = Color.White,
+                        modifier = Modifier.offset(x = (4).dp * baseScale)
                     )
                 },
                 navigationIcon = {
@@ -105,7 +105,7 @@ fun FullScreenAvatarViewer(
                         Icon(
                             painter = painterResource(R.drawable.baseline_arrow_back_24),
                             contentDescription = "Назад",
-                            modifier = Modifier.size(32.dp),
+                            modifier = Modifier.size(36.dp * baseScale),
                             tint = Color.White
                         )
                     }
